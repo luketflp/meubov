@@ -1,0 +1,29 @@
+# Pin better-call to 1.3.7 wherever @better-auth/core needs it. The dev-only
+# @better-auth/cli drags in an older better-auth (1.4.x) whose @better-auth/core
+# peer-resolves against better-call 1.1.8, which lacks `kAPIErrorHeaderSymbol`.
+# pnpm then created a duplicate @better-auth/core@1.6.25 variation linked to the
+# stale 1.1.8, and Turbopack bundled that broken copy — failing `next build`.
+# Forcing 1.3.7 (the version better-auth@1.6.25 already declares) dedupes it.
+overrides:
+  '@better-auth/core>better-call': 1.3.7
+
+allowBuilds:
+  # Optional DB drivers pulled in transitively by @better-auth/cli. We use the
+  # Drizzle + pg adapter, so these native builds are not needed; keep them off.
+  '@prisma/client': false
+  better-sqlite3: false
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
+# Torna o meubov a raiz do seu próprio workspace pnpm, evitando que o pnpm
+# suba a árvore de diretórios e adote outro pnpm-workspace.yaml como raiz.
+#
+# onlyBuiltDependencies aprova os scripts de build das dependências nativas do
+# projeto (pnpm bloqueia scripts de build por padrão, por segurança):
+#   - sharp: usado pelo Next.js para otimização de imagens
+#   - unrs-resolver: resolvedor nativo usado pelo ESLint (eslint-config-next)
+#   - esbuild: binário nativo usado por drizzle-kit/tsx (CLI de migração)
+onlyBuiltDependencies:
+  - sharp
+  - unrs-resolver
+  - esbuild

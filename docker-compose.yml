@@ -1,0 +1,24 @@
+# Local development database for MeuBov.
+# Postgres is the target for Drizzle (and the Supabase path), so we run it locally
+# via Docker. Start it with `pnpm db:up`. Drizzle wiring comes in a later step.
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: meubov
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: meubov
+      POSTGRES_PASSWORD: meubov
+      POSTGRES_DB: meubov
+    ports:
+      - "5432:5432"
+    volumes:
+      - meubov-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meubov -d meubov"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  meubov-db-data:

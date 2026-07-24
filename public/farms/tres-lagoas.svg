@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 80" role="img">
+  <circle cx="40" cy="40" r="29" fill="none" stroke="#3f6379" stroke-width="3"/>
+  <g stroke="#3f6379" stroke-width="3" fill="none" stroke-linecap="round">
+    <path d="M22 32c6-5 12 5 18 0s12 5 18 0"/>
+    <path d="M22 42c6-5 12 5 18 0s12 5 18 0"/>
+    <path d="M22 52c6-5 12 5 18 0s12 5 18 0"/>
+  </g>
+  <text x="84" y="34" font-family="Georgia, serif" font-size="12" letter-spacing="5" fill="#6e6759">FAZENDA</text>
+  <text x="84" y="60" font-family="Georgia, serif" font-size="23" font-weight="bold" fill="#23201b">Três Lagoas</text>
+</svg>
