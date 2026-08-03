@@ -19,7 +19,7 @@
  *   for an already-registered e-mail (Better Auth hashes the password and returns
  *   a synthetic user instead of throwing USER_ALREADY_EXISTS), which prevents
  *   user enumeration. The trade-off is that sign-up no longer starts a session,
- *   so the signup screen sends the user to /login afterwards.
+ *   so the AuthDialog switches to the login form afterwards.
  * - `nextCookies()` must be the LAST plugin so cookies are set on responses in
  *   Next.js server actions / route handlers.
  */
@@ -54,8 +54,8 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     // Return a generic response for duplicate e-mails (prevents enumeration).
-    // Sign-up therefore does not create a session; the signup screen redirects
-    // the user to /login afterwards.
+    // Sign-up therefore does not create a session; the AuthDialog switches to
+    // the login form afterwards.
     autoSignIn: false,
   },
   socialProviders,

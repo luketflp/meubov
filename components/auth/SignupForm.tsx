@@ -1,23 +1,30 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
 import {
   MIN_PASSWORD_LENGTH,
   PASSWORD_TOO_SHORT_MESSAGE,
 } from "@/lib/auth/constants";
 import { authErrorMessage } from "@/lib/auth/errors";
-import { navigateAfterAuth } from "@/lib/auth/navigation";
 import { GoogleAuthButton } from "@/components/auth/GoogleAuthButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SectionCard } from "@/components/ui/section-card";
 
-export default function SignupPage() {
-  const router = useRouter();
+interface SignupFormProps {
+  /** Switches the AuthDialog to the login form ("Entrar" footer link). */
+  onSwitchToLogin: () => void;
+  /**
+   * Called after a successful sign-up. With `autoSignIn: false` sign-up starts
+   * no session (see lib/auth/index.ts), so the dialog switches to the login
+   * form instead of navigating anywhere.
+   */
+  onSuccess: () => void;
+}
+
+/** Account creation form, rendered inside the AuthDialog. */
+export function SignupForm({ onSwitchToLogin, onSuccess }: SignupFormProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -47,14 +54,11 @@ export default function SignupPage() {
       return;
     }
 
-    // With `autoSignIn: false` (see lib/auth/index.ts, enabled to prevent e-mail
-    // enumeration), sign-up does NOT start a session, so we send the user to the
-    // login screen instead of /dashboard (which the server gate would bounce).
-    navigateAfterAuth(router, "/login");
+    onSuccess();
   }
 
   return (
-    <SectionCard title="Criar conta" titleAs="h1">
+    <>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="name">Nome</Label>
@@ -111,10 +115,14 @@ export default function SignupPage() {
 
       <p className="mt-4 text-center text-sm text-ink-soft">
         Já tem conta?{" "}
-        <Link href="/login" className="font-medium text-brand hover:underline">
+        <button
+          type="button"
+          onClick={onSwitchToLogin}
+          className="font-medium text-brand hover:underline"
+        >
           Entrar
-        </Link>
+        </button>
       </p>
-    </SectionCard>
+    </>
   );
 }

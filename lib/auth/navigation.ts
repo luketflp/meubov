@@ -13,8 +13,8 @@ import { useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
 
-/** Where the user lands after signing out. */
-const SIGN_OUT_REDIRECT = "/login";
+/** Where the user lands after signing out (landing page with the auth modal). */
+const SIGN_OUT_REDIRECT = "/";
 
 /** A router that can navigate and revalidate after an auth transition. */
 type AuthRouter = Pick<ReturnType<typeof useRouter>, "push" | "refresh">;
@@ -29,8 +29,8 @@ export function navigateAfterAuth(router: AuthRouter, path: string): void {
 }
 
 /**
- * Returns a stable handler that signs the user out and sends them to /login,
- * refreshing so protected content is not left visible.
+ * Returns a stable handler that signs the user out and sends them to the
+ * landing page, refreshing so protected content is not left visible.
  */
 export function useSignOut(): () => Promise<void> {
   const router = useRouter();

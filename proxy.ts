@@ -13,25 +13,30 @@ import { getSessionCookie } from "better-auth/cookies";
  * (including prefetches) while the layout enforces authentication.
  *
  * Rules:
- * - No session cookie + not on a public page (/, /login, /signup) -> /login.
- * - Session cookie + on /, /login or /signup                      -> /dashboard.
- * - Otherwise                                                     -> continue.
+ * - /login or /signup (removed pages)  -> /dashboard with session, "/" without.
+ * - No session cookie + not on "/"     -> "/" (landing opens the auth modal).
+ * - Session cookie + on "/"            -> /dashboard.
+ * - Otherwise                          -> continue.
  *
- * "/" is the public landing page: anonymous visitors see it, signed-in users
- * skip straight to the dashboard (as when "/" itself did the redirect).
+ * "/" is the public landing page and the only public route: login/signup live
+ * in its AuthDialog modal. The legacy /login and /signup URLs are kept as
+ * redirects so old bookmarks don't 404.
  */
-const AUTH_PATHS = new Set(["/login", "/signup"]);
-const PUBLIC_PATHS = new Set(["/", ...AUTH_PATHS]);
+const LEGACY_AUTH_PATHS = new Set(["/login", "/signup"]);
 
 export function proxy(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
   const hasSession = Boolean(getSessionCookie(request));
 
-  if (!hasSession && !PUBLIC_PATHS.has(pathname)) {
-    return NextResponse.redirect(new URL("/login", request.url));
+  if (LEGACY_AUTH_PATHS.has(pathname)) {
+    return NextResponse.redirect(new URL(hasSession ? "/dashboard" : "/", request.url));
   }
 
-  if (hasSession && PUBLIC_PATHS.has(pathname)) {
+  if (!hasSession && pathname !== "/") {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
+  if (hasSession && pathname === "/") {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 

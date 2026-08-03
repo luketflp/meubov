@@ -3,16 +3,17 @@
  *
  * The only page an anonymous visitor sees (proxy.ts lets "/" through and
  * redirects signed-in users to /dashboard). One compact screen: header with
- * the wordmark and "Entrar", hero with the value prop and a single CTA to
- * /signup, four feature bullets mirroring the app's own nav icons, a marquee
- * of farms that use the platform (fictional placeholder names), footer.
- * Pure server component — no client JS; NeloreMark and the marquee animate
- * via CSS (`--animate-marquee` in globals.css).
+ * the wordmark and "Entrar", hero with the value prop and a single "Criar
+ * conta" CTA, four feature bullets mirroring the app's own nav icons, a
+ * marquee of farms that use the platform, footer. Both CTAs open the
+ * AuthDialog (login/signup modal) instead of navigating; /login and /signup
+ * stay available for deep links. Server component with the dialog as the only
+ * client island; NeloreMark and the marquee animate via CSS.
  */
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
 import { Beef, CalendarDays, CircleDollarSign, LayoutDashboard, type LucideIcon } from "lucide-react";
+import { AuthDialog } from "@/components/auth/AuthDialog";
 import { Button } from "@/components/ui/button";
 import { NeloreMark } from "@/components/ui/nelore-mark";
 
@@ -59,26 +60,26 @@ const FEATURES: readonly Feature[] = [
   },
 ];
 
-/** Placeholder logos for the social-proof marquee (fictional farms, 280×80). */
+/** Farms shown in the social-proof marquee (logos 280×80). */
 const FARMS: readonly { name: string; logo: string }[] = [
-  { name: "Fazenda Santa Helena", logo: "/farms/santa-helena.svg" },
-  { name: "Agropecuária Boa Vista", logo: "/farms/boa-vista.svg" },
-  { name: "Fazenda Três Lagoas", logo: "/farms/tres-lagoas.svg" },
-  { name: "Rancho Ipê Amarelo", logo: "/farms/ipe-amarelo.svg" },
-  { name: "Agro Vale do Araguaia", logo: "/farms/araguaia.svg" },
-  { name: "Estância do Cerrado", logo: "/farms/cerrado.svg" },
-  { name: "Fazenda Água Limpa", logo: "/farms/agua-limpa.svg" },
+  { name: "Fazenda Maranatha", logo: "/farms/maranatha.svg" },
 ];
+
+/** Repeat the list until the marquee track has at least 8 logos per half. */
+const FILLED_FARMS: readonly { name: string; logo: string }[] = Array.from(
+  { length: Math.ceil(8 / FARMS.length) },
+  () => FARMS,
+).flat();
 
 /** One half of the marquee track; the duplicate half is aria-hidden. */
 function FarmLogoSet({ hidden }: { hidden?: boolean }) {
   return (
     <div aria-hidden={hidden || undefined} className="flex items-center gap-12 pr-12">
-      {FARMS.map(({ name, logo }) => (
+      {FILLED_FARMS.map(({ name, logo }, i) => (
         <Image
-          key={name}
+          key={`${name}-${i}`}
           src={logo}
-          alt={hidden ? "" : name}
+          alt={hidden || i > 0 ? "" : name}
           width={196}
           height={56}
           unoptimized
@@ -97,9 +98,9 @@ export default function LandingPage() {
           <p className="font-heading text-2xl font-semibold text-brand">MeuBov</p>
           <p className="hidden text-xs text-ink-soft sm:block">Gestão de rebanho de corte</p>
         </div>
-        <Button asChild variant="outline">
-          <Link href="/login">Entrar</Link>
-        </Button>
+        <AuthDialog initialMode="login">
+          <Button variant="outline">Entrar</Button>
+        </AuthDialog>
       </header>
 
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center gap-12 px-6 py-10">
@@ -112,12 +113,15 @@ export default function LandingPage() {
               Pesagens, GMD, calendário sanitário e cotação da arroba — em um só
               lugar, feito para a fazenda brasileira.
             </p>
-            <Button asChild size="lg">
-              <Link href="/signup">Criar conta</Link>
-            </Button>
+            <AuthDialog initialMode="signup">
+              <Button size="lg" className="self-center lg:self-start">
+                Criar conta
+              </Button>
+            </AuthDialog>
           </div>
           <div className="mx-auto aspect-[4/3] w-full max-w-xs lg:max-w-md">
-            <NeloreMark className="h-full w-full" />
+            {/* Draws once (~2.7s) and freezes on the finished illustration. */}
+            <NeloreMark className="h-full w-full" durationMs={4000} loop={false} />
           </div>
         </div>
 
@@ -133,7 +137,7 @@ export default function LandingPage() {
           ))}
         </ul>
 
-        <section aria-labelledby="farms-heading" className="flex flex-col gap-5">
+        <section aria-labelledby="farms-heading" className="mt-8 flex flex-col gap-5 sm:mt-12">
           <h2
             id="farms-heading"
             className="text-center text-sm font-medium tracking-wide text-ink-soft"

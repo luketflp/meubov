@@ -1,7 +1,6 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
 import { authErrorMessage } from "@/lib/auth/errors";
@@ -10,9 +9,14 @@ import { GoogleAuthButton } from "@/components/auth/GoogleAuthButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SectionCard } from "@/components/ui/section-card";
 
-export default function LoginPage() {
+interface LoginFormProps {
+  /** Switches the AuthDialog to the signup form ("Criar conta" footer link). */
+  onSwitchToSignup: () => void;
+}
+
+/** E-mail/password sign-in form, rendered inside the AuthDialog. */
+export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -39,7 +43,7 @@ export default function LoginPage() {
   }
 
   return (
-    <SectionCard title="Entrar" titleAs="h1">
+    <>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="email">E-mail</Label>
@@ -82,10 +86,14 @@ export default function LoginPage() {
 
       <p className="mt-4 text-center text-sm text-ink-soft">
         Não tem conta?{" "}
-        <Link href="/signup" className="font-medium text-brand hover:underline">
+        <button
+          type="button"
+          onClick={onSwitchToSignup}
+          className="font-medium text-brand hover:underline"
+        >
           Criar conta
-        </Link>
+        </button>
       </p>
-    </SectionCard>
+    </>
   );
 }
