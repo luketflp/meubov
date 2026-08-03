@@ -40,7 +40,7 @@ export function LoadingOverlay({
           with another NeloreMark instance. */}
       <NeloreMark
         className={fullScreen ? "w-44" : "w-28"}
-        durationMs={3500}
+        durationMs={2500}
         maskId="nelore-reveal-overlay"
       />
       <p className="animate-pulse text-sm text-ink-soft">{message}</p>

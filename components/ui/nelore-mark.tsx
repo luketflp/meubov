@@ -5,18 +5,21 @@ interface NeloreMarkProps extends React.SVGProps<SVGSVGElement> {
    * instance's mask (and its SMIL clock).
    */
   maskId?: string;
-  /** Full choreography cycle. Loading contexts want ~3500; the hero runs 9000. */
+  /** Full choreography cycle. Loading contexts want ~2500; the hero runs 4000. */
   durationMs?: number;
+  /**
+   * When false, the choreography plays once and freezes on the completed
+   * drawing (tag in place); the loop-restart fade is skipped entirely.
+   */
+  loop?: boolean;
 }
 
 /**
  * Animated MeuBov brand mark: the Nelore line-art illustration (vector-traced
  * from the brand drawing) that draws itself in on every loop. The artwork is a
- * single filled path revealed by an SVG mask whose "pen stroke" corridors are
- * animated in natural drawing order: muzzle -> head -> ear -> face details ->
- * dewlap -> cupim -> hindquarters; a full-canvas fade inside the mask
- * guarantees complete coverage before the brand-green ear tag clips on and
- * swings to rest; then the sketch fades and redraws.
+ * single filled path revealed by an SVG mask wiped left to right (nose to
+ * tail); once the wipe completes, the brand-green ear tag clips on and swings
+ * to rest; then the sketch fades and redraws (or freezes, with loop=false).
  *
  * ALL motion is SMIL on one clock (Chrome neither runs CSS animations on mask
  * content nor keeps SMIL and CSS timelines in sync across hidden-tab
@@ -26,10 +29,13 @@ interface NeloreMarkProps extends React.SVGProps<SVGSVGElement> {
  */
 export function NeloreMark({
   maskId = "nelore-reveal",
-  durationMs = 9000,
+  durationMs = 6000,
+  loop = true,
   ...props
 }: NeloreMarkProps) {
   const dur = `${durationMs / 1000}s`;
+  const repeat = loop ? "indefinite" : "1";
+  const freeze = loop ? "remove" : "freeze";
   const artId = `${maskId}-artwork`;
   const tagId = `${maskId}-tag`;
   return (
@@ -60,96 +66,27 @@ export function NeloreMark({
         </g>
         <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="1348" height="1084">
           <rect width="1348" height="1084" fill="#000" />
-          {/* failsafe: completes the reveal even where corridors leave slivers */}
-          <rect width="1348" height="1084" fill="#fff" opacity="0">
-            <animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.6;0.68;1" dur={dur} repeatCount="indefinite" />
-          </rect>
-          {/* pen-stroke corridors in drawing order */}
-          <g fill="none" stroke="#fff" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M 120 500 C 150 380, 300 180, 560 120" pathLength={1} strokeWidth={150} strokeDasharray="1 1" strokeDashoffset={1}>
+          {/* left-to-right wipe: one band sweeping nose -> tail (butt caps keep
+              the leading edge a clean vertical line; width covers the canvas) */}
+          <path d="M 0 542 L 1348 542" pathLength={1} fill="none" stroke="#fff" strokeWidth={1100} strokeDasharray="1 1" strokeDashoffset={1}>
             <animate
               attributeName="stroke-dashoffset"
               values="1;1;0;0"
-              keyTimes="0;0.03;0.14;1"
+              keyTimes="0;0.03;0.64;1"
               calcMode="spline"
               keySplines="0 0 1 1;0.42 0 0.58 1;0 0 1 1"
               dur={dur}
-              repeatCount="indefinite"
+              repeatCount={repeat} fill={freeze}
             />
           </path>
-          <path d="M 100 520 C 150 620, 300 640, 420 700 C 500 760, 480 900, 560 1000" pathLength={1} strokeWidth={170} strokeDasharray="1 1" strokeDashoffset={1}>
-            <animate
-              attributeName="stroke-dashoffset"
-              values="1;1;0;0"
-              keyTimes="0;0.10;0.26;1"
-              calcMode="spline"
-              keySplines="0 0 1 1;0.42 0 0.58 1;0 0 1 1"
-              dur={dur}
-              repeatCount="indefinite"
-            />
-          </path>
-          <path d="M 560 120 C 640 180, 660 320, 640 440 C 630 500, 660 540, 700 545" pathLength={1} strokeWidth={160} strokeDasharray="1 1" strokeDashoffset={1}>
-            <animate
-              attributeName="stroke-dashoffset"
-              values="1;1;0;0"
-              keyTimes="0;0.20;0.30;1"
-              calcMode="spline"
-              keySplines="0 0 1 1;0.42 0 0.58 1;0 0 1 1"
-              dur={dur}
-              repeatCount="indefinite"
-            />
-          </path>
-          <path d="M 330 280 C 400 300, 430 420, 420 520" pathLength={1} strokeWidth={140} strokeDasharray="1 1" strokeDashoffset={1}>
-            <animate
-              attributeName="stroke-dashoffset"
-              values="1;1;0;0"
-              keyTimes="0;0.27;0.36;1"
-              calcMode="spline"
-              keySplines="0 0 1 1;0.42 0 0.58 1;0 0 1 1"
-              dur={dur}
-              repeatCount="indefinite"
-            />
-          </path>
-          <path d="M 620 560 C 680 700, 700 900, 660 1060" pathLength={1} strokeWidth={170} strokeDasharray="1 1" strokeDashoffset={1}>
-            <animate
-              attributeName="stroke-dashoffset"
-              values="1;1;0;0"
-              keyTimes="0;0.34;0.48;1"
-              calcMode="spline"
-              keySplines="0 0 1 1;0.42 0 0.58 1;0 0 1 1"
-              dur={dur}
-              repeatCount="indefinite"
-            />
-          </path>
-          <path d="M 700 400 C 820 300, 950 200, 1100 210 C 1250 230, 1300 350, 1340 420" pathLength={1} strokeWidth={180} strokeDasharray="1 1" strokeDashoffset={1}>
-            <animate
-              attributeName="stroke-dashoffset"
-              values="1;1;0;0"
-              keyTimes="0;0.42;0.58;1"
-              calcMode="spline"
-              keySplines="0 0 1 1;0.42 0 0.58 1;0 0 1 1"
-              dur={dur}
-              repeatCount="indefinite"
-            />
-          </path>
-          <path d="M 860 500 C 950 650, 1000 850, 980 1080 C 1150 900, 1250 700, 1348 560" pathLength={1} strokeWidth={260} strokeDasharray="1 1" strokeDashoffset={1}>
-            <animate
-              attributeName="stroke-dashoffset"
-              values="1;1;0;0"
-              keyTimes="0;0.52;0.66;1"
-              calcMode="spline"
-              keySplines="0 0 1 1;0.42 0 0.58 1;0 0 1 1"
-              dur={dur}
-              repeatCount="indefinite"
-            />
-          </path>
-          </g>
         </mask>
       </defs>
       <g className="meubov-nelore">
         <g className="animated">
           <g opacity="1">
-            <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.94;0.99;1" dur={dur} repeatCount="indefinite" />
+            {loop ? (
+              <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.94;0.99;1" dur={dur} repeatCount={repeat} fill={freeze} />
+            ) : null}
             <g mask={`url(#${maskId})`}>
               <use href={`#${artId}`} />
             </g>
@@ -163,10 +100,10 @@ export function NeloreMark({
                   calcMode="spline"
                   keySplines="0 0 1 1;0.42 0 0.58 1;0.42 0 0.58 1;0 0 1 1"
                   dur={dur}
-                  repeatCount="indefinite"
+                  repeatCount={repeat} fill={freeze}
                 />
                 <g opacity="0">
-                  <animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.66;0.69;1" dur={dur} repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.66;0.69;1" dur={dur} repeatCount={repeat} fill={freeze} />
                   <animateTransform
                     attributeName="transform"
                     type="rotate"
@@ -175,7 +112,7 @@ export function NeloreMark({
                     calcMode="spline"
                     keySplines="0 0 1 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0 0 1 1"
                     dur={dur}
-                    repeatCount="indefinite"
+                    repeatCount={repeat} fill={freeze}
                   />
                   <use href={`#${tagId}`} />
                 </g>
