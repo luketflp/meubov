@@ -78,7 +78,7 @@ A string de conexão fica em `.env.local` (carregado automaticamente pelo Next.j
 copie de `.env.example` se necessário):
 
 ```
-DATABASE_URL="postgresql://meubov:meubov@localhost:5432/meubov"
+DATABASE_URL="postgresql://meubov:meubov@localhost:5433/meubov"
 ```
 
 Os dados são **mock determinísticos**: um gerador com semente fixa (`lib/data/seed.ts`) produz sempre o mesmo rebanho, e a data de "hoje" está ancorada em **2026-07-24** (`TODAY_ISO` em `lib/domain/dates.ts`). Isso mantém status, GMD e agenda estáveis entre recarregamentos. Não há backend nem persistência — as alterações vivem em memória durante a sessão.
