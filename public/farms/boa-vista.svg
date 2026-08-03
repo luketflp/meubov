@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 80" role="img">
-  <path d="M26 46a14 14 0 0 1 28 0z" fill="#b97a14"/>
-  <g stroke="#b97a14" stroke-width="3" stroke-linecap="round">
-    <path d="M40 16v8M20 22l5 6M60 22l-5 6M12 46h56"/>
-    <path d="M18 56h44M28 65h24" stroke="#8a5a12"/>
-  </g>
-  <text x="84" y="34" font-family="Georgia, serif" font-size="12" letter-spacing="3" fill="#6e6759">AGROPECUÁRIA</text>
-  <text x="84" y="60" font-family="Georgia, serif" font-size="23" font-weight="bold" fill="#23201b">Boa Vista</text>
-</svg>

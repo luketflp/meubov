@@ -11,7 +11,8 @@ services:
       POSTGRES_PASSWORD: meubov
       POSTGRES_DB: meubov
     ports:
-      - "5432:5432"
+      # Host port 5433: 5432 is taken by another local project (NeonPG).
+      - "5433:5432"
     volumes:
       - meubov-db-data:/var/lib/postgresql/data
     healthcheck:
