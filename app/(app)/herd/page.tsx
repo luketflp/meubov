@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { SearchX } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { activeAnimals, withStatus } from "@/lib/store/selectors";
-import { TODAY_ISO } from "@/lib/domain/dates";
+import { todayISO } from "@/lib/domain/dates";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/herd/FilterBar";
@@ -33,7 +33,7 @@ export default function HerdPage() {
   const [sort, setSort] = useState<HerdSort>(DEFAULT_SORT);
 
   const derived = useMemo(
-    () => withStatus(activeAnimals(animals), treatments, TODAY_ISO),
+    () => withStatus(activeAnimals(animals), treatments, todayISO()),
     [animals, treatments]
   );
 

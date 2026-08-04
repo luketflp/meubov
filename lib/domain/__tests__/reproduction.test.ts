@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ReproductionRecord } from "@/lib/types";
-import { TODAY_ISO } from "@/lib/domain/dates";
+/** Fixed reference date for deterministic assertions. */
+const TODAY_ISO = "2026-07-24";
 import {
   GESTATION_DAYS,
   expectedCalvingDate,

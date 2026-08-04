@@ -4,8 +4,22 @@
  * (never via new Date(iso), which interprets UTC and causes off-by-one in Brazil).
  */
 
-/** App-anchored "today" date (fixed for deterministic data). */
-export const TODAY_ISO = "2026-07-24";
+/**
+ * Formatter for the app's "today": the calendar date in the farm's timezone
+ * (America/Sao_Paulo). Pinning the zone keeps server and browser agreeing on
+ * the date regardless of where each one runs; en-CA formats as "YYYY-MM-DD".
+ */
+const TODAY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Sao_Paulo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** Current date as ISO "YYYY-MM-DD" in the farm's timezone. */
+export function todayISO(): string {
+  return TODAY_FORMATTER.format(new Date());
+}
 
 const MONTH_ABBREV = [
   "jan",
@@ -32,9 +46,9 @@ export function parseISODate(iso: string): Date {
   return new Date(year, month - 1, day);
 }
 
-/** Returns the anchored "today" date as a local Date. */
+/** Returns today (farm timezone) as a local Date at midnight. */
 export function today(): Date {
-  return parseISODate(TODAY_ISO);
+  return parseISODate(todayISO());
 }
 
 /** Difference in whole days between two ISO dates (b - a). */
@@ -58,9 +72,9 @@ export function toISO(d: Date): string {
 }
 
 /**
- * Age in complete months between birth and the reference date (default TODAY_ISO).
+ * Age in complete months between birth and the reference date (default today).
  */
-export function ageInMonths(birthIso: string, refIso: string = TODAY_ISO): number {
+export function ageInMonths(birthIso: string, refIso: string = todayISO()): number {
   const birth = parseISODate(birthIso);
   const ref = parseISODate(refIso);
   let months =
@@ -70,10 +84,11 @@ export function ageInMonths(birthIso: string, refIso: string = TODAY_ISO): numbe
 }
 
 /**
- * Formats the animal age as "2a 4m", "8m" or "3a" from the birth date.
+ * Formats the animal age as "2a 4m", "8m" or "3a" from the birth date
+ * (against refIso, default today).
  */
-export function formatAge(birthIso: string): string {
-  const months = ageInMonths(birthIso);
+export function formatAge(birthIso: string, refIso: string = todayISO()): string {
+  const months = ageInMonths(birthIso, refIso);
   const years = Math.floor(months / 12);
   const rest = months % 12;
   if (years === 0) return `${rest}m`;

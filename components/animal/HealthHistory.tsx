@@ -8,7 +8,7 @@
 import { Syringe } from "lucide-react";
 import type { TreatmentStatus, Treatment } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
-import { TODAY_ISO, addDays, formatDate } from "@/lib/domain/dates";
+import { todayISO, addDays, formatDate } from "@/lib/domain/dates";
 import { TREATMENT_TYPE_LABEL } from "@/lib/domain/labels";
 import { deriveTreatmentStatus } from "@/lib/domain/status";
 import { SectionCard } from "@/components/ui/section-card";
@@ -34,7 +34,7 @@ interface TreatmentRow {
 function activeWithdrawalUntil(t: Treatment, status: TreatmentStatus): string | null {
   if (status !== "done") return null;
   const end = addDays(t.date, t.withdrawalDays);
-  return end >= TODAY_ISO ? end : null;
+  return end >= todayISO() ? end : null;
 }
 
 function withdrawalText(row: TreatmentRow): string {
@@ -51,7 +51,7 @@ export function HealthHistory({ treatments }: HealthHistoryProps) {
   const rows: TreatmentRow[] = [...treatments]
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
     .map((treatment) => {
-      const status = deriveTreatmentStatus(treatment, TODAY_ISO);
+      const status = deriveTreatmentStatus(treatment, todayISO());
       return { treatment, status, withdrawalUntil: activeWithdrawalUntil(treatment, status) };
     });
 

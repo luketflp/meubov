@@ -1,7 +1,7 @@
 "use client";
 
 import type { Treatment } from "@/lib/types";
-import { TODAY_ISO, formatDate } from "@/lib/domain/dates";
+import { todayISO, formatDate } from "@/lib/domain/dates";
 import { deriveTreatmentStatus } from "@/lib/domain/status";
 import {
   Dialog,
@@ -47,7 +47,7 @@ export function DayDialog({ iso, treatments, onClose, onMarkDone }: DayDialogPro
                 <TreatmentRow
                   key={t.id}
                   treatment={t}
-                  status={deriveTreatmentStatus(t, TODAY_ISO)}
+                  status={deriveTreatmentStatus(t, todayISO())}
                   onMarkDone={onMarkDone}
                 />
               ))}

@@ -4,7 +4,7 @@
  */
 import type { ReactNode } from "react";
 import type { Animal, Treatment } from "@/lib/types";
-import { TODAY_ISO, formatDate } from "@/lib/domain/dates";
+import { todayISO, formatDate } from "@/lib/domain/dates";
 import { formatWeightWithArroba } from "@/lib/domain/weights";
 import {
   DIAGNOSIS_RESULT_LABEL,
@@ -55,7 +55,7 @@ function buildEvents(animal: Animal, treatments: Treatment[]): TimelineEvent[] {
   }
 
   for (const t of treatments) {
-    const status = deriveTreatmentStatus(t, TODAY_ISO);
+    const status = deriveTreatmentStatus(t, todayISO());
     events.push({
       key: `treatment-${t.id}`,
       date: t.date,

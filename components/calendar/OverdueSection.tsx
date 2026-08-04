@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import type { Treatment } from "@/lib/types";
-import { TODAY_ISO, daysBetween, formatDate } from "@/lib/domain/dates";
+import { todayISO, daysBetween, formatDate } from "@/lib/domain/dates";
 import { isFootAndMouth } from "@/lib/domain/status";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -42,7 +42,7 @@ export function OverdueSection({ overdue, onMarkDone }: OverdueSectionProps) {
               <div className="w-28 shrink-0">
                 <p className="font-mono text-sm text-ink">{formatDate(t.date)}</p>
                 <p className="text-xs font-medium text-overdue">
-                  {daysAgoLabel(daysBetween(t.date, TODAY_ISO))}
+                  {daysAgoLabel(daysBetween(t.date, todayISO()))}
                 </p>
               </div>
               <div className="min-w-0 flex-1">

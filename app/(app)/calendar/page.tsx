@@ -3,9 +3,10 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useToast } from "@/components/providers/Toasts";
 import { treatmentsInMonth, pendingTreatments } from "@/lib/store/selectors";
 import { deriveTreatmentStatus, isFootAndMouth } from "@/lib/domain/status";
-import { TODAY_ISO } from "@/lib/domain/dates";
+import { todayISO } from "@/lib/domain/dates";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { FootAndMouthBanner } from "@/components/calendar/FootAndMouthBanner";
@@ -26,8 +27,15 @@ export default function CalendarPage() {
   const treatments = useHerdStore((s) => s.treatments);
   const protocols = useHerdStore((s) => s.protocols);
   const markTreatmentDone = useHerdStore((s) => s.markTreatmentDone);
+  const { addToast } = useToast();
 
-  const [yearMonth, setYearMonth] = useState<YearMonth>(() => yearMonthOf(TODAY_ISO));
+  /** Completes one treatment and confirms it with a toast. */
+  async function onMarkDone(id: string) {
+    await markTreatmentDone(id);
+    addToast({ messageType: "success", text: "Tratamento concluído" });
+  }
+
+  const [yearMonth, setYearMonth] = useState<YearMonth>(() => yearMonthOf(todayISO()));
   const [openDay, setOpenDay] = useState<string | null>(null);
 
   const ofMonth = useMemo(
@@ -36,8 +44,8 @@ export default function CalendarPage() {
   );
   const overdue = useMemo(
     () =>
-      pendingTreatments(treatments, TODAY_ISO).filter(
-        (t) => deriveTreatmentStatus(t, TODAY_ISO) === "overdue"
+      pendingTreatments(treatments, todayISO()).filter(
+        (t) => deriveTreatmentStatus(t, todayISO()) === "overdue"
       ),
     [treatments]
   );
@@ -87,7 +95,7 @@ export default function CalendarPage() {
             <Button
               variant="outline"
               className="ml-1 min-h-11 md:min-h-0"
-              onClick={() => navigateTo(yearMonthOf(TODAY_ISO))}
+              onClick={() => navigateTo(yearMonthOf(todayISO()))}
             >
               Hoje
             </Button>
@@ -95,24 +103,24 @@ export default function CalendarPage() {
         }
       />
 
-      <OverdueSection overdue={overdue} onMarkDone={markTreatmentDone} />
+      <OverdueSection overdue={overdue} onMarkDone={onMarkDone} />
 
       {showBanner ? <FootAndMouthBanner /> : null}
 
       <MonthlyGrid
         yearMonth={yearMonth}
         monthTreatments={ofMonth}
-        todayIso={TODAY_ISO}
+        todayIso={todayISO()}
         onOpenDay={setOpenDay}
       />
 
-      <MonthList yearMonth={yearMonth} treatments={ofMonth} onMarkDone={markTreatmentDone} />
+      <MonthList yearMonth={yearMonth} treatments={ofMonth} onMarkDone={onMarkDone} />
 
       <DayDialog
         iso={openDay}
         treatments={ofOpenDay}
         onClose={() => setOpenDay(null)}
-        onMarkDone={markTreatmentDone}
+        onMarkDone={onMarkDone}
       />
     </div>
   );

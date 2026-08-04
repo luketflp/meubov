@@ -3,12 +3,12 @@
  */
 import type { Animal, Weighing } from "@/lib/types";
 import {
-  TODAY_ISO,
   addDays,
   daysBetween,
   parseISODate,
   monthYearLabel,
   toISO,
+  todayISO,
   lastDayOfMonth,
 } from "@/lib/domain/dates";
 
@@ -49,7 +49,7 @@ export function calculateAdg(weighings: Weighing[]): number | null {
 export function monthlyAdg(
   animals: Animal[],
   months = 6,
-  refIso: string = TODAY_ISO
+  refIso: string = todayISO()
 ): MonthlyAdgPoint[] {
   const ref = parseISODate(refIso);
   const active = animals.filter((a) => a.active);

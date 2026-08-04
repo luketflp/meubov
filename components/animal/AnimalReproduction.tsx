@@ -4,7 +4,7 @@
  */
 import Link from "next/link";
 import type { ReproductionRecord, DiagnosisResult, BreedingType } from "@/lib/types";
-import { TODAY_ISO, formatDate } from "@/lib/domain/dates";
+import { todayISO, formatDate } from "@/lib/domain/dates";
 import { expectedCalvingDate, currentDiagnosis, daysToCalving } from "@/lib/domain/reproduction";
 import {
   DIAGNOSIS_RESULT_LABEL,
@@ -106,7 +106,7 @@ export function AnimalReproduction({ record }: AnimalReproductionProps) {
               {formatDate(expected)}
             </p>
             <p className="mt-0.5 text-sm text-ink-soft">
-              {daysToCalvingText(daysToCalving(expected, TODAY_ISO))}
+              {daysToCalvingText(daysToCalving(expected, todayISO()))}
             </p>
           </div>
         ) : null}

@@ -34,7 +34,7 @@ describe("monthlyAdg", () => {
   ];
 
   it("generates the labels of the last months up to the reference", () => {
-    const series = monthlyAdg([], 3);
+    const series = monthlyAdg([], 3, "2026-07-24");
     expect(series.map((p) => p.month)).toEqual(["mai/26", "jun/26", "jul/26"]);
   });
 
@@ -47,14 +47,14 @@ describe("monthlyAdg", () => {
         { date: "2026-06-30", weightKg: 330 },
       ],
     });
-    const series = monthlyAdg([animalA, animalB], 1);
+    const series = monthlyAdg([animalA, animalB], 1, "2026-07-24");
     expect(series[0].month).toBe("jul/26");
     expect(series[0].averageAdg).toBeCloseTo(0.75, 5);
   });
 
   it("returns null in a month without animals with 2 weighings in the window", () => {
     const oneWeighing = makeAnimal({ weighings: [{ date: "2026-07-01", weightKg: 300 }] });
-    const series = monthlyAdg([oneWeighing], 1);
+    const series = monthlyAdg([oneWeighing], 1, "2026-07-24");
     expect(series[0].averageAdg).toBeNull();
   });
 
@@ -65,13 +65,13 @@ describe("monthlyAdg", () => {
         { date: "2026-07-01", weightKg: 400 },
       ],
     });
-    const series = monthlyAdg([animal], 1);
+    const series = monthlyAdg([animal], 1, "2026-07-24");
     expect(series[0].averageAdg).toBeNull();
   });
 
   it("ignores inactive animals", () => {
     const inactive = makeAnimal({ active: false, weighings: adg1Weighings });
-    const series = monthlyAdg([inactive], 1);
+    const series = monthlyAdg([inactive], 1, "2026-07-24");
     expect(series[0].averageAdg).toBeNull();
   });
 });

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  TODAY_ISO,
   addDays,
   daysBetween,
   formatDate,
   formatAge,
   today,
+  todayISO,
   ageInMonths,
   parseISODate,
   firstDayOfMonth,
@@ -23,10 +23,13 @@ describe("parseISODate", () => {
   });
 });
 
-describe("TODAY_ISO / today", () => {
-  it("anchors today at 2026-07-24", () => {
-    expect(TODAY_ISO).toBe("2026-07-24");
-    expect(today().getDate()).toBe(24);
+describe("todayISO / today", () => {
+  it("returns the current date as YYYY-MM-DD", () => {
+    expect(todayISO()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("today() is the local-midnight Date of todayISO()", () => {
+    expect(toISO(today())).toBe(todayISO());
   });
 });
 
@@ -59,25 +62,25 @@ describe("addDays", () => {
 
 describe("ageInMonths", () => {
   it("counts complete months", () => {
-    expect(ageInMonths("2024-03-10")).toBe(28);
+    expect(ageInMonths("2024-03-10", "2026-07-24")).toBe(28);
   });
 
   it("discounts the month when the day has not arrived yet", () => {
-    expect(ageInMonths("2024-07-25")).toBe(23);
+    expect(ageInMonths("2024-07-25", "2026-07-24")).toBe(23);
   });
 });
 
 describe("formatAge", () => {
   it("formats years and months", () => {
-    expect(formatAge("2024-03-10")).toBe("2a 4m");
+    expect(formatAge("2024-03-10", "2026-07-24")).toBe("2a 4m");
   });
 
   it("formats only months below 1 year", () => {
-    expect(formatAge("2025-11-24")).toBe("8m");
+    expect(formatAge("2025-11-24", "2026-07-24")).toBe("8m");
   });
 
   it("formats exact years without months", () => {
-    expect(formatAge("2024-07-24")).toBe("2a");
+    expect(formatAge("2024-07-24", "2026-07-24")).toBe("2a");
   });
 });
 

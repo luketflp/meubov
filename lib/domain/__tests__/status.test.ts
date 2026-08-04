@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ReproductionRecord } from "@/lib/types";
-import { TODAY_ISO, addDays } from "@/lib/domain/dates";
+import { addDays } from "@/lib/domain/dates";
+
+/** Fixed reference date for deterministic assertions. */
+const TODAY_ISO = "2026-07-24";
 import {
   deriveAnimalStatus,
   deriveTreatmentStatus,

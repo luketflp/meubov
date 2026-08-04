@@ -2,7 +2,7 @@
 
 import { CalendarDays } from "lucide-react";
 import type { Treatment } from "@/lib/types";
-import { TODAY_ISO, formatDate } from "@/lib/domain/dates";
+import { todayISO, formatDate } from "@/lib/domain/dates";
 import { deriveTreatmentStatus } from "@/lib/domain/status";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
@@ -47,7 +47,7 @@ export function MonthList({ yearMonth, treatments, onMarkDone }: MonthListProps)
                   <TreatmentRow
                     key={t.id}
                     treatment={t}
-                    status={deriveTreatmentStatus(t, TODAY_ISO)}
+                    status={deriveTreatmentStatus(t, todayISO())}
                     onMarkDone={onMarkDone}
                   />
                 ))}

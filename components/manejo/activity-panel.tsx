@@ -7,7 +7,7 @@
  */
 import { ClipboardCheck } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
-import { TODAY_ISO, formatDate } from "@/lib/domain/dates";
+import { todayISO, formatDate } from "@/lib/domain/dates";
 import { formatNumber } from "@/lib/domain/format";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -40,7 +40,7 @@ function ActivityRow({
         <p className="mt-1 text-xs text-ink-soft">
           <span className="font-mono text-ink">{formatDate(activity.date)}</span>
           {" · "}
-          {activityDueLabel(activity, TODAY_ISO)}
+          {activityDueLabel(activity, todayISO())}
           {" · "}
           <span className="font-mono text-ink">{formatNumber(heads)}</span>{" "}
           {heads === 1 ? "animal" : "animais"}
@@ -62,7 +62,7 @@ function ActivityRow({
 export function ActivityPanel() {
   const treatments = useHerdStore((s) => s.treatments);
   const completeTreatments = useHerdStore((s) => s.completeTreatments);
-  const activities = pendingActivities(treatments, TODAY_ISO);
+  const activities = pendingActivities(treatments, todayISO());
 
   return (
     <SectionCard title="Painel de atividades">
