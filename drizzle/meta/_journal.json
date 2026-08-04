@@ -6,14 +6,42 @@
       "idx": 0,
       "version": "7",
       "when": 1785543738394,
-      "tag": "0000_lucky_shaman",
+      "tag": "0000_herd_schema",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
       "when": 1785624054490,
-      "tag": "0001_premium_moonstone",
+      "tag": "0001_better_auth",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785781994888,
+      "tag": "0002_multi_farm_manejo",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785782414482,
+      "tag": "0003_manejo_position",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785798260858,
+      "tag": "0004_add_expenses_and_movement_amount",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785800970281,
+      "tag": "0005_custom_categories_and_animal_edit",
       "breakpoints": true
     }
   ]

@@ -1,0 +1,1 @@
+ALTER TABLE "manejo_session_animals" ADD COLUMN "position" integer NOT NULL;

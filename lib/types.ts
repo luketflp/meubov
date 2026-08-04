@@ -64,15 +64,33 @@ export interface ReproductionRecord {
   calvings: Calving[];
 }
 
+/** Why an animal left the active herd. */
+export type InactiveReason = "sale" | "death" | "loss" | "other";
+
+/**
+ * User-defined herd category mapped to a canonical base category. Domain
+ * rules always run on the base; the custom name is presentation.
+ */
+export interface CustomCategory {
+  id: string;
+  name: string;
+  baseCategory: Category;
+}
+
 /** Herd animal. Weighings sorted asc by date; reproduction only for females. */
 export interface Animal {
   earTag: string;
+  /** Canonical category — the custom category's base when one is set. */
   category: Category;
+  /** Optional user-defined category (see CustomCategory). */
+  customCategoryId?: string;
   breed: string;
   sex: Sex;
   birthDate: string;
   lotId: string;
   active: boolean;
+  /** Why the animal left the herd; absent while active. */
+  inactiveReason?: InactiveReason;
   weighings: Weighing[];
   reproduction?: ReproductionRecord;
 }
@@ -161,8 +179,34 @@ export interface Movement {
   type: MovementType;
   date: string;
   quantity: number;
+  /** Predominant category of the animals moved. */
+  category: Category;
   origin: string;
   destination: string;
+  /**
+   * Total value in BRL. Present for purchase/sale (required on new records);
+   * absent for transfers and legacy rows (excluded from aggregations).
+   */
+  amountBrl?: number;
+  notes?: string;
+}
+
+/** Category of a farm expense. */
+export type ExpenseCategory =
+  | "nutrition"
+  | "pasture"
+  | "labor"
+  | "health"
+  | "breeding"
+  | "admin"
+  | "other";
+
+/** Farm expense (cost outside the sanitary treatments). */
+export interface Expense {
+  id: string;
+  date: string;
+  category: ExpenseCategory;
+  amountBrl: number;
   notes?: string;
 }
 
@@ -195,5 +239,7 @@ export interface HerdData {
   breeds: string[];
   protocols: HealthProtocol[];
   manejoSessions: ManejoSession[];
+  expenses: Expense[];
+  customCategories: CustomCategory[];
   farm: FarmData;
 }

@@ -3,12 +3,13 @@
  * Two calls of generateInitialData() produce deeply equal structures;
  * all noise comes from the rng in @/lib/data/rng, never from Math.random.
  *
- * Temporal anchor: TODAY_ISO (2026-07-24). Ages, weighings, health
+ * Temporal anchor: SEED_TODAY_ISO (2026-07-24). Ages, weighings, health
  * campaigns and calving forecasts are consistent with this date.
  */
 import type {
   Animal,
   Breeding,
+  Expense,
   FarmData,
   HerdData,
   Lot,
@@ -20,7 +21,15 @@ import type {
   BreedingType,
   Treatment,
 } from "@/lib/types";
-import { TODAY_ISO, addDays, daysBetween } from "@/lib/domain/dates";
+import { addDays, daysBetween } from "@/lib/domain/dates";
+
+/**
+ * Fixed temporal anchor of the demo herd. The app's "today" is the real
+ * clock; the SEED stays anchored so generation is deterministic (ages,
+ * weighings and schedules never change between runs).
+ */
+export const SEED_TODAY_ISO = "2026-07-24";
+const TODAY_ISO = SEED_TODAY_ISO;
 import { GESTATION_DAYS } from "@/lib/domain/reproduction";
 import { type Rng, createRng, pick, intBetween } from "@/lib/data/rng";
 
@@ -123,6 +132,61 @@ const PREGNANT_BREEDINGS: readonly string[] = [
   "2025-11-05", "2025-11-22", "2025-12-10", "2025-12-28", "2026-01-15", "2026-01-30", "2026-02-12",
 ];
 const PREGNANT_COW_INDICES: readonly number[] = [0, 1, 5, 6, 7, 8, 9];
+
+// ---- Expenses (12 months ending at the seed anchor) -------------------------
+
+/** Month keys of the 12 months ending at SEED_TODAY_ISO's month (asc). */
+const EXPENSE_MONTHS: readonly string[] = [
+  "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01",
+  "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07",
+];
+
+/** Feed/mineral cost per month — heavier in the dry season (Aug–Oct). */
+const NUTRITION_BY_MONTH: readonly number[] = [
+  5400, 5600, 5200, 4300, 3800, 3400, 3200, 3300, 3600, 4100, 4800, 5200,
+];
+
+const LABOR_MONTHLY = 2600;
+const ADMIN_MONTHLY = 480;
+
+/** One-off expenses: pasture upkeep, breeding, extra health and misc. */
+const ONE_OFF_EXPENSES: readonly Omit<Expense, "id">[] = [
+  { date: "2025-09-15", category: "pasture", amountBrl: 2900, notes: "Adubação das pastagens" },
+  { date: "2026-01-20", category: "pasture", amountBrl: 1400, notes: "Sementes de braquiária" },
+  { date: "2026-03-18", category: "pasture", amountBrl: 1650, notes: "Roçada e reparo de cercas" },
+  { date: "2026-06-10", category: "pasture", amountBrl: 900 },
+  { date: "2025-11-05", category: "breeding", amountBrl: 2100, notes: "Protocolo IATF" },
+  { date: "2026-01-15", category: "breeding", amountBrl: 1300, notes: "Doses de sêmen" },
+  { date: "2025-10-12", category: "health", amountBrl: 850, notes: "Consulta veterinária" },
+  { date: "2026-02-08", category: "health", amountBrl: 620 },
+  { date: "2026-05-11", category: "health", amountBrl: 1200, notes: "Campanha de aftosa" },
+  { date: "2025-12-18", category: "other", amountBrl: 700, notes: "Combustível" },
+  { date: "2026-04-22", category: "other", amountBrl: 540 },
+];
+
+/** Deterministic expense book: monthly recurring rows + one-offs, date asc. */
+function buildExpenses(): Expense[] {
+  const rows: Omit<Expense, "id">[] = [];
+  EXPENSE_MONTHS.forEach((month, i) => {
+    rows.push({
+      date: `${month}-05`,
+      category: "nutrition",
+      amountBrl: NUTRITION_BY_MONTH[i],
+      notes: "Ração e sal mineral",
+    });
+    rows.push({
+      date: `${month}-01`,
+      category: "labor",
+      amountBrl: LABOR_MONTHLY,
+      notes: "Diárias e encargos",
+    });
+    rows.push({ date: `${month}-10`, category: "admin", amountBrl: ADMIN_MONTHLY });
+  });
+  rows.push(...ONE_OFF_EXPENSES);
+  return rows
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+    .map((row, i) => ({ ...row, id: `expense-${i + 1}` }));
+}
 
 function range(rng: Rng, min: number, max: number): number {
   return min + rng() * (max - min);
@@ -423,14 +487,14 @@ export function generateInitialData(): HerdData {
 
   // ---- Movements (last 6 months) ----------------------------------------
   const movementsWithoutId: readonly Omit<Movement, "id">[] = [
-    { type: "purchase", date: BULL_2_PURCHASE_DATE, quantity: 1, origin: "Externo", destination: "Pasto do Rio", notes: `Aquisição do touro ${bulls[1].earTag}` },
-    { type: "purchase", date: "2026-03-10", quantity: 2, origin: "Externo", destination: "Pasto do Rio" },
-    { type: "transfer", date: "2026-03-18", quantity: 4, origin: "Pasto do Rio", destination: "Invernada Alta" },
-    { type: "sale", date: "2026-04-08", quantity: 1, origin: "Invernada Alta", destination: "Externo", notes: `Venda do boi ${soldSteer.earTag} para frigorífico` },
-    { type: "sale", date: "2026-05-12", quantity: 1, origin: "Pasto da Sede", destination: "Externo", notes: `Descarte da vaca ${soldCow.earTag}` },
-    { type: "transfer", date: "2026-05-30", quantity: 3, origin: "Reserva do Ipê", destination: "Piquete Norte" },
-    { type: "sale", date: "2026-06-02", quantity: 3, origin: "Piquete Norte", destination: "Externo", notes: "Bezerros desmamados vendidos em leilão (sem cadastro individual)" },
-    { type: "transfer", date: "2026-07-02", quantity: 6, origin: "Pasto da Sede", destination: "Reserva do Ipê" },
+    { type: "purchase", date: BULL_2_PURCHASE_DATE, quantity: 1, category: "bull", origin: "Externo", destination: "Pasto do Rio", amountBrl: 14000, notes: `Aquisição do touro ${bulls[1].earTag}` },
+    { type: "purchase", date: "2026-03-10", quantity: 2, category: "steer", origin: "Externo", destination: "Pasto do Rio", amountBrl: 7600 },
+    { type: "transfer", date: "2026-03-18", quantity: 4, category: "steer", origin: "Pasto do Rio", destination: "Invernada Alta" },
+    { type: "sale", date: "2026-04-08", quantity: 1, category: "steer", origin: "Invernada Alta", destination: "Externo", amountBrl: 8850, notes: `Venda do boi ${soldSteer.earTag} para frigorífico` },
+    { type: "sale", date: "2026-05-12", quantity: 1, category: "cow", origin: "Pasto da Sede", destination: "Externo", amountBrl: 6200, notes: `Descarte da vaca ${soldCow.earTag}` },
+    { type: "transfer", date: "2026-05-30", quantity: 3, category: "heifer", origin: "Reserva do Ipê", destination: "Piquete Norte" },
+    { type: "sale", date: "2026-06-02", quantity: 3, category: "calf", origin: "Piquete Norte", destination: "Externo", amountBrl: 8400, notes: "Bezerros desmamados vendidos em leilão (sem cadastro individual)" },
+    { type: "transfer", date: "2026-07-02", quantity: 6, category: "cow", origin: "Pasto da Sede", destination: "Reserva do Ipê" },
   ];
   const movements: Movement[] = movementsWithoutId.map((m, i) => ({ ...m, id: `mov-${i + 1}` }));
 
@@ -445,6 +509,8 @@ export function generateInitialData(): HerdData {
     breeds: [...BREEDS],
     protocols: PROTOCOLS.map((p) => ({ ...p })),
     manejoSessions: [],
+    expenses: buildExpenses(),
+    customCategories: [],
     farm: { ...FARM },
   };
 }

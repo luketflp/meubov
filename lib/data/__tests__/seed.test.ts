@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { HerdData } from "@/lib/types";
-import { TODAY_ISO } from "@/lib/domain/dates";
+
 import { currentDiagnosis } from "@/lib/domain/reproduction";
 import { deriveTreatmentStatus } from "@/lib/domain/status";
-import { generateInitialData } from "@/lib/data/seed";
+import { generateInitialData, SEED_TODAY_ISO as TODAY_ISO } from "@/lib/data/seed";
 
 function reproductiveSituations(data: HerdData): Map<string, string> {
   const situations = new Map<string, string>();
@@ -20,6 +20,30 @@ describe("generateInitialData", () => {
 
   it("is deterministic: two calls produce deeply equal data", () => {
     expect(generateInitialData()).toEqual(generateInitialData());
+  });
+
+  it("prices every purchase/sale and never a transfer", () => {
+    for (const m of data.movements) {
+      if (m.type === "transfer") {
+        expect(m.amountBrl).toBeUndefined();
+      } else {
+        expect(m.amountBrl).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("has a deterministic 12-month expense book covering every category", () => {
+    const months = new Set(data.expenses.map((e) => e.date.slice(0, 7)));
+    expect(months.size).toBe(12);
+    const categories = new Set(data.expenses.map((e) => e.category));
+    for (const category of [
+      "nutrition", "pasture", "labor", "health", "breeding", "admin", "other",
+    ]) {
+      expect(categories).toContain(category);
+    }
+    for (const e of data.expenses) expect(e.amountBrl).toBeGreaterThan(0);
+    const ids = data.expenses.map((e) => e.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it("has 39 active animals and 2 inactive consistent with sales", () => {

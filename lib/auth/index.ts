@@ -2,9 +2,9 @@
  * Better Auth server instance for MeuBov.
  *
  * Wires Better Auth to the app's Drizzle + Postgres client. Auth data (user,
- * session, account, verification) lives in the same database as the rest of the
- * schema. Herd data still comes from MockHerdRepository in this phase — only the
- * authentication layer is persisted here.
+ * session, account, verification) lives in the same database as the herd
+ * schema; the herd API (lib/api) reads the session through `auth.api` to scope
+ * every request to the user's farm.
  *
  * Configuration notes:
  * - `drizzleAdapter(db, { provider: "pg", schema, usePlural: false })`. Table
