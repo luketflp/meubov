@@ -12,7 +12,14 @@
  */
 import type { Metadata } from "next";
 import Image from "next/image";
-import { Beef, CalendarDays, CircleDollarSign, LayoutDashboard, type LucideIcon } from "lucide-react";
+import {
+  Beef,
+  CalendarDays,
+  CircleDollarSign,
+  LayoutDashboard,
+  LogIn,
+  type LucideIcon,
+} from "lucide-react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { Button } from "@/components/ui/button";
 import { NeloreMark } from "@/components/ui/nelore-mark";
@@ -60,9 +67,9 @@ const FEATURES: readonly Feature[] = [
   },
 ];
 
-/** Farms shown in the social-proof marquee (logos 280×80). */
+/** Farms shown in the social-proof marquee. */
 const FARMS: readonly { name: string; logo: string }[] = [
-  { name: "Fazenda Maranatha", logo: "/farms/maranatha.svg" },
+  { name: "Fazenda Maranata", logo: "/farms/maranata.png" },
 ];
 
 /** Repeat the list until the marquee track has at least 8 logos per half. */
@@ -74,16 +81,19 @@ const FILLED_FARMS: readonly { name: string; logo: string }[] = Array.from(
 /** One half of the marquee track; the duplicate half is aria-hidden. */
 function FarmLogoSet({ hidden }: { hidden?: boolean }) {
   return (
-    <div aria-hidden={hidden || undefined} className="flex items-center gap-12 pr-12">
+    <div
+      aria-hidden={hidden || undefined}
+      className="flex items-center gap-12 pr-12 md:gap-24 md:pr-24"
+    >
       {FILLED_FARMS.map(({ name, logo }, i) => (
         <Image
           key={`${name}-${i}`}
           src={logo}
           alt={hidden || i > 0 ? "" : name}
-          width={196}
-          height={56}
+          width={278}
+          height={264}
           unoptimized
-          className="h-14 w-auto shrink-0 object-contain opacity-60 grayscale transition-all duration-300 hover:opacity-100 hover:grayscale-0"
+          className="h-14 w-auto shrink-0 object-contain opacity-60 grayscale transition-all duration-300 hover:opacity-100 hover:grayscale-0 md:h-[5.5rem]"
         />
       ))}
     </div>
@@ -99,7 +109,10 @@ export default function LandingPage() {
           <p className="hidden text-xs text-ink-soft sm:block">Gestão de rebanho de corte</p>
         </div>
         <AuthDialog initialMode="login">
-          <Button variant="outline">Entrar</Button>
+          <Button variant="outline">
+            <LogIn aria-hidden />
+            Entrar
+          </Button>
         </AuthDialog>
       </header>
 
