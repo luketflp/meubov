@@ -5,7 +5,7 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { animals, customCategories, weighings } from "@/lib/db/schema";
+import { animals, breeds, customCategories, lots, weighings } from "@/lib/db/schema";
 import type {
   Category,
   InactiveReason,
@@ -14,7 +14,7 @@ import type {
   Animal,
 } from "@/lib/types";
 import { todayISO } from "@/lib/domain/dates";
-import { toWeighing } from "@/lib/api/services/mappers";
+import { toAnimal, toWeighing } from "@/lib/api/services/mappers";
 
 export interface NewAnimalInput {
   earTag: string;
@@ -132,6 +132,175 @@ export async function addAnimal(
     if (isUniqueViolation(error)) return null;
     throw error;
   }
+}
+
+/** One row of a herd import: like NewAnimalInput but the pasto is a NAME. */
+export interface ImportAnimalInput {
+  earTag: string;
+  category: Category;
+  customCategoryId?: string;
+  breed: string;
+  sex: Sex;
+  birthDate: string;
+  /** Pasto name; resolved to a lot id, creating the lot when it is new. */
+  lot: string;
+  weightKg?: number;
+}
+
+/** Summary of a bulk herd import (what was added, skipped and auto-created). */
+export interface ImportResult {
+  imported: Animal[];
+  skipped: { earTag: string; reason: "duplicate" }[];
+  createdBreeds: string[];
+  createdLots: { id: string; name: string }[];
+}
+
+/** Placeholder pasture data for auto-created lots (editable in Settings). */
+const IMPORT_LOT_GRASS = "A definir";
+const IMPORT_LOT_HECTARES = 1;
+
+/**
+ * Bulk-imports animals in one transaction. Add-only and idempotent: rows whose
+ * ear tag already exists on the farm (or repeats earlier in the batch) are
+ * skipped, not updated. Missing breeds and pastos are auto-created (the pasto
+ * with placeholder area/grass to edit later). An optional weight becomes the
+ * animal's first weighing dated today.
+ */
+export async function importAnimals(
+  farmId: number,
+  rows: ImportAnimalInput[]
+): Promise<ImportResult> {
+  return db.transaction(async (tx) => {
+    // 1. Current farm state used to resolve refs and detect duplicates.
+    const [existingTagRows, breedRows, lotRows, customRows] = await Promise.all([
+      tx.select({ earTag: animals.earTag }).from(animals).where(eq(animals.farmId, farmId)),
+      tx.select({ name: breeds.name }).from(breeds).where(eq(breeds.farmId, farmId)),
+      tx.select({ id: lots.id, name: lots.name }).from(lots).where(eq(lots.farmId, farmId)),
+      tx
+        .select({ id: customCategories.id, baseCategory: customCategories.baseCategory })
+        .from(customCategories)
+        .where(eq(customCategories.farmId, farmId)),
+    ]);
+    const existingTags = new Set(existingTagRows.map((r) => r.earTag));
+    const breedSet = new Set(breedRows.map((r) => r.name));
+    const lotByName = new Map(lotRows.map((r) => [r.name, r.id]));
+    const baseByCustomId = new Map(customRows.map((r) => [r.id, r.baseCategory]));
+
+    // 2. Keep the first occurrence of each new ear tag; skip the rest.
+    // `skippedTags` de-dupes the report so a tag repeated in the payload (e.g.
+    // an already-in-herd tag sent twice) is counted once, not per occurrence.
+    const skipped: { earTag: string; reason: "duplicate" }[] = [];
+    const skippedTags = new Set<string>();
+    const markSkipped = (earTag: string) => {
+      if (skippedTags.has(earTag)) return;
+      skippedTags.add(earTag);
+      skipped.push({ earTag, reason: "duplicate" });
+    };
+    const seen = new Set<string>();
+    const toImport: ImportAnimalInput[] = [];
+    for (const row of rows) {
+      const earTag = row.earTag.trim();
+      if (earTag === "") continue; // guarded client + schema side; ignore defensively
+      if (existingTags.has(earTag) || seen.has(earTag)) {
+        markSkipped(earTag);
+        continue;
+      }
+      seen.add(earTag);
+      toImport.push({ ...row, earTag });
+    }
+    if (toImport.length === 0) {
+      return { imported: [], skipped, createdBreeds: [], createdLots: [] };
+    }
+
+    // 3. Auto-create the breeds this batch introduces.
+    const createdBreeds = [...new Set(toImport.map((r) => r.breed))].filter(
+      (name) => !breedSet.has(name)
+    );
+    if (createdBreeds.length > 0) {
+      await tx
+        .insert(breeds)
+        .values(createdBreeds.map((name) => ({ farmId, name })))
+        .onConflictDoNothing();
+    }
+
+    // 4. Auto-create the pastos this batch introduces (placeholder area/grass).
+    const newLotNames = [...new Set(toImport.map((r) => r.lot))].filter(
+      (name) => !lotByName.has(name)
+    );
+    const createdLots: { id: string; name: string }[] = [];
+    if (newLotNames.length > 0) {
+      const inserted = await tx
+        .insert(lots)
+        .values(
+          newLotNames.map((name) => ({
+            id: randomUUID(),
+            farmId,
+            name,
+            grass: IMPORT_LOT_GRASS,
+            hectares: IMPORT_LOT_HECTARES,
+          }))
+        )
+        .returning({ id: lots.id, name: lots.name });
+      for (const lot of inserted) {
+        lotByName.set(lot.name, lot.id);
+        createdLots.push({ id: lot.id, name: lot.name });
+      }
+    }
+
+    // 5. Insert the animals in one batch (onConflict guards a concurrent race).
+    const animalValues = toImport.map((r) => {
+      let category = r.category;
+      let customCategoryId: string | null = null;
+      if (r.customCategoryId && baseByCustomId.has(r.customCategoryId)) {
+        customCategoryId = r.customCategoryId;
+        category = baseByCustomId.get(r.customCategoryId)!;
+      }
+      return {
+        id: randomUUID(),
+        farmId,
+        earTag: r.earTag,
+        category,
+        customCategoryId,
+        breed: r.breed,
+        sex: r.sex,
+        birthDate: r.birthDate,
+        lotId: lotByName.get(r.lot)!,
+        active: true,
+      };
+    });
+    const insertedAnimals = await tx
+      .insert(animals)
+      .values(animalValues)
+      .onConflictDoNothing({ target: [animals.farmId, animals.earTag] })
+      .returning();
+    const rowByTag = new Map(insertedAnimals.map((a) => [a.earTag, a]));
+
+    // Rows dropped by the race guard did not insert — report them as skipped.
+    for (const r of toImport) {
+      if (!rowByTag.has(r.earTag)) markSkipped(r.earTag);
+    }
+
+    // 6. First weighing (today) for the imported rows that carried a weight.
+    const weighingValues = toImport
+      .filter((r) => r.weightKg !== undefined && rowByTag.has(r.earTag))
+      .map((r) => ({
+        animalId: rowByTag.get(r.earTag)!.id,
+        date: todayISO(),
+        weightKg: r.weightKg!,
+      }));
+    const weighingsByAnimal = new Map<string, Weighing[]>();
+    if (weighingValues.length > 0) {
+      const insertedWeighings = await tx.insert(weighings).values(weighingValues).returning();
+      for (const w of insertedWeighings) {
+        weighingsByAnimal.set(w.animalId, [toWeighing(w)]);
+      }
+    }
+
+    const imported = insertedAnimals.map((row) =>
+      toAnimal(row, weighingsByAnimal.get(row.id) ?? [], undefined)
+    );
+    return { imported, skipped, createdBreeds, createdLots };
+  });
 }
 
 /**

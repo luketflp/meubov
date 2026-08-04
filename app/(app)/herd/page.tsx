@@ -11,6 +11,7 @@ import { FilterBar } from "@/components/herd/FilterBar";
 import { HerdTable } from "@/components/herd/HerdTable";
 import { AnimalCard } from "@/components/herd/AnimalCard";
 import { RegisterAnimalDialog } from "@/components/herd/RegisterAnimalDialog";
+import { ImportHerdDialog } from "@/components/herd/ImportHerdDialog";
 import {
   INITIAL_FILTERS,
   DEFAULT_SORT,
@@ -60,7 +61,12 @@ export default function HerdPage() {
       <PageHeader
         title="Rebanho"
         subtitle={herdSubtitle(derived.length, filtered.length, filterActive)}
-        actions={<RegisterAnimalDialog />}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <ImportHerdDialog />
+            <RegisterAnimalDialog />
+          </div>
+        }
       />
 
       <FilterBar filters={filters} lots={lots} onChange={setFilters} />

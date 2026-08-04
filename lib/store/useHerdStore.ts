@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import { type HerdRepository } from "@/lib/repository/HerdRepository";
 import { ApiHerdRepository } from "@/lib/repository/ApiHerdRepository";
 import { api } from "@/lib/api/client";
+import type { ImportAnimalPayload } from "@/lib/domain/herdImport";
 
 /** Movement to record; optional earTags apply sale/transfer to the animals. */
 export type NewMovement = Omit<Movement, "id"> & { earTags?: string[] };
@@ -74,11 +75,22 @@ export interface NewCalving {
   calfWeightKg?: number;
 }
 
+/** Summary of a bulk import, shown on the dialog's final screen. */
+export interface ImportSummary {
+  imported: number;
+  skipped: number;
+  createdBreeds: string[];
+  /** Names of the pastos auto-created by the import. */
+  createdLots: string[];
+}
+
 export interface HerdStore extends HerdData {
   loaded: boolean;
   load: () => Promise<void>;
   /** Registers the animal via the API; false when the ear tag is taken. */
   addAnimal: (a: NewAnimal) => Promise<boolean>;
+  /** Bulk-imports parsed rows, refreshes the herd, and returns a summary. */
+  importHerd: (rows: ImportAnimalPayload[]) => Promise<ImportSummary>;
   markTreatmentDone: (id: string) => Promise<void>;
   completeTreatments: (ids: string[]) => Promise<void>;
   /** Opens a manejo session and returns its id (for the run screen). */
@@ -216,6 +228,34 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const animal = data as Animal;
     set((s) => ({ animals: [...s.animals, animal] }));
     return true;
+  },
+
+  importHerd: async (rows) => {
+    const { data, error } = await api.animals.import.post({ animals: rows });
+    if (error) apiFail("importar o rebanho", error.status);
+    const result = data as {
+      imported: Animal[];
+      skipped: { earTag: string; reason: string }[];
+      createdBreeds: string[];
+      createdLots: { id: string; name: string }[];
+    };
+    const summary: ImportSummary = {
+      imported: result.imported.length,
+      skipped: result.skipped.length,
+      createdBreeds: result.createdBreeds,
+      createdLots: result.createdLots.map((lot) => lot.name),
+    };
+    // The import already committed on the server. Re-fetch the whole herd so
+    // animals plus any new raças/pastos stay consistent, but never let a refresh
+    // failure mask a successful import — return the server-reported summary
+    // regardless; the store refreshes on the next successful load.
+    try {
+      const fresh = await repository.load();
+      set({ ...fresh, loaded: true });
+    } catch {
+      // best-effort: keep the committed import's summary
+    }
+    return summary;
   },
 
   markTreatmentDone: async (id) => {

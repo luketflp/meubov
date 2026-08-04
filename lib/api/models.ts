@@ -45,6 +45,27 @@ export const NewAnimalBody = t.Object({
   initialWeightKg: t.Optional(t.Number({ exclusiveMinimum: 0 })),
 });
 
+/**
+ * One row of POST /animals/import. Mirrors NewAnimalBody but carries the pasto
+ * as a NAME (`lot`) instead of a lot id: the server resolves it to a lot,
+ * creating the lot (and any missing breed) on the fly.
+ */
+export const ImportAnimalRow = t.Object({
+  earTag: t.String({ minLength: 1 }),
+  category: CategoryModel,
+  customCategoryId: t.Optional(t.String()),
+  breed: t.String({ minLength: 1 }),
+  sex: SexModel,
+  birthDate: DateString,
+  lot: t.String({ minLength: 1 }),
+  weightKg: t.Optional(t.Number({ exclusiveMinimum: 0 })),
+});
+
+/** Body of POST /animals/import (bulk herd import). */
+export const ImportAnimalsBody = t.Object({
+  animals: t.Array(ImportAnimalRow, { minItems: 1, maxItems: 2000 }),
+});
+
 /** Body of POST /animals/:earTag/weighings. */
 export const WeighingBody = t.Object({
   date: DateString,

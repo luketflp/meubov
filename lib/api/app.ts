@@ -16,6 +16,7 @@ import {
   CompleteTreatmentsBody,
   DeactivateAnimalBody,
   FarmDataBody,
+  ImportAnimalsBody,
   ManejoPassBody,
   ManejoSkipBody,
   NewAnimalBody,
@@ -104,6 +105,11 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
       return animal;
     },
     { farm: true, body: NewAnimalBody }
+  )
+  .post(
+    "/animals/import",
+    ({ farmId, body }) => animalsService.importAnimals(farmId, body.animals),
+    { farm: true, body: ImportAnimalsBody }
   )
   .patch(
     "/animals/:earTag",
