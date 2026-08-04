@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Zilla_Slab } from "next/font/google";
+import { ToastProvider } from "@/components/providers/Toasts";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const zillaSlab = Zilla_Slab({
@@ -37,7 +39,8 @@ export default function RootLayout({
       className={`${zillaSlab.variable} ${ibmPlexSans.variable} ${ibmPlexMono.variable} h-full antialiased`}
     >
       <body className="min-h-full" suppressHydrationWarning>
-        {children}
+        <ToastProvider>{children}</ToastProvider>
+        <Toaster />
       </body>
     </html>
   );

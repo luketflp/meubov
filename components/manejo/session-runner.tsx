@@ -11,6 +11,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, ClipboardX, Search, Undo2 } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useToast } from "@/components/providers/Toasts";
 import type { ManejoSessionAnimal } from "@/lib/types";
 import { formatDate } from "@/lib/domain/dates";
 import { CATEGORY_LABEL } from "@/lib/domain/labels";
@@ -38,12 +39,15 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
   const skipManejoAnimal = useHerdStore((s) => s.skipManejoAnimal);
   const reopenManejoAnimal = useHerdStore((s) => s.reopenManejoAnimal);
   const closeManejoSession = useHerdStore((s) => s.closeManejoSession);
+  const { addToast } = useToast();
 
   const [search, setSearch] = useState("");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [weight, setWeight] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  /** True while a pass is in flight — a chute action must not double-fire. */
+  const [busy, setBusy] = useState(false);
 
   const byTag = useMemo(() => new Map(animals.map((a) => [a.earTag, a])), [animals]);
 
@@ -89,9 +93,9 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
     setSearch("");
   }
 
-  function onComplete(event: FormEvent<HTMLFormElement>) {
+  async function onComplete(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!session || !current) return;
+    if (!session || !current || busy) return;
     let weightKg: number | undefined;
     if (session.weighing) {
       weightKg = Number(weight);
@@ -100,17 +104,31 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         return;
       }
     }
-    completeManejoAnimal(session.id, current.earTag, {
-      weightKg,
-      notes: note.trim() === "" ? undefined : note.trim(),
-    });
-    resetPassForm();
+    setBusy(true);
+    try {
+      await completeManejoAnimal(session.id, current.earTag, {
+        weightKg,
+        notes: note.trim() === "" ? undefined : note.trim(),
+      });
+      resetPassForm();
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function onSkip() {
-    if (!session || !current) return;
-    skipManejoAnimal(session.id, current.earTag, note.trim() === "" ? undefined : note.trim());
-    resetPassForm();
+  async function onSkip() {
+    if (!session || !current || busy) return;
+    setBusy(true);
+    try {
+      await skipManejoAnimal(
+        session.id,
+        current.earTag,
+        note.trim() === "" ? undefined : note.trim()
+      );
+      resetPassForm();
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -199,7 +217,11 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
             {error ? <p className="text-xs text-overdue">{error}</p> : null}
 
             <div className="flex flex-wrap gap-2">
-              <Button type="submit" className="min-h-12 flex-1 sm:flex-none sm:px-8">
+              <Button
+                type="submit"
+                disabled={busy}
+                className="min-h-12 flex-1 sm:flex-none sm:px-8"
+              >
                 <CheckCircle2 aria-hidden />
                 Concluir animal
               </Button>
@@ -207,6 +229,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
                 type="button"
                 variant="outline"
                 className="min-h-12"
+                disabled={busy}
                 onClick={onSkip}
               >
                 Pular (não passou)
@@ -316,7 +339,10 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
           <Button
             variant="outline"
             className="min-h-11"
-            onClick={() => closeManejoSession(session.id)}
+            onClick={async () => {
+              await closeManejoSession(session.id);
+              addToast({ messageType: "success", text: "Manejo encerrado" });
+            }}
           >
             {progress.pending > 0
               ? `Encerrar com ${progress.pending} ${progress.pending === 1 ? "pendente" : "pendentes"}`

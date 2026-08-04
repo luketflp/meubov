@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SectionCard } from "@/components/ui/section-card";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useToast } from "@/components/providers/Toasts";
 import type { FarmData } from "@/lib/types";
-import { useTemporaryMessage } from "./useTemporaryMessage";
 
 interface FarmField {
   /** Only the free-text fields — headquarters (coordinates) is set via the map. */
@@ -28,16 +27,16 @@ const FIELDS: readonly FarmField[] = [
 export function FarmDataForm() {
   const farm = useHerdStore((s) => s.farm);
   const saveFarm = useHerdStore((s) => s.saveFarm);
+  const { addToast } = useToast();
   const [form, setForm] = useState<FarmData>(farm);
-  const [feedback, showFeedback] = useTemporaryMessage(2000);
 
   const hasChange = FIELDS.some(({ key }) => form[key] !== farm[key]);
 
-  function onSave(event: FormEvent<HTMLFormElement>) {
+  async function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!hasChange) return;
-    saveFarm(form);
-    showFeedback("Salvo");
+    await saveFarm(form);
+    addToast({ messageType: "success", text: "Dados da fazenda salvos" });
   }
 
   return (
@@ -58,12 +57,6 @@ export function FarmDataForm() {
           <Button type="submit" disabled={!hasChange} className="min-h-11 md:min-h-0">
             Salvar
           </Button>
-          {feedback ? (
-            <span className="inline-flex items-center gap-1 text-sm font-medium text-healthy">
-              <Check className="size-4" aria-hidden />
-              {feedback}
-            </span>
-          ) : null}
         </div>
       </form>
     </SectionCard>

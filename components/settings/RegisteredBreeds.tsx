@@ -31,8 +31,8 @@ export function RegisteredBreeds() {
     setName("");
   }
 
-  function onRemove(breed: string) {
-    if (!removeBreed(breed)) {
+  async function onRemove(breed: string) {
+    if (!(await removeBreed(breed))) {
       showError("Raça em uso — não é possível remover");
     }
   }

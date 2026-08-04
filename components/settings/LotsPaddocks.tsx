@@ -37,8 +37,8 @@ export function LotsPaddocks() {
 
   const summaries = lotsWithSummary(lots, animals);
 
-  function onRemove(id: string) {
-    if (!removeLot(id)) {
+  async function onRemove(id: string) {
+    if (!(await removeLot(id))) {
       showRemoveError("Lote com animais — transfira antes de remover");
     }
   }

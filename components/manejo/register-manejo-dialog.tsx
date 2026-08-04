@@ -12,9 +12,10 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Play, Search } from "lucide-react";
 import { useHerdStore, type NewManejoSession } from "@/lib/store/useHerdStore";
+import { useToast } from "@/components/providers/Toasts";
 import { activeAnimals } from "@/lib/store/selectors";
 import type { Animal, Category } from "@/lib/types";
-import { TODAY_ISO, formatAge } from "@/lib/domain/dates";
+import { todayISO, formatAge } from "@/lib/domain/dates";
 import { CATEGORY_LABEL } from "@/lib/domain/labels";
 import { currentWeight } from "@/lib/domain/weights";
 import { formatKg } from "@/lib/domain/format";
@@ -58,7 +59,7 @@ const CATEGORY_LIST = Object.keys(CATEGORY_LABEL) as Category[];
 function createInitialFields(): ManejoFields {
   return {
     action: "vaccine",
-    date: TODAY_ISO,
+    date: todayISO(),
     name: "",
     dose: "",
     withdrawalDays: "0",
@@ -114,6 +115,7 @@ export function RegisterManejoDialog() {
   const lots = useHerdStore((s) => s.lots);
   const animals = useHerdStore((s) => s.animals);
   const startManejoSession = useHerdStore((s) => s.startManejoSession);
+  const { addToast } = useToast();
 
   const [open, setOpen] = useState(false);
   const [fields, setFields] = useState<ManejoFields>(createInitialFields);
@@ -172,7 +174,7 @@ export function RegisterManejoDialog() {
     setFields((f) => ({ ...f, action, weighAlso: false }));
   }
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const newErrors = validateManejo(fields);
     setErrors(newErrors);
@@ -199,7 +201,8 @@ export function RegisterManejoDialog() {
         nextDate: fields.nextDate === "" ? undefined : fields.nextDate,
       };
     }
-    const id = startManejoSession(input);
+    const id = await startManejoSession(input);
+    addToast({ messageType: "success", text: "Manejo iniciado" });
     setOpen(false);
     router.push(`/manejo/${id}`);
   }

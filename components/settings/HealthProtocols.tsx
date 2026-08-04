@@ -32,6 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useToast } from "@/components/providers/Toasts";
 import { formatNumber } from "@/lib/domain/format";
 import { TREATMENT_TYPE_LABEL } from "@/lib/domain/labels";
 import type { TreatmentType } from "@/lib/types";
@@ -71,6 +72,7 @@ export function HealthProtocols() {
   const protocols = useHerdStore((s) => s.protocols);
   const addProtocol = useHerdStore((s) => s.addProtocol);
   const removeProtocol = useHerdStore((s) => s.removeProtocol);
+  const { addToast } = useToast();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +85,7 @@ export function HealthProtocols() {
     }
   }
 
-  function onSave(event: FormEvent<HTMLFormElement>) {
+  async function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const cleanName = form.name.trim();
     const interval = Number(form.intervalMonths);
@@ -100,7 +102,7 @@ export function HealthProtocols() {
       setError("Carência deve ser um número inteiro de dias (zero ou mais).");
       return;
     }
-    addProtocol(
+    await addProtocol(
       {
         name: cleanName,
         type: form.type,
@@ -110,6 +112,12 @@ export function HealthProtocols() {
       },
       form.generateSchedule
     );
+    addToast({
+      messageType: "success",
+      text: form.generateSchedule
+        ? `Protocolo "${cleanName}" criado e agenda gerada`
+        : `Protocolo "${cleanName}" criado`,
+    });
     setOpen(false);
   }
 

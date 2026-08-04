@@ -6,7 +6,8 @@
  */
 import { type FormEvent, useState } from "react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
-import { TODAY_ISO } from "@/lib/domain/dates";
+import { useToast } from "@/components/providers/Toasts";
+import { todayISO } from "@/lib/domain/dates";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,11 +20,12 @@ interface WeighingFormProps {
 
 export function WeighingForm({ earTag }: WeighingFormProps) {
   const recordWeighing = useHerdStore((s) => s.recordWeighing);
-  const [date, setDate] = useState(TODAY_ISO);
+  const { addToast } = useToast();
+  const [date, setDate] = useState(todayISO());
   const [weight, setWeight] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!ISO_DATE_PATTERN.test(date)) {
       setError("Informe uma data válida.");
@@ -34,7 +36,8 @@ export function WeighingForm({ earTag }: WeighingFormProps) {
       setError("Informe um peso maior que zero.");
       return;
     }
-    recordWeighing(earTag, { date, weightKg });
+    await recordWeighing(earTag, { date, weightKg });
+    addToast({ messageType: "success", text: `Pesagem de ${earTag} registrada` });
     setWeight("");
     setError(null);
   }
