@@ -32,7 +32,7 @@ Ferramenta de **gestão de rebanho bovino de corte** para o produtor ou gerente 
 
 - **Painel** — total de cabeças, quebra por categoria, animais que precisam de atenção, tendência de GMD e calendário sanitário dos próximos dias.
 - **Rebanho** — lista com busca, filtros (categoria, lote, status) e ordenação por qualquer coluna.
-- **Ficha do animal** — identificação, evolução de peso com registro de pesagem, linha do tempo, histórico sanitário e ficha reprodutiva (fêmeas).
+- **Ficha do animal** — identificação, evolução de peso com registro de pesagem, linha do tempo, histórico sanitário e ficha reprodutiva das fêmeas (registro de cobertura, diagnóstico de gestação e parto — o bezerro entra no rebanho junto).
 - **Calendário Sanitário** — visão mensal de tratamentos agendados e atrasados, com destaque para a campanha de aftosa.
 - **Movimentação / Lotes** — cards por pasto (taxa de lotação UA/ha), histórico de entradas e saídas e registro de movimentações.
 - **Financeiro** — indicadores da pecuária de corte (preço da @, valor do rebanho, margens, relação de troca) com gráficos. Receitas vêm das vendas com valor, custos das despesas lançadas + tratamentos com custo; a cotação da arroba é real (Scot Consultoria + histórico IPEADATA).
@@ -186,7 +186,7 @@ lib/domain  →  lib/repository  →  lib/store (zustand)  →  telas (app + com
 
 A camada de dados real vive em **[Elysia](https://elysiajs.com)**, montado no route handler `app/api/herd/[[...slugs]]/route.ts` (Next 16 entrega `Request` padrão Web, que o `herdApi.handle()` consome direto).
 
-- **App e rotas:** `lib/api/app.ts` — leitura (`GET /api/herd`) e todas as mutações (animais, pesagens, tratamentos, manejo, movimentações, raças, lotes, fazenda, protocolos), validadas com TypeBox (`lib/api/models.ts`).
+- **App e rotas:** `lib/api/app.ts` — leitura (`GET /api/herd`) e todas as mutações (animais, pesagens, tratamentos, reprodução, manejo, movimentações, raças, lotes, fazenda, protocolos), validadas com TypeBox (`lib/api/models.ts`).
 - **Contexto de fazenda:** `lib/api/plugins/farm.ts` resolve sessão (Better Auth) + fazenda ativa; usuário sem fazenda ganha uma automaticamente (`lib/api/services/onboarding.ts`).
 - **Serviços:** `lib/api/services/*` — consultas/transações Drizzle escopadas por `farm_id`; o manejo roda cada passagem em transação com lock (`FOR UPDATE`), impedindo passagem dupla no brete.
 - **Cliente:** `lib/api/client.ts` usa **Eden Treaty** (`treaty<HerdApi>`), com tipos ponta a ponta derivados do próprio app Elysia (import apenas de tipo). O store (`useHerdStore`) chama a API e mescla a resposta no estado; `ApiHerdRepository` faz a carga inicial.

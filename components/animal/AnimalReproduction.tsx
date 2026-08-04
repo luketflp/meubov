@@ -1,16 +1,31 @@
+"use client";
+
 /**
  * "Reproduction" section (females): current diagnosis, calving forecast when
- * pregnant, list of breedings and calvings with links to bull and calf.
+ * pregnant, list of breedings and calvings with links to bull and calf — plus
+ * the three write actions (breeding, diagnosis, calving).
+ *
+ * Rendered for EVERY female, with or without history: an empty record is where
+ * the first breeding gets registered. Actions disappear once the animal leaves
+ * the herd (sold, dead), the history stays readable.
  */
 import Link from "next/link";
-import type { ReproductionRecord, DiagnosisResult, BreedingType } from "@/lib/types";
+import type { Animal, ReproductionRecord, DiagnosisResult, BreedingType } from "@/lib/types";
 import { todayISO, formatDate } from "@/lib/domain/dates";
-import { expectedCalvingDate, currentDiagnosis, daysToCalving } from "@/lib/domain/reproduction";
+import {
+  expectedCalvingDate,
+  currentDiagnosis,
+  daysToCalving,
+  hasCalvedSince,
+} from "@/lib/domain/reproduction";
 import {
   DIAGNOSIS_RESULT_LABEL,
   BREEDING_TYPE_LABEL,
 } from "@/lib/domain/labels";
 import { SectionCard } from "@/components/ui/section-card";
+import { RegisterBreedingDialog } from "@/components/animal/RegisterBreedingDialog";
+import { RegisterDiagnosisDialog } from "@/components/animal/RegisterDiagnosisDialog";
+import { RegisterCalvingDialog } from "@/components/animal/RegisterCalvingDialog";
 import { cn } from "@/lib/utils";
 
 const RESULT_STYLE: Record<DiagnosisResult, string> = {
@@ -68,11 +83,16 @@ function daysToCalvingText(days: number): string {
   return days > 0 ? `em ${days} dias` : `há ${-days} dias`;
 }
 
+/** A female with no history yet: the section still opens, ready for the first record. */
+const EMPTY_RECORD: ReproductionRecord = { breedings: [], diagnoses: [], calvings: [] };
+
 interface AnimalReproductionProps {
-  record: ReproductionRecord;
+  /** The female. Shown even without history — that is where recording starts. */
+  animal: Animal;
 }
 
-export function AnimalReproduction({ record }: AnimalReproductionProps) {
+export function AnimalReproduction({ animal }: AnimalReproductionProps) {
+  const record = animal.reproduction ?? EMPTY_RECORD;
   const current = currentDiagnosis(record);
   const breedings = [...record.breedings].sort((a, b) =>
     a.date < b.date ? 1 : a.date > b.date ? -1 : 0
@@ -80,11 +100,18 @@ export function AnimalReproduction({ record }: AnimalReproductionProps) {
   const calvings = [...record.calvings].sort((a, b) =>
     a.date < b.date ? 1 : a.date > b.date ? -1 : 0
   );
+  // A recorded calving closes the pregnancy: without this the card would keep
+  // forecasting a birth that already happened.
   const expected =
-    current?.result === "pregnant" ? expectedCalvingDate(current.breeding.date) : null;
+    current?.result === "pregnant" && !hasCalvedSince(record, current.breeding.date)
+      ? expectedCalvingDate(current.breeding.date)
+      : null;
 
   return (
-    <SectionCard title="Reprodução">
+    <SectionCard
+      title="Reprodução"
+      action={animal.active ? <RegisterBreedingDialog earTag={animal.earTag} /> : null}
+    >
       <div className="space-y-5">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-medium tracking-wide text-ink-soft uppercase">
@@ -112,7 +139,12 @@ export function AnimalReproduction({ record }: AnimalReproductionProps) {
         ) : null}
 
         <div>
-          <h3 className="text-sm font-semibold text-ink">Coberturas</h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-ink">Coberturas</h3>
+            {animal.active && breedings.length > 0 ? (
+              <RegisterDiagnosisDialog earTag={animal.earTag} record={record} />
+            ) : null}
+          </div>
           {breedings.length > 0 ? (
             <ul className="mt-2 divide-y divide-hairline">
               {breedings.map((b) => (
@@ -131,7 +163,10 @@ export function AnimalReproduction({ record }: AnimalReproductionProps) {
         </div>
 
         <div>
-          <h3 className="text-sm font-semibold text-ink">Partos</h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-ink">Partos</h3>
+            {animal.active ? <RegisterCalvingDialog dam={animal} /> : null}
+          </div>
           {calvings.length > 0 ? (
             <ul className="mt-2 divide-y divide-hairline">
               {calvings.map((c) => (

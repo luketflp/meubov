@@ -26,31 +26,41 @@ export interface NewAnimalInput {
   birthDate: string;
   lotId: string;
   initialWeightKg?: number;
+  /** Date of the initial weighing; defaults to today (a calf uses its birth). */
+  initialWeightDate?: string;
 }
 
 /** Postgres unique-violation SQLSTATE. */
 const UNIQUE_VIOLATION = "23505";
 
-const isUniqueViolation = (error: unknown): boolean =>
+/** True for a duplicate-key error, raw or wrapped by the driver in `cause`. */
+export const isUniqueViolation = (error: unknown): boolean =>
   typeof error === "object" &&
   error !== null &&
-  (error as { code?: string }).code === UNIQUE_VIOLATION;
+  ((error as { code?: string }).code === UNIQUE_VIOLATION ||
+    isUniqueViolation((error as { cause?: unknown }).cause));
+
+/** Transaction handle of the app's Drizzle client. */
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
- * Registers an animal (optionally with an initial weighing dated today).
- * Returns null when the ear tag is already in use on this farm.
+ * Inserts an animal (plus its optional first weighing) inside a transaction the
+ * CALLER owns — so a flow that creates an animal together with something else
+ * (a calving and its calf) stays atomic. The caller also maps the
+ * unique-violation to its own outcome; see `addAnimal` and the calving flow.
  */
-export async function addAnimal(
+export async function insertAnimal(
+  tx: Tx,
   farmId: number,
   input: NewAnimalInput
-): Promise<Animal | null> {
+): Promise<Animal> {
   const earTag = input.earTag.trim();
 
   // Resolve the custom category first: when valid it forces the base category.
   let customCategoryId: string | null = null;
   let category = input.category;
   if (input.customCategoryId) {
-    const [custom] = await db
+    const [custom] = await tx
       .select()
       .from(customCategories)
       .where(
@@ -66,47 +76,60 @@ export async function addAnimal(
     }
   }
 
+  const [row] = await tx
+    .insert(animals)
+    .values({
+      id: randomUUID(),
+      farmId,
+      earTag,
+      category,
+      customCategoryId,
+      breed: input.breed,
+      sex: input.sex,
+      birthDate: input.birthDate,
+      lotId: input.lotId,
+      active: true,
+    })
+    .returning();
+
+  const animalWeighings: Weighing[] = [];
+  if (input.initialWeightKg !== undefined) {
+    const [w] = await tx
+      .insert(weighings)
+      .values({
+        animalId: row.id,
+        date: input.initialWeightDate ?? todayISO(),
+        weightKg: input.initialWeightKg,
+      })
+      .returning();
+    animalWeighings.push(toWeighing(w));
+  }
+
+  return {
+    earTag: row.earTag,
+    category: row.category,
+    customCategoryId: row.customCategoryId ?? undefined,
+    breed: row.breed,
+    sex: row.sex,
+    birthDate: row.birthDate,
+    lotId: row.lotId,
+    active: row.active,
+    weighings: animalWeighings,
+  };
+}
+
+/**
+ * Registers an animal (optionally with an initial weighing dated today).
+ * Returns null when the ear tag is already in use on this farm.
+ */
+export async function addAnimal(
+  farmId: number,
+  input: NewAnimalInput
+): Promise<Animal | null> {
   try {
-    return await db.transaction(async (tx) => {
-      const [row] = await tx
-        .insert(animals)
-        .values({
-          id: randomUUID(),
-          farmId,
-          earTag,
-          category,
-          customCategoryId,
-          breed: input.breed,
-          sex: input.sex,
-          birthDate: input.birthDate,
-          lotId: input.lotId,
-          active: true,
-        })
-        .returning();
-      const animalWeighings: Weighing[] = [];
-      if (input.initialWeightKg !== undefined) {
-        const [w] = await tx
-          .insert(weighings)
-          .values({ animalId: row.id, date: todayISO(), weightKg: input.initialWeightKg })
-          .returning();
-        animalWeighings.push(toWeighing(w));
-      }
-      return {
-        earTag: row.earTag,
-        category: row.category,
-        customCategoryId: row.customCategoryId ?? undefined,
-        breed: row.breed,
-        sex: row.sex,
-        birthDate: row.birthDate,
-        lotId: row.lotId,
-        active: row.active,
-        weighings: animalWeighings,
-      };
-    });
+    return await db.transaction((tx) => insertAnimal(tx, farmId, input));
   } catch (error) {
-    if (isUniqueViolation(error) || isUniqueViolation((error as { cause?: unknown }).cause)) {
-      return null;
-    }
+    if (isUniqueViolation(error)) return null;
     throw error;
   }
 }

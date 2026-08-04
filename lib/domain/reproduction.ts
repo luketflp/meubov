@@ -32,3 +32,23 @@ export function currentDiagnosis(
 export function daysToCalving(expectedIso: string, todayIso: string): number {
   return daysBetween(todayIso, expectedIso);
 }
+
+/**
+ * Breedings that still have no diagnosis, most recent first — the ones waiting
+ * for the vet. The diagnosis form defaults to the first of this list.
+ */
+export function breedingsAwaitingDiagnosis(record: ReproductionRecord): Breeding[] {
+  const diagnosed = new Set(record.diagnoses.map((d) => d.breedingId));
+  return record.breedings
+    .filter((b) => !diagnosed.has(b.id))
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
+
+/**
+ * True when a calving was already recorded on or after the breeding date — the
+ * pregnancy ended. Without this a "pregnant" diagnosis would keep forecasting a
+ * calving that already happened.
+ */
+export function hasCalvedSince(record: ReproductionRecord, breedingIso: string): boolean {
+  return record.calvings.some((c) => c.date >= breedingIso);
+}

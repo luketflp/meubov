@@ -66,8 +66,6 @@ export default function AnimalRecordPage() {
   const derived = withStatus([animal], treatments, todayISO())[0];
   const forAnimal = animalTreatments(treatments, animal.earTag);
   const lot = lots.find((l) => l.id === animal.lotId) ?? null;
-  const reproductionRecord =
-    animal.sex === "female" && animal.reproduction ? animal.reproduction : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 md:px-8">
@@ -86,7 +84,8 @@ export default function AnimalRecordPage() {
         </div>
         <div className="space-y-4 xl:col-span-3">
           <HealthHistory treatments={forAnimal} />
-          {reproductionRecord ? <AnimalReproduction record={reproductionRecord} /> : null}
+          {/* Every female gets the section: without history it is the entry point. */}
+          {animal.sex === "female" ? <AnimalReproduction animal={animal} /> : null}
         </div>
       </div>
     </div>

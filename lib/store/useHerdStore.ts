@@ -6,6 +6,8 @@
 import { create } from "zustand";
 import type {
   Animal,
+  Breeding,
+  Calving,
   CustomCategory,
   Expense,
   FarmData,
@@ -16,6 +18,9 @@ import type {
   ManejoSessionAnimal,
   ManejoTreatmentPlan,
   Movement,
+  PregnancyDiagnosis,
+  ReproductionRecord,
+  Sex,
   Weighing,
   HealthProtocol,
   Treatment,
@@ -51,6 +56,22 @@ export interface NewManejoSession {
 export interface ManejoPassData {
   weightKg?: number;
   notes?: string;
+}
+
+/** Breeding to record; the id comes from the server. */
+export type NewBreeding = Omit<Breeding, "id">;
+
+/**
+ * Calving to record. The calf joins the herd in the same transaction, taking
+ * the dam's breed and lot unless overridden here.
+ */
+export interface NewCalving {
+  date: string;
+  calfEarTag: string;
+  calfSex: Sex;
+  calfBreed?: string;
+  calfLotId?: string;
+  calfWeightKg?: number;
 }
 
 export interface HerdStore extends HerdData {
@@ -91,6 +112,12 @@ export interface HerdStore extends HerdData {
   addCustomCategory: (c: Omit<CustomCategory, "id">) => Promise<boolean>;
   /** Removes a custom category; false when an active animal still uses it. */
   removeCustomCategory: (id: string) => Promise<boolean>;
+  /** Records a breeding of one female (herd bull or external semen code). */
+  recordBreeding: (earTag: string, input: NewBreeding) => Promise<void>;
+  /** Records (or corrects) the pregnancy diagnosis of one breeding. */
+  recordDiagnosis: (earTag: string, input: PregnancyDiagnosis) => Promise<void>;
+  /** Records a calving; false when the calf's ear tag is already in use. */
+  recordCalving: (earTag: string, input: NewCalving) => Promise<boolean>;
   /** Edits an animal's registration fields (category/breed/birth/lot). */
   updateAnimal: (earTag: string, patch: AnimalPatch) => Promise<void>;
   /** Deactivates an animal with a reason (sales go through movements). */
@@ -124,6 +151,26 @@ const compareByDate = (a: Weighing, b: Weighing): number =>
 
 /** Conflict statuses a manejo pass can hit (stale UI); treated as a no-op. */
 const CONFLICT = 409;
+
+/** A female with no reproduction history yet — she can still receive records. */
+const EMPTY_REPRODUCTION: ReproductionRecord = {
+  breedings: [],
+  diagnoses: [],
+  calvings: [],
+};
+
+/** Immutably updates one female's reproduction record, creating it if absent. */
+function withReproduction(
+  animals: Animal[],
+  earTag: string,
+  update: (record: ReproductionRecord) => ReproductionRecord
+): Animal[] {
+  return animals.map((a) =>
+    a.earTag === earTag
+      ? { ...a, reproduction: update(a.reproduction ?? EMPTY_REPRODUCTION) }
+      : a
+  );
+}
 
 /** Immutably replaces one animal entry inside one session. */
 function withSessionAnimal(
@@ -409,6 +456,57 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       apiFail("remover a categoria", error.status);
     }
     set((s) => ({ customCategories: s.customCategories.filter((c) => c.id !== id) }));
+    return true;
+  },
+
+  recordBreeding: async (earTag, input) => {
+    const { data, error } = await api.animals({ earTag }).breedings.post(input);
+    if (error) apiFail("registrar a cobertura", error.status);
+    const breeding = data as Breeding;
+    set((s) => ({
+      animals: withReproduction(s.animals, earTag, (r) => ({
+        ...r,
+        breedings: [...r.breedings, breeding],
+      })),
+    }));
+  },
+
+  recordDiagnosis: async (earTag, input) => {
+    const { data, error } = await api.animals({ earTag }).diagnoses.post(input);
+    if (error) apiFail("registrar o diagnóstico", error.status);
+    const diagnosis = data as PregnancyDiagnosis;
+    set((s) => ({
+      animals: withReproduction(s.animals, earTag, (r) => ({
+        ...r,
+        // One diagnosis per breeding: a re-exam replaces the previous result.
+        diagnoses: [
+          ...r.diagnoses.filter((d) => d.breedingId !== diagnosis.breedingId),
+          diagnosis,
+        ],
+      })),
+    }));
+  },
+
+  recordCalving: async (earTag, input) => {
+    const calfEarTag = input.calfEarTag.trim();
+    if (get().animals.some((a) => a.earTag === calfEarTag)) return false;
+    const { data, error } = await api
+      .animals({ earTag })
+      .calvings.post({ ...input, calfEarTag });
+    if (error) {
+      if (error.status === 409) return false;
+      apiFail("registrar o parto", error.status);
+    }
+    const { calving, calf } = data as { calving: Calving; calf: Animal };
+    set((s) => ({
+      animals: [
+        ...withReproduction(s.animals, earTag, (r) => ({
+          ...r,
+          calvings: [...r.calvings, calving],
+        })),
+        calf,
+      ],
+    }));
     return true;
   },
 

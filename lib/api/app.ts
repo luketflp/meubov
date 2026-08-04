@@ -19,7 +19,10 @@ import {
   ManejoPassBody,
   ManejoSkipBody,
   NewAnimalBody,
+  NewBreedingBody,
+  NewCalvingBody,
   NewCustomCategoryBody,
+  NewDiagnosisBody,
   NewExpenseBody,
   NewLotBody,
   NewManejoSessionBody,
@@ -33,6 +36,7 @@ import * as movementsService from "@/lib/api/services/movements";
 import * as manejoService from "@/lib/api/services/manejo";
 import * as expensesService from "@/lib/api/services/expenses";
 import * as categoriesService from "@/lib/api/services/categories";
+import * as reproductionService from "@/lib/api/services/reproduction";
 
 export const herdApi = new Elysia({ prefix: "/api/herd" })
   .use(farmPlugin)
@@ -139,6 +143,41 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
       ids: await settings.completeTreatments(farmId, body.ids),
     }),
     { farm: true, body: CompleteTreatmentsBody }
+  )
+
+  /* ---- Reproduction (females) -------------------------------------------- */
+  .post(
+    "/animals/:earTag/breedings",
+    async ({ farmId, params, body, status }) => {
+      const result = await reproductionService.addBreeding(farmId, params.earTag, body);
+      if (result === "animal_not_found") return status(404, { error: result });
+      if (result === "not_female") return status(422, { error: result });
+      return result;
+    },
+    { farm: true, body: NewBreedingBody }
+  )
+  .post(
+    "/animals/:earTag/diagnoses",
+    async ({ farmId, params, body, status }) => {
+      const result = await reproductionService.setDiagnosis(farmId, params.earTag, body);
+      if (result === "animal_not_found" || result === "breeding_not_found") {
+        return status(404, { error: result });
+      }
+      if (result === "not_female") return status(422, { error: result });
+      return result;
+    },
+    { farm: true, body: NewDiagnosisBody }
+  )
+  .post(
+    "/animals/:earTag/calvings",
+    async ({ farmId, params, body, status }) => {
+      const result = await reproductionService.addCalving(farmId, params.earTag, body);
+      if (result === "animal_not_found") return status(404, { error: result });
+      if (result === "not_female") return status(422, { error: result });
+      if (result === "duplicate_ear_tag") return status(409, { error: result });
+      return result;
+    },
+    { farm: true, body: NewCalvingBody }
   )
 
   /* ---- Movements --------------------------------------------------------- */
