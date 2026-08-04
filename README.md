@@ -35,7 +35,7 @@ Ferramenta de **gestão de rebanho bovino de corte** para o produtor ou gerente 
 - **Ficha do animal** — identificação, evolução de peso com registro de pesagem, linha do tempo, histórico sanitário e ficha reprodutiva (fêmeas).
 - **Calendário Sanitário** — visão mensal de tratamentos agendados e atrasados, com destaque para a campanha de aftosa.
 - **Movimentação / Lotes** — cards por pasto (taxa de lotação UA/ha), histórico de entradas e saídas e registro de movimentações.
-- **Financeiro** — indicadores da pecuária de corte (preço da @, valor do rebanho, margens, relação de troca) com gráficos. **Valores de mercado são ilustrativos.**
+- **Financeiro** — indicadores da pecuária de corte (preço da @, valor do rebanho, margens, relação de troca) com gráficos. Receitas vêm das vendas com valor, custos das despesas lançadas + tratamentos com custo; a cotação da arroba é real (Scot Consultoria + histórico IPEADATA).
 - **Configurações** — dados da fazenda, categorias, raças, lotes e protocolos sanitários (que geram a agenda).
 
 ## Stack
@@ -63,15 +63,17 @@ pnpm lint     # ESLint
 
 ## Banco de dados local (Docker)
 
-Para o desenvolvimento o projeto sobe um **PostgreSQL** local via Docker. A
-integração com o banco (Drizzle) entra num passo seguinte — por enquanto isto
-apenas disponibiliza o servidor. Requer o **Docker Desktop** em execução.
+Para o desenvolvimento o projeto sobe um **PostgreSQL** local via Docker.
+Requer o **Docker Desktop** em execução.
 
 ```bash
 pnpm db:up      # sobe o Postgres em background (docker compose up -d)
 pnpm db:logs    # acompanha os logs do banco
 pnpm db:down    # para o banco
 pnpm db:reset   # apaga o volume e recria o banco do zero
+
+pnpm migration:run                    # aplica as migrations (Drizzle)
+pnpm db:seed --email voce@exemplo.com # semeia o rebanho de demonstração para um usuário existente
 ```
 
 A string de conexão fica em `.env.local` (carregado automaticamente pelo Next.js;
@@ -81,11 +83,13 @@ copie de `.env.example` se necessário):
 DATABASE_URL="postgresql://meubov:meubov@localhost:5433/meubov"
 ```
 
-Os dados são **mock determinísticos**: um gerador com semente fixa (`lib/data/seed.ts`) produz sempre o mesmo rebanho, e a data de "hoje" está ancorada em **2026-07-24** (`TODAY_ISO` em `lib/domain/dates.ts`). Isso mantém status, GMD e agenda estáveis entre recarregamentos. Não há backend nem persistência — as alterações vivem em memória durante a sessão.
+O rebanho é **persistido no Postgres** e servido pela API do rebanho (Elysia em `/api/herd`). O gerador determinístico de semente fixa (`lib/data/seed.ts`) continua existindo como dado de demonstração: `pnpm db:seed --email <usuário>` insere a Fazenda Boa Vista completa para um usuário já cadastrado (`--force` apaga as fazendas dele e re-semeia). A data de "hoje" segue ancorada em **2026-07-24** (`TODAY_ISO` em `lib/domain/dates.ts`), mantendo status, GMD e agenda estáveis.
+
+O modelo é **multi-fazenda**: um usuário pode participar de várias fazendas (`farm_users`); todas as tabelas do rebanho são escopadas por `farm_id`. No primeiro acesso de um usuário sem fazenda, uma fazenda vazia é criada automaticamente.
 
 ## Autenticação
 
-A autenticação usa **[Better Auth](https://better-auth.com)** com e-mail/senha e login social opcional com Google. Só a camada de autenticação é persistida no Postgres; o rebanho continua vindo do `MockHerdRepository` nesta fase.
+A autenticação usa **[Better Auth](https://better-auth.com)** com e-mail/senha e login social opcional com Google. A sessão também protege a API do rebanho: cada rota resolve o usuário e a fazenda ativa (cabeçalho opcional `x-farm-id`) antes de tocar no banco.
 
 - **Instância servidor:** `lib/auth/index.ts` (adapter Drizzle + `pg`).
 - **Cliente:** `lib/auth/client.ts` (`signIn`, `signUp`, `signOut`, `useSession`).
@@ -157,8 +161,8 @@ lib/
   domain/                # regras de negócio PURAS e testáveis (sem React, sem I/O):
                          #   dates, format, weights, adg, status, stocking, reproduction,
                          #   finance, labels
-  data/                  # seed determinístico (rng + seed) e mock de mercado (market)
-  repository/            # HerdRepository (interface) + MockHerdRepository
+  data/                  # seed determinístico (rng + seed) e cotação real (market/scot/ipeadata)
+  repository/            # HerdRepository (interface) + ApiHerdRepository
   store/                 # useHerdStore (zustand) + selectors puros
 ```
 
@@ -178,36 +182,18 @@ lib/domain  →  lib/repository  →  lib/store (zustand)  →  telas (app + com
 
 **Regra de ouro:** um componente **nunca** reimplementa regra de negócio — ele chama uma função de `lib/domain` ou um selector. Isso mantém a lógica testável e a UI fina.
 
-## Trocando o mock por uma API real
+## API do rebanho (Elysia)
 
-Toda a camada de dados está atrás de uma interface, então dá para plugar um backend REST/Supabase sem tocar na UI.
+A camada de dados real vive em **[Elysia](https://elysiajs.com)**, montado no route handler `app/api/herd/[[...slugs]]/route.ts` (Next 16 entrega `Request` padrão Web, que o `herdApi.handle()` consome direto).
 
-**1. Implemente `HerdRepository`** (`lib/repository/HerdRepository.ts`):
+- **App e rotas:** `lib/api/app.ts` — leitura (`GET /api/herd`) e todas as mutações (animais, pesagens, tratamentos, manejo, movimentações, raças, lotes, fazenda, protocolos), validadas com TypeBox (`lib/api/models.ts`).
+- **Contexto de fazenda:** `lib/api/plugins/farm.ts` resolve sessão (Better Auth) + fazenda ativa; usuário sem fazenda ganha uma automaticamente (`lib/api/services/onboarding.ts`).
+- **Serviços:** `lib/api/services/*` — consultas/transações Drizzle escopadas por `farm_id`; o manejo roda cada passagem em transação com lock (`FOR UPDATE`), impedindo passagem dupla no brete.
+- **Cliente:** `lib/api/client.ts` usa **Eden Treaty** (`treaty<HerdApi>`), com tipos ponta a ponta derivados do próprio app Elysia (import apenas de tipo). O store (`useHerdStore`) chama a API e mescla a resposta no estado; `ApiHerdRepository` faz a carga inicial.
 
-```ts
-export class ApiHerdRepository implements HerdRepository {
-  constructor(private baseUrl: string) {}
+**Cotação de mercado** — real, sem mock. `GET /api/market/quote` busca em paralelo o preço atual na **Scot Consultoria** (boi gordo à vista C. Grande-MS, cache 6h) e o histórico mensal no **IPEADATA** (série Seab/Deral-PR, cache 24h), mesclados por `mergeQuotePayload` (`lib/data/market.ts`). Se ambas as fontes falharem, o cliente mostra "—" em todos os valores dependentes da arroba — nunca um número falso.
 
-  async load(): Promise<HerdData> {
-    const resp = await fetch(`${this.baseUrl}/herd`, { cache: "no-store" });
-    if (!resp.ok) throw new Error("Falha ao carregar o rebanho");
-    return resp.json(); // deve satisfazer o contrato HerdData de lib/types.ts
-  }
-}
-```
-
-Com Supabase, faça as consultas às tabelas e monte o objeto `HerdData` no mesmo formato.
-
-**2. Injete no store** — em `lib/store/useHerdStore.ts`, troque a instância de `MockHerdRepository` usada em `load()` pelo seu repositório (por env var, por exemplo). Nenhum componente precisa mudar. As ações do store (`recordWeighing`, `recordMovement`, ...) são onde você adicionaria as chamadas de escrita (`POST`/`PATCH`) ao backend.
-
-**3. Cotação de mercado** — os valores financeiros do mock são **ilustrativos**. Substitua `MockQuoteSource` por uma implementação real da interface `QuoteSource` (`lib/data/market.ts`), conectando a uma fonte de cotação da arroba como **ESALQ/CEPEA**, **B3** ou **Scot Consultoria**:
-
-```ts
-export class CepeaQuoteSource implements QuoteSource {
-  async getCurrentQuote(): Promise<ArrobaQuote> { /* fetch da fonte */ }
-  async getSeries(months: number): Promise<ArrobaQuote[]> { /* histórico */ }
-}
-```
+**Financeiro real** — receita = movimentações de **venda** com `amountBrl` (obrigatório para compra/venda desde a v0.2); custo = **despesas** (`expenses`, 7 categorias, CRUD na tela Financeiro) + tratamentos concluídos com `costBrl`. As derivações (série mensal, composição de custos, indicadores) são funções puras em `lib/domain/economics.ts`; indicadores sem dados suficientes mostram "—".
 
 ## Testes
 
