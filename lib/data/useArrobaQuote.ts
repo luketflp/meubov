@@ -1,34 +1,31 @@
 "use client";
 
 /**
- * Client hook that delivers the arroba quote to the screens: tries the real
- * source (/api/market/quote → Scot Consultoria, boi gordo MS) and, while
- * loading or on failure, falls back to the illustrative mockMarket so the UI
- * always has a price. The `live` flag lets screens label the value ("cotação
- * de 31/07/2026 · Scot Consultoria" vs "ilustrativo"); `seriesLive` does the
- * same for the chart, since the daily source has no public history.
+ * Client hook that delivers the arroba quote to the screens from
+ * /api/market/quote (Scot Consultoria current price + IPEADATA monthly
+ * history). There is NO fallback value: when the API fails, `price` is null
+ * and every @-dependent figure renders "—" — the app never shows a fake
+ * number.
  */
 import { useEffect, useState } from "react";
-import {
-  mockMarket,
-  type ArrobaQuote,
-  type MarketQuotePayload,
-} from "@/lib/data/market";
+import type { ArrobaQuote, MarketQuotePayload } from "@/lib/data/market";
 import { formatDate } from "@/lib/domain/dates";
 
 export interface ArrobaQuoteView {
-  /** Current price (R$/@) — live when available, mock otherwise. */
-  price: number;
-  /** Change (%) vs the previous point, or null when the source has no history. */
+  /** Current price (R$/@), or null while loading / when unavailable. */
+  price: number | null;
+  /** Change (%) vs the previous month, or null when there is no history. */
   changePct: number | null;
-  /** Series for charts, ascending — the mock when the source has no history. */
+  /** Historical series for charts, ascending (empty when unavailable). */
   series: ArrobaQuote[];
-  /** True when `series` comes from the real source (false = illustrative). */
-  seriesLive: boolean;
-  /** True when the price comes from the real source. */
+  /** True while the first fetch is in flight. */
+  loading: boolean;
+  /** True when the payload came from the real source. */
   live: boolean;
-  /** User-visible provenance, e.g. "cotação de 31/07/2026 · … Scot Consultoria". */
+  /** Provenance of the price, e.g. "cotação de 31/07/2026 · … Scot Consultoria". */
   sourceLabel: string | null;
+  /** Provenance of the series (history source), or null without series. */
+  seriesSourceLabel: string | null;
 }
 
 /** Narrow unknown JSON into the payload shape (defensive on the boundary). */
@@ -45,6 +42,7 @@ function isQuotePayload(data: unknown): data is MarketQuotePayload {
 
 export function useArrobaQuote(): ArrobaQuoteView {
   const [payload, setPayload] = useState<MarketQuotePayload | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -52,31 +50,33 @@ export function useArrobaQuote(): ArrobaQuoteView {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (isQuotePayload(data)) setPayload(data);
+        setLoading(false);
       })
       .catch(() => {
-        // Fallback to the mock is the deliberate behavior — nothing to handle.
+        if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
   }, []);
 
   if (payload === null) {
     return {
-      price: mockMarket.currentArrobaPrice,
-      changePct: mockMarket.monthlyChangePct,
-      series: mockMarket.quoteSeries,
-      seriesLive: false,
+      price: null,
+      changePct: null,
+      series: [],
+      loading,
       live: false,
       sourceLabel: null,
+      seriesSourceLabel: null,
     };
   }
 
-  const seriesLive = payload.series.length > 0;
   return {
     price: payload.current.value,
     changePct: payload.changePct,
-    series: seriesLive ? payload.series : mockMarket.quoteSeries,
-    seriesLive,
+    series: payload.series,
+    loading: false,
     live: true,
     sourceLabel: `cotação de ${formatDate(payload.current.date)} · ${payload.source}`,
+    seriesSourceLabel: payload.seriesSource,
   };
 }

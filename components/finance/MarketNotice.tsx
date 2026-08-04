@@ -1,14 +1,20 @@
 import { Info } from "lucide-react";
 
 interface MarketNoticeProps {
-  /** True when the arroba quote is coming from the real source. */
+  /** True when the arroba quote came from the real source. */
   quoteLive: boolean;
   /** Provenance label of the live quote (e.g. "cotação de 31/07/2026 · … Scot Consultoria"). */
   quoteSourceLabel: string | null;
+  /** Provenance label of the historical series, or null without series. */
+  seriesSourceLabel: string | null;
 }
 
 /** Discreet notice on the provenance of the market figures. */
-export function MarketNotice({ quoteLive, quoteSourceLabel }: MarketNoticeProps) {
+export function MarketNotice({
+  quoteLive,
+  quoteSourceLabel,
+  seriesSourceLabel,
+}: MarketNoticeProps) {
   return (
     <div
       role="note"
@@ -18,15 +24,16 @@ export function MarketNotice({ quoteLive, quoteSourceLabel }: MarketNoticeProps)
       <p className="text-xs leading-relaxed">
         {quoteLive ? (
           <>
-            Cotação da arroba real: {quoteSourceLabel}. Receitas, custos e demais
-            valores de mercado seguem ilustrativos até a integração financeira.
+            Cotação da arroba: {quoteSourceLabel}
+            {seriesSourceLabel ? <> · histórico: {seriesSourceLabel}</> : null}.
+            Receitas, custos e indicadores são calculados dos lançamentos da
+            fazenda (vendas, compras, despesas e tratamentos).
           </>
         ) : (
           <>
-            Valores de mercado ilustrativos — fonte real indisponível no momento
-            (a cotação tenta a Scot Consultoria via{" "}
-            <code className="font-mono font-medium">/api/market/quote</code> e cai
-            no mock quando offline).
+            Fontes de cotação indisponíveis no momento — os valores que dependem
+            da arroba mostram “—”. Receitas e custos seguem reais, calculados dos
+            lançamentos da fazenda.
           </>
         )}
       </p>

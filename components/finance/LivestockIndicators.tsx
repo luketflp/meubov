@@ -2,11 +2,12 @@ import { SectionCard } from "@/components/ui/section-card";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
 
 interface LivestockIndicatorsProps {
-  exchangeRatio: number;
-  offtakeRate: number;
-  productivity: number;
-  dailyCost: number;
-  turnover: number;
+  /** All derived from real records; null = insufficient data ("—"). */
+  exchangeRatio: number | null;
+  offtakeRate: number | null;
+  productivity: number | null;
+  dailyCost: number | null;
+  turnover: number | null;
 }
 
 interface IndicatorRow {
@@ -14,6 +15,8 @@ interface IndicatorRow {
   explanation: string;
   value: string;
 }
+
+const DASH = "—";
 
 /** Key-value list of the technical and economic livestock indicators. */
 export function LivestockIndicators({
@@ -27,27 +30,27 @@ export function LivestockIndicators({
     {
       label: "Relação de troca boi/bezerro",
       explanation: "Quantos bezerros o valor de 1 boi gordo compra hoje.",
-      value: `1 boi ≈ ${formatNumber(exchangeRatio, 1)} bezerros`,
+      value: exchangeRatio === null ? DASH : `1 boi ≈ ${formatNumber(exchangeRatio, 1)} bezerros`,
     },
     {
       label: "Taxa de desfrute",
-      explanation: "Cabeças vendidas no ano sobre o rebanho ativo.",
-      value: `${formatNumber(offtakeRate, 1)}%`,
+      explanation: "Cabeças vendidas nos últimos 12 meses sobre o rebanho ativo.",
+      value: offtakeRate === null ? DASH : `${formatNumber(offtakeRate, 1)}%`,
     },
     {
       label: "Produtividade (@/ha/ano)",
-      explanation: "Arrobas produzidas no ano por hectare de pasto.",
-      value: formatNumber(productivity, 1),
+      explanation: "Estimativa: cabeças vendidas × @ média dos bois, por hectare.",
+      value: productivity === null ? DASH : formatNumber(productivity, 1),
     },
     {
       label: "Custo da diária",
-      explanation: "Custo médio de manter cada cabeça por dia.",
-      value: `${formatCurrency(dailyCost)}/cab/dia`,
+      explanation: "Custo dos últimos 12 meses por cabeça por dia.",
+      value: dailyCost === null ? DASH : `${formatCurrency(dailyCost)}/cab/dia`,
     },
     {
       label: "Giro de capital",
       explanation: "Receita dos últimos 12 meses sobre o valor do rebanho.",
-      value: `${formatNumber(turnover, 2)}×`,
+      value: turnover === null ? DASH : `${formatNumber(turnover, 2)}×`,
     },
   ];
 

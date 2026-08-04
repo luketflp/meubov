@@ -1,10 +1,13 @@
+import { Wallet } from "lucide-react";
 import { SectionCard } from "@/components/ui/section-card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { DonutChart, type DonutSlice } from "@/components/charts/donut-chart";
-import type { CostBreakdown } from "@/lib/data/market";
+import type { CostBreakdownSlice } from "@/lib/domain/economics";
+import { EXPENSE_CATEGORY_LABEL } from "@/lib/domain/labels";
 import { formatCompact } from "@/components/finance/format";
 
 interface CostBreakdownChartProps {
-  breakdown: CostBreakdown[];
+  breakdown: CostBreakdownSlice[];
   totalCost: number;
 }
 
@@ -18,11 +21,23 @@ const SLICE_COLORS = [
   "text-ink-soft",
 ] as const;
 
-/** Donut with the percentage cost breakdown and the period total cost at the center. */
+/** Donut with the real cost breakdown and the period total cost at the center. */
 export function CostBreakdownChart({ breakdown, totalCost }: CostBreakdownChartProps) {
-  const slices: DonutSlice[] = breakdown.map((cost, index) => ({
-    label: cost.category,
-    value: cost.pct,
+  if (breakdown.length === 0) {
+    return (
+      <SectionCard title="Composição de custos">
+        <EmptyState
+          icon={Wallet}
+          title="Sem custos no período"
+          description="Lance despesas (ou tratamentos com custo) para ver a composição."
+        />
+      </SectionCard>
+    );
+  }
+
+  const slices: DonutSlice[] = breakdown.map((slice, index) => ({
+    label: EXPENSE_CATEGORY_LABEL[slice.category],
+    value: slice.pct,
     colorClass: SLICE_COLORS[index % SLICE_COLORS.length],
   }));
 

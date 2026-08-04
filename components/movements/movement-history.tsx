@@ -8,7 +8,7 @@ import { ArrowLeftRight, ArrowRight } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import type { Movement } from "@/lib/types";
 import { formatDate } from "@/lib/domain/dates";
-import { formatNumber } from "@/lib/domain/format";
+import { formatCurrency, formatNumber } from "@/lib/domain/format";
 import { SectionCard } from "@/components/ui/section-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -66,6 +66,7 @@ export function MovementHistory() {
                   <TableHead>Data</TableHead>
                   <TableHead>Tipo</TableHead>
                   <TableHead className="text-right">Qtd</TableHead>
+                  <TableHead className="text-right">Valor</TableHead>
                   <TableHead>Origem → Destino</TableHead>
                   <TableHead>Obs</TableHead>
                 </TableRow>
@@ -79,6 +80,9 @@ export function MovementHistory() {
                     </TableCell>
                     <TableCell className="text-right font-mono text-ink">
                       {formatNumber(m.quantity)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-ink">
+                      {m.amountBrl === undefined ? "—" : formatCurrency(m.amountBrl)}
                     </TableCell>
                     <TableCell>
                       <OriginDestination movement={m} />
@@ -114,6 +118,12 @@ export function MovementHistory() {
                 <p className="mt-1 text-xs text-ink-soft">
                   <span className="font-mono text-ink">{formatNumber(m.quantity)}</span>{" "}
                   {m.quantity === 1 ? "animal" : "animais"}
+                  {m.amountBrl !== undefined ? (
+                    <>
+                      {" · "}
+                      <span className="font-mono text-ink">{formatCurrency(m.amountBrl)}</span>
+                    </>
+                  ) : null}
                 </p>
                 {m.notes ? <p className="mt-1 text-xs text-ink-soft">{m.notes}</p> : null}
               </li>

@@ -4,17 +4,23 @@ import type { PeriodResult } from "@/lib/domain/finance";
 import { formatArroba, formatCurrency, formatNumber } from "@/lib/domain/format";
 
 interface FinanceKpisProps {
-  arrobaPrice: number;
+  /** Live arroba price, or null when the quote is unavailable. */
+  arrobaPrice: number | null;
   /** Change (%) vs the previous point, or null when the source has no history. */
   monthlyChangePct: number | null;
-  totalHerdValue: number;
+  /** Herd market value, or null when the quote is unavailable. */
+  totalHerdValue: number | null;
   totalArrobas: number;
   result: PeriodResult;
-  costPerArroba: number;
-  grossMarginArroba: number;
+  /** Real production cost per arroba, or null without enough data. */
+  costPerArroba: number | null;
+  /** Gross margin per arroba, or null when price or cost is unknown. */
+  grossMarginArroba: number | null;
 }
 
-/** Grid with the farm's 4 financial KPIs. */
+const DASH = "—";
+
+/** Grid with the farm's 4 financial KPIs ("—" = data unavailable). */
 export function FinanceKpis({
   arrobaPrice,
   monthlyChangePct,
@@ -28,7 +34,7 @@ export function FinanceKpis({
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <KpiCard
         label="Preço da @ do boi gordo"
-        value={formatCurrency(arrobaPrice)}
+        value={arrobaPrice === null ? DASH : formatCurrency(arrobaPrice)}
         delta={
           monthlyChangePct === null
             ? undefined
@@ -41,8 +47,12 @@ export function FinanceKpis({
       />
       <KpiCard
         label="Valor do rebanho"
-        value={formatCurrency(totalHerdValue)}
-        sub={`${formatArroba(totalArrobas)} × ${formatCurrency(arrobaPrice)}`}
+        value={totalHerdValue === null ? DASH : formatCurrency(totalHerdValue)}
+        sub={
+          arrobaPrice === null
+            ? `${formatArroba(totalArrobas)} · cotação indisponível`
+            : `${formatArroba(totalArrobas)} × ${formatCurrency(arrobaPrice)}`
+        }
         icon={Beef}
       />
       <KpiCard
@@ -57,8 +67,12 @@ export function FinanceKpis({
       />
       <KpiCard
         label="Custo de produção/@"
-        value={formatCurrency(costPerArroba)}
-        sub={`margem bruta ${formatCurrency(grossMarginArroba)}/@`}
+        value={costPerArroba === null ? DASH : formatCurrency(costPerArroba)}
+        sub={
+          grossMarginArroba === null
+            ? "sem dados suficientes"
+            : `margem bruta ${formatCurrency(grossMarginArroba)}/@`
+        }
         icon={Tractor}
       />
     </div>

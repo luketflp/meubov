@@ -1,7 +1,8 @@
 "use client";
 
 import { Wallet } from "lucide-react";
-import type { CostBreakdown } from "@/lib/data/market";
+import type { CostBreakdownSlice } from "@/lib/domain/economics";
+import { EXPENSE_CATEGORY_LABEL } from "@/lib/domain/labels";
 import { SectionCard } from "@/components/ui/section-card";
 import { BarChart, type BarGroup } from "@/components/charts/bar-chart";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -9,9 +10,9 @@ import { formatCurrency } from "@/lib/domain/format";
 import { formatCompactCurrency } from "@/components/finance/format";
 
 interface ExpensesCardProps {
-  /** Illustrative cost split in % (sums to 100) from market.ts. */
-  breakdown: CostBreakdown[];
-  /** Period total cost (R$) the percentages are applied to (period-filtered). */
+  /** Real cost slices of the selected period (expenses + treatment costs). */
+  breakdown: CostBreakdownSlice[];
+  /** Period total cost (R$) shown in the card's top-right. */
   totalCost: number;
 }
 
@@ -25,18 +26,14 @@ const BAR_COLORS = [
   "text-ink-soft",
 ] as const;
 
-/**
- * "Despesas por Categoria": turns the % cost breakdown into R$ bars by applying
- * each share to the period total cost, so the period filter flows through. The
- * total (= sum, which equals `totalCost`) is shown in the card's top-right.
- */
+/** "Despesas por Categoria": real R$ per cost category in the period. */
 export function ExpensesCard({ breakdown, totalCost }: ExpensesCardProps) {
-  const groups: BarGroup[] = breakdown.map((cost, index) => ({
-    label: cost.category,
+  const groups: BarGroup[] = breakdown.map((slice, index) => ({
+    label: EXPENSE_CATEGORY_LABEL[slice.category],
     bars: [
       {
         key: "Despesa",
-        value: (cost.pct / 100) * totalCost,
+        value: slice.amountBrl,
         colorClass: BAR_COLORS[index % BAR_COLORS.length],
       },
     ],
@@ -54,11 +51,11 @@ export function ExpensesCard({ breakdown, totalCost }: ExpensesCardProps) {
         </span>
       }
     >
-      {totalCost <= 0 ? (
+      {breakdown.length === 0 ? (
         <EmptyState
           icon={Wallet}
           title="Sem despesas no período"
-          description="Ajuste o período para incluir meses com custo lançado."
+          description="Lance despesas (ou ajuste o período) para ver a composição."
         />
       ) : (
         <BarChart groups={groups} height={220} formatValue={formatCompactCurrency} />

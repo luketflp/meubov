@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { MarketNotice } from "@/components/finance/MarketNotice";
 import { FinanceKpis } from "@/components/finance/FinanceKpis";
@@ -8,54 +9,85 @@ import { QuoteChart } from "@/components/finance/QuoteChart";
 import { CostBreakdownChart } from "@/components/finance/CostBreakdownChart";
 import { LivestockIndicators } from "@/components/finance/LivestockIndicators";
 import { CategorySalesTable } from "@/components/finance/CategorySalesTable";
+import { ExpensesList } from "@/components/finance/ExpensesList";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { activeAnimals } from "@/lib/store/selectors";
-import { mockMarket } from "@/lib/data/market";
 import { useArrobaQuote } from "@/lib/data/useArrobaQuote";
+import { todayISO } from "@/lib/domain/dates";
 import { kgToArroba, totalWeightKg } from "@/lib/domain/weights";
+import { herdValue, periodResult } from "@/lib/domain/finance";
 import {
-  capitalTurnover,
-  grossMarginPerArroba,
-  productivityArrobasPerHa,
-  steerToCalfRatio,
-  periodResult,
-  offtakeRatePct,
-  herdValue,
-} from "@/lib/domain/finance";
+  annualRevenue,
+  arrobasProducedPerYear,
+  averageArrobasPerSteer,
+  averageCalfPrice,
+  capitalTurnoverRatio,
+  costBreakdown,
+  dailyCostPerHead,
+  headSoldLast12m,
+  monthlyRevenueCost,
+  offtakeRate,
+  productionCostPerArroba,
+  productivityPerHa,
+  steerToCalfExchange,
+  totalCostLast12m,
+} from "@/lib/domain/economics";
 
 export default function FinancePage() {
   const animals = useHerdStore((state) => state.animals);
   const lots = useHerdStore((state) => state.lots);
+  const movements = useHerdStore((state) => state.movements);
+  const treatments = useHerdStore((state) => state.treatments);
+  const expenses = useHerdStore((state) => state.expenses);
 
-  const market = mockMarket;
-  // Live arroba quote (Scot Consultoria) with mock fallback; drives every @-based figure.
+  // Live arroba quote (Scot + IPEADATA); null price = every @-figure shows "—".
   const quote = useArrobaQuote();
   const active = activeAnimals(animals);
   const totalArrobas = kgToArroba(totalWeightKg(active));
-  const totalHerdValue = herdValue(totalArrobas, quote.price);
+  const totalHerdValue =
+    quote.price === null ? null : herdValue(totalArrobas, quote.price);
+
+  // Real revenue × cost of the last 12 months, from the farm's records.
+  const series = useMemo(
+    () => monthlyRevenueCost(movements, treatments, expenses, 12, todayISO()),
+    [movements, treatments, expenses]
+  );
   const result = periodResult(
-    market.monthlyRevenueCost.map((month) => month.revenue),
-    market.monthlyRevenueCost.map((month) => month.cost)
+    series.map((month) => month.revenue),
+    series.map((month) => month.cost)
   );
-  const grossMarginArroba = grossMarginPerArroba(
-    quote.price,
-    market.productionCostPerArroba
+  const breakdown = useMemo(
+    () => costBreakdown(expenses, treatments, 12, todayISO()),
+    [expenses, treatments]
   );
+
+  // Indicators — each null when the records can't support it yet.
+  const totalCost12m = totalCostLast12m(expenses, treatments, todayISO());
+  const revenue12m = annualRevenue(movements, todayISO());
+  const headSold = headSoldLast12m(movements, todayISO());
+  const steerArrobas = averageArrobasPerSteer(animals);
+  const arrobasYear = arrobasProducedPerYear(movements, animals, todayISO());
+  const costPerArroba = productionCostPerArroba(totalCost12m, arrobasYear);
+  const grossMarginArroba =
+    quote.price === null || costPerArroba === null
+      ? null
+      : quote.price - costPerArroba;
   const totalHectares = lots.reduce((sum, lot) => sum + lot.hectares, 0);
-  const exchangeRatio = steerToCalfRatio(
+  const exchangeRatio = steerToCalfExchange(
     quote.price,
-    market.averageArrobasPerSteer,
-    market.averageCalfPrice
+    steerArrobas,
+    averageCalfPrice(movements, todayISO())
   );
-  const offtakeRate = offtakeRatePct(market.headSoldPerYear, active.length);
-  const productivity = productivityArrobasPerHa(market.arrobasProducedPerYear, totalHectares);
-  const turnover = capitalTurnover(result.totalRevenue, totalHerdValue);
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 md:px-8">
       <PageHeader title="Financeiro" subtitle="Indicadores da pecuária de corte" />
 
-      <MarketNotice quoteLive={quote.live} quoteSourceLabel={quote.sourceLabel} />
+      <MarketNotice
+        quoteLive={quote.live}
+        quoteSourceLabel={quote.sourceLabel}
+        seriesSourceLabel={quote.seriesSourceLabel}
+      />
 
       <FinanceKpis
         arrobaPrice={quote.price}
@@ -63,27 +95,26 @@ export default function FinancePage() {
         totalHerdValue={totalHerdValue}
         totalArrobas={totalArrobas}
         result={result}
-        costPerArroba={market.productionCostPerArroba}
+        costPerArroba={costPerArroba}
         grossMarginArroba={grossMarginArroba}
       />
 
-      <RevenueCostChart months={market.monthlyRevenueCost} />
+      <RevenueCostChart months={series} />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <QuoteChart series={quote.series} illustrative={!quote.seriesLive} />
-        <CostBreakdownChart
-          breakdown={market.costBreakdown}
-          totalCost={result.totalCost}
-        />
+        <QuoteChart series={quote.series} sourceLabel={quote.seriesSourceLabel} />
+        <CostBreakdownChart breakdown={breakdown} totalCost={result.totalCost} />
       </div>
+
+      <ExpensesList />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <LivestockIndicators
           exchangeRatio={exchangeRatio}
-          offtakeRate={offtakeRate}
-          productivity={productivity}
-          dailyCost={market.dailyCostPerHead}
-          turnover={turnover}
+          offtakeRate={offtakeRate(headSold, active.length)}
+          productivity={productivityPerHa(arrobasYear, totalHectares)}
+          dailyCost={dailyCostPerHead(totalCost12m, active.length)}
+          turnover={capitalTurnoverRatio(revenue12m, totalHerdValue)}
         />
         <CategorySalesTable animals={active} arrobaPrice={quote.price} />
       </div>

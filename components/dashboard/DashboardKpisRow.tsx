@@ -17,8 +17,8 @@ interface DashboardKpisRowProps {
   headCount: number;
   /** REAL — mini-summary by category, e.g.: "13 vacas · 9 bois". */
   categorySummary: string;
-  /** Fat steer arroba quote (R$/@) — live (Scot Consultoria) or mock fallback. */
-  arrobaPrice: number;
+  /** Fat steer arroba quote (R$/@), or null when the quote is unavailable. */
+  arrobaPrice: number | null;
   /** Change of the arroba quote (%), or null when the source has no history. */
   arrobaMonthlyChangePct: number | null;
   /** Provenance line under the quote (e.g. "cotação de 31/07/2026 · … Scot Consultoria"), or null when mock. */
@@ -27,8 +27,8 @@ interface DashboardKpisRowProps {
   averageAdg: number | null;
   /** REAL — aggregate herd stocking rate (AU/ha) derived from herd + lots. */
   stockingRate: number;
-  /** REAL — herd market value (R$) = total arrobas x arroba price. */
-  herdValue: number;
+  /** Herd market value (R$), or null when the quote is unavailable. */
+  herdValue: number | null;
 }
 
 /**
@@ -63,10 +63,14 @@ export function DashboardKpisRow({
       <KpiCard
         label="Cotação da arroba"
         value={
-          <>
-            {formatNumber(arrobaPrice, 2)}
-            <span className="text-sm text-ink-soft"> R$/@</span>
-          </>
+          arrobaPrice === null ? (
+            "—"
+          ) : (
+            <>
+              {formatNumber(arrobaPrice, 2)}
+              <span className="text-sm text-ink-soft"> R$/@</span>
+            </>
+          )
         }
         delta={
           arrobaMonthlyChangePct === null
@@ -76,7 +80,7 @@ export function DashboardKpisRow({
                 positive: arrobaMonthlyChangePct >= 0,
               }
         }
-        sub={arrobaQuoteSub ?? "ilustrativo"}
+        sub={arrobaQuoteSub ?? "cotação indisponível"}
         icon={TrendingUp}
       />
       <KpiCard
@@ -107,8 +111,8 @@ export function DashboardKpisRow({
       />
       <KpiCard
         label="Valor do rebanho"
-        value={formatCompactCurrency(herdValue)}
-        sub={formatCurrency(herdValue)}
+        value={herdValue === null ? "—" : formatCompactCurrency(herdValue)}
+        sub={herdValue === null ? "cotação indisponível" : formatCurrency(herdValue)}
         icon={CircleDollarSign}
       />
     </div>
@@ -122,7 +126,7 @@ export function DashboardKpisNote({ quoteLive }: { quoteLive: boolean }) {
       <Info className="size-3.5 shrink-0" aria-hidden />
       {quoteLive
         ? "Cotação da arroba: boi gordo à vista Campo Grande-MS, Scot Consultoria. Demais indicadores derivados dos dados reais do rebanho."
-        : "Cotação da arroba é ilustrativa (fonte de mercado indisponível). Demais indicadores derivados dos dados reais do rebanho."}
+        : "Cotação da arroba indisponível no momento — valores dependentes da @ mostram “—”. Demais indicadores derivados dos dados reais do rebanho."}
     </p>
   );
 }

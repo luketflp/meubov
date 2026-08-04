@@ -2,18 +2,15 @@
  * REAL arroba quote source backed by IPEADATA's open OData4 API (no key needed).
  *
  * Series DERAL12_PRBGO12 — "Preço médio recebido pelo agricultor, boi gordo,
- * arroba, PR" (Seab/Deral-PR) — monthly average in R$/@, active and public. It
- * is the realization of the `QuoteSource` swap documented in `lib/data/market.ts`:
- * the CEPEA/ESALQ daily indicator sits behind Cloudflare and B3/Scot require
- * licenses, so this is the best open series available.
+ * arroba, PR" (Seab/Deral-PR) — monthly average in R$/@, active and public.
+ * It is the app's historical series (merged with Scot's daily current price by
+ * mergeQuotePayload): the CEPEA/ESALQ daily indicator sits behind Cloudflare
+ * and B3/Scot histories require licenses, so this is the best open series.
  *
  * This module is pure fetch-shape + parsing (server-safe, unit-testable); the
  * HTTP boundary lives in `app/api/market/quote/route.ts`.
  */
-import type { ArrobaQuote, MarketQuotePayload } from "@/lib/data/market";
-
-/** Re-export for compatibility: the payload contract lives in lib/data/market. */
-export type { MarketQuotePayload } from "@/lib/data/market";
+import type { ArrobaQuote } from "@/lib/data/market";
 
 export const IPEADATA_SERIES_CODE = "DERAL12_PRBGO12";
 
@@ -47,24 +44,3 @@ export function parseIpeadataSeries(payload: unknown): ArrobaQuote[] {
   return series;
 }
 
-/**
- * Consolidates a parsed series into the payload the UI needs: latest point,
- * monthly change and the last `months` points. Returns null when the series has
- * fewer than 2 points (no change can be derived — callers fall back to the mock).
- */
-export function buildQuotePayload(
-  series: ArrobaQuote[],
-  months = 12
-): MarketQuotePayload | null {
-  if (series.length < 2) return null;
-  const current = series[series.length - 1];
-  const previous = series[series.length - 2];
-  const changePct =
-    previous.value === 0 ? 0 : ((current.value - previous.value) / previous.value) * 100;
-  return {
-    current,
-    changePct: Math.round(changePct * 10) / 10,
-    series: series.slice(-months),
-    source: IPEADATA_SOURCE_LABEL,
-  };
-}

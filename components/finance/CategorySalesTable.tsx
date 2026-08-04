@@ -18,7 +18,8 @@ import { pluralCategory } from "@/lib/domain/labels";
 
 interface CategorySalesTableProps {
   animals: Animal[];
-  arrobaPrice: number;
+  /** Live arroba price, or null when the quote is unavailable. */
+  arrobaPrice: number | null;
 }
 
 /** Capitalized plural label of the category, e.g.: "Bezerros". */
@@ -67,6 +68,18 @@ function totalize(rows: CategoryRow[]): Omit<CategoryRow, "category"> {
 
 /** Estimated revenue per category at the current arroba price (table + cards on mobile). */
 export function CategorySalesTable({ animals, arrobaPrice }: CategorySalesTableProps) {
+  if (arrobaPrice === null) {
+    return (
+      <SectionCard title="Vendas e faturamento estimado por categoria">
+        <EmptyState
+          icon={CircleDollarSign}
+          title="Cotação indisponível"
+          description="Sem a cotação da arroba não é possível estimar o faturamento por categoria."
+        />
+      </SectionCard>
+    );
+  }
+
   const rows = buildRows(animals, arrobaPrice);
   const total = totalize(rows);
 

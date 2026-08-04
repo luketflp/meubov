@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useToast } from "@/components/providers/Toasts";
 import {
   activeAnimals,
   animalsNeedingAttention,
@@ -9,7 +10,7 @@ import {
   herdStockingRateAuPerHa,
   pendingTreatments,
 } from "@/lib/store/selectors";
-import { TODAY_ISO } from "@/lib/domain/dates";
+import { todayISO } from "@/lib/domain/dates";
 import { monthlyAdg, herdAverageAdg } from "@/lib/domain/adg";
 import { kgToArroba, totalWeightKg } from "@/lib/domain/weights";
 import {
@@ -19,7 +20,7 @@ import {
   type Period,
 } from "@/lib/domain/finance";
 import { deriveTreatmentStatus } from "@/lib/domain/status";
-import { mockMarket } from "@/lib/data/market";
+import { costBreakdownBetween, monthlyRevenueCost } from "@/lib/domain/economics";
 import { useArrobaQuote } from "@/lib/data/useArrobaQuote";
 import { PageHeader } from "@/components/layout/PageHeader";
 import {
@@ -29,7 +30,7 @@ import {
 import { ExpensesCard } from "@/components/dashboard/ExpensesCard";
 import { PeriodResultCard } from "@/components/dashboard/PeriodResultCard";
 import { PeriodPicker } from "@/components/dashboard/PeriodPicker";
-import { defaultPeriod, withSeriesDates } from "@/components/dashboard/period";
+import { defaultPeriod } from "@/components/dashboard/period";
 import { summaryByCategory } from "@/components/dashboard/helpers";
 import { AdgChart } from "@/components/dashboard/AdgChart";
 import { AnimalsNeedingAttention } from "@/components/dashboard/AnimalsNeedingAttention";
@@ -58,10 +59,19 @@ export default function DashboardPage() {
   const animals = useHerdStore((s) => s.animals);
   const lots = useHerdStore((s) => s.lots);
   const treatments = useHerdStore((s) => s.treatments);
+  const movements = useHerdStore((s) => s.movements);
+  const expenses = useHerdStore((s) => s.expenses);
   const farm = useHerdStore((s) => s.farm);
   const markTreatmentDone = useHerdStore((s) => s.markTreatmentDone);
+  const { addToast } = useToast();
 
-  const [period, setPeriod] = useState<Period>(() => defaultPeriod(TODAY_ISO));
+  /** Completes one treatment and confirms it with a toast. */
+  async function onCompleteTreatment(id: string) {
+    await markTreatmentDone(id);
+    addToast({ messageType: "success", text: "Tratamento concluído" });
+  }
+
+  const [period, setPeriod] = useState<Period>(() => defaultPeriod(todayISO()));
 
   // Live arroba quote (IPEADATA), with mock fallback while loading/offline.
   const quote = useArrobaQuote();
@@ -70,21 +80,22 @@ export default function DashboardPage() {
 
   // REAL KPIs derived from the herd.
   const categorySummary = useMemo(() => summaryByCategory(countByCategory(active)), [active]);
-  const averageAdg = useMemo(() => herdAverageAdg(active, TODAY_ISO), [active]);
+  const averageAdg = useMemo(() => herdAverageAdg(active, todayISO()), [active]);
   const stockingRate = useMemo(
     () => herdStockingRateAuPerHa(animals, lots),
     [animals, lots]
   );
   const herdValue = useMemo(() => {
+    if (quote.price === null) return null;
     const totalArrobas = kgToArroba(totalWeightKg(active));
     return computeHerdValue(totalArrobas, quote.price);
   }, [active, quote.price]);
 
-  // The period REALLY filters the monthly revenue x cost series: rebuild the ISO
-  // month of each entry, keep the ones inside the window, then consolidate.
+  // Real revenue × cost series from the farm's records; the period picker
+  // filters it before consolidating.
   const datedSeries = useMemo(
-    () => withSeriesDates(mockMarket.monthlyRevenueCost, TODAY_ISO),
-    []
+    () => monthlyRevenueCost(movements, treatments, expenses, 12, todayISO()),
+    [movements, treatments, expenses]
   );
   const financials = useMemo(() => {
     const inPeriod = filterMonthlyByPeriod(datedSeries, period);
@@ -93,17 +104,21 @@ export default function DashboardPage() {
       inPeriod.map((m) => m.cost)
     );
   }, [datedSeries, period]);
+  const periodBreakdown = useMemo(
+    () => costBreakdownBetween(expenses, treatments, period.start, period.end),
+    [expenses, treatments, period]
+  );
 
   // Daily management: what needs action today comes first on the screen.
   const needingAttention = useMemo(
-    () => animalsNeedingAttention(active, treatments, TODAY_ISO),
+    () => animalsNeedingAttention(active, treatments, todayISO()),
     [active, treatments]
   );
   const pending = useMemo<PendingTreatmentItem[]>(
     () =>
-      pendingTreatments(treatments, TODAY_ISO).map((treatment) => ({
+      pendingTreatments(treatments, todayISO()).map((treatment) => ({
         treatment,
-        status: deriveTreatmentStatus(treatment, TODAY_ISO),
+        status: deriveTreatmentStatus(treatment, todayISO()),
       })),
     [treatments]
   );
@@ -136,7 +151,7 @@ export default function DashboardPage() {
           <AnimalsNeedingAttention items={needingAttention} />
         </div>
         <div className="lg:col-span-2">
-          <UpcomingTreatments items={pending} onComplete={markTreatmentDone} />
+          <UpcomingTreatments items={pending} onComplete={onCompleteTreatment} />
         </div>
       </div>
 
@@ -151,7 +166,7 @@ export default function DashboardPage() {
 
       <div className="grid items-start gap-4 lg:grid-cols-2">
         <PeriodResultCard result={financials} />
-        <ExpensesCard breakdown={mockMarket.costBreakdown} totalCost={financials.totalCost} />
+        <ExpensesCard breakdown={periodBreakdown} totalCost={financials.totalCost} />
       </div>
     </div>
   );

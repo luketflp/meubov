@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  SCOT_SOURCE_LABEL,
-  buildScotQuotePayload,
-  parseScotMsQuote,
-} from "@/lib/data/scot";
+import { parseScotMsQuote } from "@/lib/data/scot";
 
 /** Minimal snippet of the boi gordo page with the Mercado Físico table. */
 const page = (msRow: string) => `
@@ -49,17 +45,5 @@ describe("parseScotMsQuote", () => {
   it("returns null on pages without the Mercado Físico header", () => {
     expect(parseScotMsQuote("<html><body>manutenção</body></html>")).toBeNull();
     expect(parseScotMsQuote("")).toBeNull();
-  });
-});
-
-describe("buildScotQuotePayload", () => {
-  it("wraps the snapshot with null change and empty series", () => {
-    const payload = buildScotQuotePayload({ date: "2026-07-31", value: 336 });
-    expect(payload).toEqual({
-      current: { date: "2026-07-31", value: 336 },
-      changePct: null,
-      series: [],
-      source: SCOT_SOURCE_LABEL,
-    });
   });
 });

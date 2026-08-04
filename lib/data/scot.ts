@@ -3,14 +3,14 @@
  *
  * The "Mercado Físico" table publishes the daily fat steer price per praça; we
  * read the "MS C. Grande" row (Campo Grande-MS, reference praça of Mato Grosso
- * do Sul), "Preços Brutos · à vista" column, in R$/@. It is a daily snapshot:
- * there is no public history, so the payload carries changePct = null and an
- * empty series (screens fall back to the illustrative chart, labeled as such).
+ * do Sul), "Preços Brutos · à vista" column, in R$/@. It is a daily snapshot
+ * with no public history — the historical series comes from IPEADATA and both
+ * are merged by mergeQuotePayload (lib/data/market.ts).
  *
  * This module is pure fetch-shape + parsing (server-safe, unit-testable); the
  * HTTP boundary lives in `app/api/market/quote/route.ts`.
  */
-import type { ArrobaQuote, MarketQuotePayload } from "@/lib/data/market";
+import type { ArrobaQuote } from "@/lib/data/market";
 
 export const SCOT_QUOTE_URL = "https://www.scotconsultoria.com.br/cotacoes/boi-gordo/";
 
@@ -60,12 +60,3 @@ export function parseScotMsQuote(html: string, praca: string = SCOT_PRACA): Arro
   return { date: brDateToIso(dateMatch[1]), value };
 }
 
-/** Wraps the daily snapshot into the payload the UI consumes. */
-export function buildScotQuotePayload(quote: ArrobaQuote): MarketQuotePayload {
-  return {
-    current: quote,
-    changePct: null,
-    series: [],
-    source: SCOT_SOURCE_LABEL,
-  };
-}

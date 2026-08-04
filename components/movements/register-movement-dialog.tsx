@@ -8,9 +8,11 @@
 import { useState, type FormEvent } from "react";
 import { Plus, Search } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useToast } from "@/components/providers/Toasts";
 import { activeAnimals } from "@/lib/store/selectors";
-import type { Animal, MovementType } from "@/lib/types";
-import { TODAY_ISO } from "@/lib/domain/dates";
+import type { Animal, Category, MovementType } from "@/lib/types";
+import { todayISO } from "@/lib/domain/dates";
+import { CATEGORY_LABEL } from "@/lib/domain/labels";
 import { kgToArroba, currentWeight } from "@/lib/domain/weights";
 import { formatArroba, formatKg } from "@/lib/domain/format";
 import { Button } from "@/components/ui/button";
@@ -39,19 +41,37 @@ import { TYPE_LABELS } from "@/components/movements/movement-type-pill";
 /** Origin/destination outside the farm. */
 const EXTERNAL = "Externo";
 
-/** Raw form state (quantity as input text). */
+/** Raw form state (quantity/amount as input text). */
 export interface MovementFields {
   type: MovementType;
   date: string;
   quantity: string;
+  category: Category;
+  /** Total value in R$ — required for purchase/sale, hidden for transfer. */
+  amount: string;
   origin: string;
   destination: string;
   notes: string;
   earTags: string[];
 }
 
+/** Most frequent category among the selected animals (first on tie). */
+export function predominantCategory(selected: Animal[]): Category | undefined {
+  const counts = new Map<Category, number>();
+  for (const a of selected) counts.set(a.category, (counts.get(a.category) ?? 0) + 1);
+  let best: Category | undefined;
+  let bestCount = 0;
+  for (const [category, count] of counts) {
+    if (count > bestCount) {
+      best = category;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
 export type MovementErrors = Partial<
-  Record<"date" | "quantity" | "origin" | "destination", string>
+  Record<"date" | "quantity" | "amount" | "origin" | "destination", string>
 >;
 
 /** Pure form validation; returns pt-BR messages per field. */
@@ -64,6 +84,12 @@ export function validateMovement(fields: MovementFields): MovementErrors {
     const quantity = Number(fields.quantity);
     if (fields.quantity.trim() === "" || !Number.isInteger(quantity) || quantity < 1) {
       errors.quantity = "Informe uma quantidade inteira de pelo menos 1.";
+    }
+  }
+  if (fields.type !== "transfer") {
+    const amount = Number(fields.amount.replace(",", "."));
+    if (fields.amount.trim() === "" || !Number.isFinite(amount) || amount <= 0) {
+      errors.amount = "Informe o valor total da movimentação.";
     }
   }
   if (fields.type !== "purchase" && fields.origin === "") {
@@ -81,8 +107,10 @@ export function validateMovement(fields: MovementFields): MovementErrors {
 function createInitialFields(): MovementFields {
   return {
     type: "purchase",
-    date: TODAY_ISO,
+    date: todayISO(),
     quantity: "1",
+    category: "steer",
+    amount: "",
     origin: EXTERNAL,
     destination: "",
     notes: "",
@@ -129,6 +157,7 @@ export function RegisterMovementDialog() {
   const lots = useHerdStore((s) => s.lots);
   const animals = useHerdStore((s) => s.animals);
   const recordMovement = useHerdStore((s) => s.recordMovement);
+  const { addToast } = useToast();
 
   const [open, setOpen] = useState(false);
   const [fields, setFields] = useState<MovementFields>(createInitialFields);
@@ -145,6 +174,9 @@ export function RegisterMovementDialog() {
   }
 
   const selectionLocksQuantity = fields.earTags.length > 0;
+  const selectedCategory = selectionLocksQuantity
+    ? predominantCategory(animals.filter((a) => fields.earTags.includes(a.earTag)))
+    : undefined;
   const originLot = lots.find((l) => l.name === fields.origin);
   const selectableAnimals =
     fields.type !== "purchase" && originLot
@@ -181,23 +213,29 @@ export function RegisterMovementDialog() {
     }));
   }
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const newErrors = validateMovement(fields);
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
     const notes = fields.notes.trim();
-    recordMovement({
+    await recordMovement({
       type: fields.type,
       date: fields.date,
       quantity: selectionLocksQuantity
         ? fields.earTags.length
         : Number(fields.quantity),
+      category: selectedCategory ?? fields.category,
+      amountBrl:
+        fields.type === "transfer"
+          ? undefined
+          : Number(fields.amount.replace(",", ".")),
       origin: fields.origin,
       destination: fields.destination,
       notes: notes === "" ? undefined : notes,
       earTags: selectionLocksQuantity ? fields.earTags : undefined,
     });
+    addToast({ messageType: "success", text: "Movimentação registrada" });
     setOpen(false);
   }
 
@@ -273,6 +311,51 @@ export function RegisterMovementDialog() {
               ) : null}
               <ErrorMessage message={errors.quantity} />
             </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="mov-category">Categoria</Label>
+              <Select
+                value={selectedCategory ?? fields.category}
+                onValueChange={(category) =>
+                  setFields((f) => ({ ...f, category: category as Category }))
+                }
+                disabled={selectionLocksQuantity}
+              >
+                <SelectTrigger id="mov-category" className="min-h-11 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(CATEGORY_LABEL) as Category[]).map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {CATEGORY_LABEL[category]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectionLocksQuantity ? (
+                <p className="text-xs text-ink-soft">
+                  Categoria predominante da seleção.
+                </p>
+              ) : null}
+            </div>
+
+            {fields.type !== "transfer" ? (
+              <div className="grid gap-1.5">
+                <Label htmlFor="mov-amount">Valor total (R$)</Label>
+                <Input
+                  id="mov-amount"
+                  type="number"
+                  min={0.01}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={fields.amount}
+                  onChange={(e) => setFields((f) => ({ ...f, amount: e.target.value }))}
+                  aria-invalid={errors.amount ? true : undefined}
+                  className="min-h-11 font-mono"
+                />
+                <ErrorMessage message={errors.amount} />
+              </div>
+            ) : null}
 
             <div className="grid gap-1.5">
               <Label htmlFor="mov-origin">Origem</Label>

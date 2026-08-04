@@ -6,6 +6,7 @@
 import type {
   Category,
   DiagnosisResult,
+  ExpenseCategory,
   Sex,
   BreedingType,
   MovementType,
@@ -76,4 +77,30 @@ export const MOVEMENT_TYPE_LABEL: Record<MovementType, string> = {
   purchase: "Compra",
   sale: "Venda",
   transfer: "Transferência",
+};
+
+/**
+ * Display name of an animal's category: the custom category's name when one
+ * is set (and still exists), else the canonical label.
+ */
+export function animalCategoryName(
+  animal: { category: Category; customCategoryId?: string },
+  customCategories: readonly { id: string; name: string }[]
+): string {
+  if (animal.customCategoryId) {
+    const custom = customCategories.find((c) => c.id === animal.customCategoryId);
+    if (custom) return custom.name;
+  }
+  return CATEGORY_LABEL[animal.category];
+}
+
+/** Label of each expense category, e.g.: "Nutrição". */
+export const EXPENSE_CATEGORY_LABEL: Record<ExpenseCategory, string> = {
+  nutrition: "Nutrição",
+  pasture: "Pastagem",
+  labor: "Mão de obra",
+  health: "Sanidade",
+  breeding: "Reprodução",
+  admin: "Administrativo",
+  other: "Outros",
 };
