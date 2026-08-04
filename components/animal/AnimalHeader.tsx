@@ -4,10 +4,11 @@
  */
 import type { ReactNode } from "react";
 import type { AnimalWithDerived } from "@/lib/store/selectors";
+import { useHerdStore } from "@/lib/store/useHerdStore";
 import { formatDate, formatAge } from "@/lib/domain/dates";
 import { formatNumber } from "@/lib/domain/format";
 import { formatWeightWithArroba } from "@/lib/domain/weights";
-import { CATEGORY_LABEL, SEX_LABEL } from "@/lib/domain/labels";
+import { SEX_LABEL, animalCategoryName } from "@/lib/domain/labels";
 import { StatusPill } from "@/components/ui/status-pill";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +38,7 @@ interface AnimalHeaderProps {
 
 export function AnimalHeader({ derived, lotName }: AnimalHeaderProps) {
   const { animal, status, reason, currentWeightKg, adg } = derived;
+  const customCategories = useHerdStore((s) => s.customCategories);
 
   return (
     <section className="rounded-lg border border-hairline bg-panel p-4 sm:p-5">
@@ -55,7 +57,7 @@ export function AnimalHeader({ derived, lotName }: AnimalHeaderProps) {
       {reason ? <p className="mt-1.5 text-xs text-ink-soft">{reason}</p> : null}
 
       <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-        <Field label="Categoria" value={CATEGORY_LABEL[animal.category]} />
+        <Field label="Categoria" value={animalCategoryName(animal, customCategories)} />
         <Field label="Raça" value={animal.breed} />
         <Field label="Sexo" value={SEX_LABEL[animal.sex]} />
         <Field

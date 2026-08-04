@@ -16,11 +16,12 @@ import {
 } from "@/components/ui/table";
 import {
   SEX_LABEL,
-  CATEGORY_LABELS,
   formatFullWeight,
   type SortColumn,
   type HerdSort,
 } from "@/components/herd/filters";
+import { useHerdStore } from "@/lib/store/useHerdStore";
+import { animalCategoryName } from "@/lib/domain/labels";
 
 interface HerdTableProps {
   items: AnimalWithDerived[];
@@ -47,6 +48,7 @@ function SortIcon({ active, direction }: { active: boolean; direction: "asc" | "
 }
 
 export function HerdTable({ items, lotNames, sort, onSort }: HerdTableProps) {
+  const customCategories = useHerdStore((s) => s.customCategories);
   const router = useRouter();
 
   const goToRecord = (earTag: string): void => {
@@ -97,7 +99,9 @@ export function HerdTable({ items, lotNames, sort, onSort }: HerdTableProps) {
               className="cursor-pointer border-hairline hover:bg-surface"
             >
               <TableCell className="px-3 font-mono font-medium">{animal.earTag}</TableCell>
-              <TableCell className="px-3">{CATEGORY_LABELS[animal.category]}</TableCell>
+              <TableCell className="px-3">
+                {animalCategoryName(animal, customCategories)}
+              </TableCell>
               <TableCell className="px-3">{animal.breed}</TableCell>
               <TableCell className="px-3">{SEX_LABEL[animal.sex]}</TableCell>
               <TableCell className="px-3">

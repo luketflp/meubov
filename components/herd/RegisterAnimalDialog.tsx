@@ -9,8 +9,9 @@
 import { useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
 import { useHerdStore, type NewAnimal } from "@/lib/store/useHerdStore";
+import { useToast } from "@/components/providers/Toasts";
 import type { Category, Sex } from "@/lib/types";
-import { TODAY_ISO } from "@/lib/domain/dates";
+import { todayISO } from "@/lib/domain/dates";
 import { CATEGORY_LABEL, SEX_LABEL } from "@/lib/domain/labels";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +48,8 @@ export function impliedSex(category: Category | ""): Sex | null {
 export interface AnimalFields {
   earTag: string;
   category: Category | "";
+  /** Custom category id when the picked option is user-defined. */
+  customCategoryId: string;
   sex: Sex | "";
   breed: string;
   birthDate: string;
@@ -103,6 +106,7 @@ function createInitialFields(): AnimalFields {
   return {
     earTag: "",
     category: "",
+    customCategoryId: "",
     sex: "",
     breed: "",
     birthDate: "",
@@ -120,7 +124,9 @@ export function RegisterAnimalDialog() {
   const animals = useHerdStore((s) => s.animals);
   const breeds = useHerdStore((s) => s.breeds);
   const lots = useHerdStore((s) => s.lots);
+  const customCategories = useHerdStore((s) => s.customCategories);
   const addAnimal = useHerdStore((s) => s.addAnimal);
+  const { addToast } = useToast();
 
   const [open, setOpen] = useState(false);
   const [fields, setFields] = useState<AnimalFields>(createInitialFields);
@@ -136,14 +142,33 @@ export function RegisterAnimalDialog() {
     setOpen(next);
   }
 
-  function onChangeCategory(category: Category) {
-    setFields((f) => ({ ...f, category, sex: impliedSex(category) ?? f.sex }));
+  /** Handles both canonical ("base:x") and custom ("custom:id") options. */
+  function onChangeCategory(value: string) {
+    if (value.startsWith("custom:")) {
+      const id = value.slice("custom:".length);
+      const custom = customCategories.find((c) => c.id === id);
+      if (!custom) return;
+      setFields((f) => ({
+        ...f,
+        category: custom.baseCategory,
+        customCategoryId: id,
+        sex: impliedSex(custom.baseCategory) ?? f.sex,
+      }));
+      return;
+    }
+    const category = value.slice("base:".length) as Category;
+    setFields((f) => ({
+      ...f,
+      category,
+      customCategoryId: "",
+      sex: impliedSex(category) ?? f.sex,
+    }));
   }
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const earTags = animals.map((a) => a.earTag);
-    const newErrors = validateAnimal(fields, earTags, TODAY_ISO);
+    const newErrors = validateAnimal(fields, earTags, todayISO());
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
     const { category, sex } = fields;
@@ -152,16 +177,19 @@ export function RegisterAnimalDialog() {
     const animal: NewAnimal = {
       earTag: fields.earTag.trim(),
       category,
+      customCategoryId:
+        fields.customCategoryId === "" ? undefined : fields.customCategoryId,
       sex,
       breed: fields.breed,
       birthDate: fields.birthDate,
       lotId: fields.lotId,
       initialWeightKg: weight === "" ? undefined : Number(weight),
     };
-    if (!addAnimal(animal)) {
+    if (!(await addAnimal(animal))) {
       setErrors({ earTag: "Já existe um animal com este brinco." });
       return;
     }
+    addToast({ messageType: "success", text: `Animal ${animal.earTag} cadastrado` });
     setOpen(false);
   }
 
@@ -201,7 +229,7 @@ export function RegisterAnimalDialog() {
               <Input
                 id="animal-birth"
                 type="date"
-                max={TODAY_ISO}
+                max={todayISO()}
                 value={fields.birthDate}
                 onChange={(e) => setFields((f) => ({ ...f, birthDate: e.target.value }))}
                 aria-invalid={errors.birthDate ? true : undefined}
@@ -213,7 +241,13 @@ export function RegisterAnimalDialog() {
             <div className="grid gap-1.5">
               <Label htmlFor="animal-category">Categoria</Label>
               <Select
-                value={fields.category === "" ? undefined : fields.category}
+                value={
+                  fields.customCategoryId !== ""
+                    ? `custom:${fields.customCategoryId}`
+                    : fields.category === ""
+                      ? undefined
+                      : `base:${fields.category}`
+                }
                 onValueChange={onChangeCategory}
               >
                 <SelectTrigger
@@ -225,8 +259,13 @@ export function RegisterAnimalDialog() {
                 </SelectTrigger>
                 <SelectContent>
                   {CATEGORY_LIST.map((category) => (
-                    <SelectItem key={category} value={category}>
+                    <SelectItem key={category} value={`base:${category}`}>
                       {CATEGORY_LABEL[category]}
+                    </SelectItem>
+                  ))}
+                  {customCategories.map((c) => (
+                    <SelectItem key={c.id} value={`custom:${c.id}`}>
+                      {c.name} ({CATEGORY_LABEL[c.baseCategory]})
                     </SelectItem>
                   ))}
                 </SelectContent>

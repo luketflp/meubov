@@ -8,10 +8,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, SearchX } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
-import { TODAY_ISO } from "@/lib/domain/dates";
+import { todayISO } from "@/lib/domain/dates";
 import { animalByEarTag, withStatus, animalTreatments } from "@/lib/store/selectors";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AnimalHeader } from "@/components/animal/AnimalHeader";
+import { EditAnimalDialog } from "@/components/animal/EditAnimalDialog";
 import { WeightEvolution } from "@/components/animal/WeightEvolution";
 import { Timeline } from "@/components/animal/Timeline";
 import { HealthHistory } from "@/components/animal/HealthHistory";
@@ -62,7 +63,7 @@ export default function AnimalRecordPage() {
     );
   }
 
-  const derived = withStatus([animal], treatments, TODAY_ISO)[0];
+  const derived = withStatus([animal], treatments, todayISO())[0];
   const forAnimal = animalTreatments(treatments, animal.earTag);
   const lot = lots.find((l) => l.id === animal.lotId) ?? null;
   const reproductionRecord =
@@ -70,7 +71,10 @@ export default function AnimalRecordPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 md:px-8">
-      <BackLink />
+      <div className="flex items-center justify-between gap-3">
+        <BackLink />
+        <EditAnimalDialog animal={animal} />
+      </div>
 
       <AnimalHeader derived={derived} lotName={lot?.name ?? null} />
 

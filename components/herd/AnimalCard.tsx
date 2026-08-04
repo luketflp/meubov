@@ -1,10 +1,9 @@
 import Link from "next/link";
 import type { AnimalWithDerived } from "@/lib/store/selectors";
+import { useHerdStore } from "@/lib/store/useHerdStore";
+import { animalCategoryName } from "@/lib/domain/labels";
 import { StatusPill } from "@/components/ui/status-pill";
-import {
-  CATEGORY_LABELS,
-  formatFullWeight,
-} from "@/components/herd/filters";
+import { formatFullWeight } from "@/components/herd/filters";
 
 interface AnimalCardProps {
   item: AnimalWithDerived;
@@ -14,6 +13,7 @@ interface AnimalCardProps {
 /** Animal card of the mobile list: the whole card navigates to the record. */
 export function AnimalCard({ item, lotName }: AnimalCardProps) {
   const { animal, status, currentWeightKg } = item;
+  const customCategories = useHerdStore((s) => s.customCategories);
 
   return (
     <li>
@@ -29,7 +29,7 @@ export function AnimalCard({ item, lotName }: AnimalCardProps) {
           <StatusPill status={status} withDot />
         </div>
         <p className="text-sm text-ink-soft">
-          {CATEGORY_LABELS[animal.category]} · {animal.breed} · {lotName}
+          {animalCategoryName(animal, customCategories)} · {animal.breed} · {lotName}
         </p>
         <p className="font-mono text-sm text-ink">{formatFullWeight(currentWeightKg)}</p>
       </Link>
