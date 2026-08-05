@@ -31,6 +31,7 @@ import { toast } from "sonner";
 import { type HerdRepository } from "@/lib/repository/HerdRepository";
 import { ApiHerdRepository } from "@/lib/repository/ApiHerdRepository";
 import { api } from "@/lib/api/client";
+import { setActiveFarmId } from "@/lib/api/activeFarm";
 import type { ImportAnimalPayload } from "@/lib/domain/herdImport";
 
 /** Animal to register; the optional initial weight becomes the first weighing. */
@@ -142,9 +143,21 @@ export interface InvernadaPatch {
   boundary?: [number, number][] | null;
 }
 
+/** A farm the user can switch to (from GET /farms). */
+export interface FarmOption {
+  id: number;
+  name: string;
+  role: "owner" | "member";
+}
+
 export interface HerdStore extends HerdData {
   loaded: boolean;
+  /** Farms the user can access; the picker only renders with more than one. */
+  farms: FarmOption[];
+  activeFarmId: number | null;
   load: () => Promise<void>;
+  /** Persists the choice and rehydrates the whole store from the new farm. */
+  switchFarm: (farmId: number) => Promise<void>;
   /** Registers the animal via the API; false when the ear tag is taken. */
   addAnimal: (a: NewAnimal) => Promise<boolean>;
   /** Bulk-imports parsed rows, refreshes the herd, and returns a summary. */
@@ -311,11 +324,26 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   customCategories: [],
   farm: { name: "", municipality: "", stateRegistration: "", manager: "" },
   loaded: false,
+  farms: [],
+  activeFarmId: null,
 
   load: async () => {
     if (get().loaded) return;
+    const [data, farmsRes] = await Promise.all([repository.load(), api.farms.get()]);
+    set({
+      ...data,
+      farms: farmsRes.data?.farms ?? [],
+      activeFarmId: farmsRes.data?.activeFarmId ?? null,
+      loaded: true,
+    });
+  },
+
+  switchFarm: async (farmId) => {
+    if (farmId === get().activeFarmId) return;
+    setActiveFarmId(farmId);
+    set({ loaded: false });
     const data = await repository.load();
-    set({ ...data, loaded: true });
+    set({ ...data, activeFarmId: farmId, loaded: true });
   },
 
   addAnimal: async (a) => {
