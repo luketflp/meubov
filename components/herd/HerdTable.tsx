@@ -51,8 +51,8 @@ export function HerdTable({ items, lotNames, sort, onSort }: HerdTableProps) {
   const customCategories = useHerdStore((s) => s.customCategories);
   const router = useRouter();
 
-  const goToRecord = (earTag: string): void => {
-    router.push(`/herd/${earTag}`);
+  const goToRecord = (id: string): void => {
+    router.push(`/herd/${id}`);
   };
 
   return (
@@ -89,11 +89,11 @@ export function HerdTable({ items, lotNames, sort, onSort }: HerdTableProps) {
         <TableBody>
           {items.map(({ animal, status, currentWeightKg }) => (
             <TableRow
-              key={animal.earTag}
+              key={animal.id}
               tabIndex={0}
-              onClick={() => goToRecord(animal.earTag)}
+              onClick={() => goToRecord(animal.id)}
               onKeyDown={(event) => {
-                if (event.key === "Enter") goToRecord(animal.earTag);
+                if (event.key === "Enter") goToRecord(animal.id);
               }}
               aria-label={`Abrir ficha do animal ${animal.earTag}`}
               className="cursor-pointer border-hairline hover:bg-surface"

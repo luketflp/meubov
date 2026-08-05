@@ -149,9 +149,9 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
     { farm: true, body: ImportAnimalsBody }
   )
   .patch(
-    "/animals/:earTag",
+    "/animals/:id",
     async ({ farmId, params, body, status }) => {
-      const result = await animalsService.updateAnimal(farmId, params.earTag, body);
+      const result = await animalsService.updateAnimal(farmId, params.id, body);
       if (result === "animal_not_found") return status(404, { error: result });
       if (result === "category_not_found") return status(404, { error: result });
       if (result === "duplicate_ear_tag") return status(409, { error: result });
@@ -161,14 +161,14 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
     { farm: true, body: AnimalPatchBody }
   )
   .post(
-    "/animals/:earTag/deactivate",
+    "/animals/:id/deactivate",
     async ({ farmId, params, body, status }) => {
       // A baixa is history: it can be backdated, never postdated.
       if (body.date > todayISO()) return status(422, { error: "future_date" });
-      const done = await animalsService.deactivateAnimal(farmId, params.earTag, body);
+      const done = await animalsService.deactivateAnimal(farmId, params.id, body);
       if (!done) return status(404, { error: "animal_not_found" });
       return {
-        earTag: params.earTag,
+        id: params.id,
         reason: body.reason,
         date: body.date,
         notes: body.notes,
@@ -177,9 +177,9 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
     { farm: true, body: DeactivateAnimalBody }
   )
   .post(
-    "/animals/:earTag/weighings",
+    "/animals/:id/weighings",
     async ({ farmId, params, body, status }) => {
-      const weighing = await animalsService.recordWeighing(farmId, params.earTag, body);
+      const weighing = await animalsService.recordWeighing(farmId, params.id, body);
       if (weighing === null) return status(404, { error: "animal_not_found" });
       return weighing;
     },
@@ -195,9 +195,9 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
 
   /* ---- Reproduction (females) -------------------------------------------- */
   .post(
-    "/animals/:earTag/breedings",
+    "/animals/:id/breedings",
     async ({ farmId, params, body, status }) => {
-      const result = await reproductionService.addBreeding(farmId, params.earTag, body);
+      const result = await reproductionService.addBreeding(farmId, params.id, body);
       if (result === "animal_not_found") return status(404, { error: result });
       if (result === "not_female") return status(422, { error: result });
       return result;
@@ -205,9 +205,9 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
     { farm: true, body: NewBreedingBody }
   )
   .post(
-    "/animals/:earTag/diagnoses",
+    "/animals/:id/diagnoses",
     async ({ farmId, params, body, status }) => {
-      const result = await reproductionService.setDiagnosis(farmId, params.earTag, body);
+      const result = await reproductionService.setDiagnosis(farmId, params.id, body);
       if (result === "animal_not_found" || result === "breeding_not_found") {
         return status(404, { error: result });
       }
@@ -217,9 +217,9 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
     { farm: true, body: NewDiagnosisBody }
   )
   .post(
-    "/animals/:earTag/calvings",
+    "/animals/:id/calvings",
     async ({ farmId, params, body, status }) => {
-      const result = await reproductionService.addCalving(farmId, params.earTag, body);
+      const result = await reproductionService.addCalving(farmId, params.id, body);
       if (result === "animal_not_found") return status(404, { error: result });
       if (result === "not_female") return status(422, { error: result });
       if (result === "duplicate_ear_tag") return status(409, { error: result });
@@ -297,12 +297,12 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
     { farm: true, body: EntryAnimalBody }
   )
   .post(
-    "/manejo/:id/animals/:earTag/complete",
+    "/manejo/:id/animals/:animalId/complete",
     async ({ farmId, params, body, status }) => {
       const result = await manejoService.completeAnimal(
         farmId,
         params.id,
-        params.earTag,
+        params.animalId,
         body
       );
       if (result === null) return status(404, { error: "not_found" });
@@ -312,12 +312,12 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
     { farm: true, body: ManejoPassBody }
   )
   .post(
-    "/manejo/:id/animals/:earTag/skip",
+    "/manejo/:id/animals/:animalId/skip",
     async ({ farmId, params, body, status }) => {
       const result = await manejoService.skipAnimal(
         farmId,
         params.id,
-        params.earTag,
+        params.animalId,
         body.notes
       );
       if (result === null) return status(404, { error: "not_found" });
@@ -327,9 +327,9 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
     { farm: true, body: ManejoSkipBody }
   )
   .post(
-    "/manejo/:id/animals/:earTag/reopen",
+    "/manejo/:id/animals/:animalId/reopen",
     async ({ farmId, params, status }) => {
-      const result = await manejoService.reopenAnimal(farmId, params.id, params.earTag);
+      const result = await manejoService.reopenAnimal(farmId, params.id, params.animalId);
       if (result === null) return status(404, { error: "not_found" });
       if ("conflict" in result) return status(409, { error: result.conflict });
       return result;

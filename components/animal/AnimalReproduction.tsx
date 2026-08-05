@@ -27,6 +27,8 @@ import { RegisterBreedingDialog } from "@/components/animal/RegisterBreedingDial
 import { RegisterDiagnosisDialog } from "@/components/animal/RegisterDiagnosisDialog";
 import { RegisterCalvingDialog } from "@/components/animal/RegisterCalvingDialog";
 import { cn } from "@/lib/utils";
+import { useHerdStore } from "@/lib/store/useHerdStore";
+import { animalByEarTag } from "@/lib/store/selectors";
 
 const RESULT_STYLE: Record<DiagnosisResult, string> = {
   pregnant: "bg-healthy-soft text-healthy",
@@ -66,9 +68,11 @@ function BreedingPill({ type }: { type: BreedingType }) {
 }
 
 function EarTagLink({ earTag }: { earTag: string }) {
+  const animal = useHerdStore((state) => animalByEarTag(state.animals, earTag));
+  if (!animal) return <span className="font-mono font-medium">{earTag}</span>;
   return (
     <Link
-      href={`/herd/${encodeURIComponent(earTag)}`}
+      href={`/herd/${animal.id}`}
       className="font-mono font-medium text-brand hover:underline"
     >
       {earTag}

@@ -79,6 +79,8 @@ export interface CustomCategory {
 
 /** Herd animal. Weighings sorted asc by date; reproduction only for females. */
 export interface Animal {
+  /** Stable internal identifier. Ear tags can be corrected or replaced. */
+  id: string;
   earTag: string;
   /** Canonical category — the custom category's base when one is set. */
   category: Category;

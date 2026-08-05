@@ -52,6 +52,7 @@ const treatment = (partial: Partial<Treatment>): Treatment => ({
 });
 
 const steer = (earTag: string, weightKg: number | null): Animal => ({
+  id: `animal-${earTag}`,
   earTag,
   category: "steer",
   breed: "Nelore",

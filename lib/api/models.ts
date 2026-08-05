@@ -73,7 +73,7 @@ export const ImportAnimalsBody = t.Object({
   animals: t.Array(ImportAnimalRow, { minItems: 1, maxItems: 2000 }),
 });
 
-/** Body of POST /animals/:earTag/weighings. */
+/** Body of POST /animals/:id/weighings. */
 export const WeighingBody = t.Object({
   date: DateString,
   weightKg: t.Number({ exclusiveMinimum: 0 }),
@@ -91,7 +91,7 @@ export const DiagnosisResultModel = t.Union([
 ]);
 
 /**
- * Body of POST /animals/:earTag/breedings. `bullEarTag` is free text on
+ * Body of POST /animals/:id/breedings. `bullEarTag` is free text on
  * purpose: natural mating points at a herd bull, timed AI at a semen code from
  * outside the farm.
  */
@@ -102,7 +102,7 @@ export const NewBreedingBody = t.Object({
 });
 
 /**
- * Body of POST /animals/:earTag/diagnoses. One diagnosis per breeding, so
+ * Body of POST /animals/:id/diagnoses. One diagnosis per breeding, so
  * re-examining the same breeding overwrites the previous result.
  */
 export const NewDiagnosisBody = t.Object({
@@ -112,7 +112,7 @@ export const NewDiagnosisBody = t.Object({
 });
 
 /**
- * Body of POST /animals/:earTag/calvings. The calf enters the herd in the same
+ * Body of POST /animals/:id/calvings. The calf enters the herd in the same
  * transaction; breed and lot fall back to the dam's when omitted.
  */
 export const NewCalvingBody = t.Object({
@@ -218,7 +218,7 @@ export const NewCustomCategoryBody = t.Object({
   baseCategory: CategoryModel,
 });
 
-/** Body of PATCH /animals/:earTag (all fields optional). */
+/** Body of PATCH /animals/:id (all fields optional). */
 export const AnimalPatchBody = t.Object({
   /** New ear tag; must stay unique within the farm (409 on conflict). */
   earTag: t.Optional(t.String({ minLength: 1 })),
@@ -230,7 +230,7 @@ export const AnimalPatchBody = t.Object({
 });
 
 /**
- * Body of POST /animals/:earTag/deactivate — the baixa of an animal: why it
+ * Body of POST /animals/:id/deactivate — the baixa of an animal: why it
  * left, when, and what happened. A sale never comes through here; it is a
  * manejo de venda, which also carries the price.
  */
@@ -292,13 +292,13 @@ export const EntryAnimalBody = t.Object({
   notes: t.Optional(t.String()),
 });
 
-/** Body of POST /manejo/:id/animals/:earTag/complete (ManejoPassData). */
+/** Body of POST /manejo/:id/animals/:animalId/complete (ManejoPassData). */
 export const ManejoPassBody = t.Object({
   weightKg: t.Optional(t.Number({ exclusiveMinimum: 0 })),
   notes: t.Optional(t.String()),
 });
 
-/** Body of POST /manejo/:id/animals/:earTag/skip. */
+/** Body of POST /manejo/:id/animals/:animalId/skip. */
 export const ManejoSkipBody = t.Object({
   notes: t.Optional(t.String()),
 });

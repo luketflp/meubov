@@ -6,6 +6,7 @@ import type { Animal, Treatment } from "@/lib/types";
 /** Creates a default animal for tests, with partial overrides. */
 export function makeAnimal(overrides: Partial<Animal> = {}): Animal {
   return {
+    id: "animal-1",
     earTag: "BR-001",
     category: "steer",
     breed: "Angus",

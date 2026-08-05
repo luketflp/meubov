@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusDot } from "@/components/ui/status-dot";
 import { daysAgoLabel } from "@/components/calendar/helpers";
+import { useHerdStore } from "@/lib/store/useHerdStore";
 
 interface OverdueSectionProps {
   overdue: Treatment[];
@@ -18,6 +19,8 @@ interface OverdueSectionProps {
 
 /** Overdue treatments of the whole herd, independent of the navigated month. */
 export function OverdueSection({ overdue, onMarkDone }: OverdueSectionProps) {
+  const animals = useHerdStore((state) => state.animals);
+  const animalIdsByEarTag = new Map(animals.map((animal) => [animal.earTag, animal.id]));
   return (
     <SectionCard
       title="Atrasados"
@@ -50,12 +53,16 @@ export function OverdueSection({ overdue, onMarkDone }: OverdueSectionProps) {
                   {isFootAndMouth(t) ? <StatusDot status="fmd" /> : null}
                   <span className="truncate">{t.name}</span>
                 </p>
-                <Link
-                  href={`/herd/${t.animalEarTag}`}
-                  className="font-mono text-xs text-brand hover:underline"
-                >
-                  {t.animalEarTag}
-                </Link>
+                {animalIdsByEarTag.get(t.animalEarTag) ? (
+                  <Link
+                    href={`/herd/${animalIdsByEarTag.get(t.animalEarTag)}`}
+                    className="font-mono text-xs text-brand hover:underline"
+                  >
+                    {t.animalEarTag}
+                  </Link>
+                ) : (
+                  <span className="font-mono text-xs">{t.animalEarTag}</span>
+                )}
               </div>
               <Button
                 variant="outline"
