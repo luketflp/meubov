@@ -10,6 +10,7 @@ import type {
   Lot,
   LotPlacement,
   AnimalStatus,
+  ManejoSession,
   Treatment,
 } from "@/lib/types";
 import { deriveAnimalStatus, deriveTreatmentStatus, attentionReason } from "@/lib/domain/status";
@@ -140,6 +141,33 @@ export function currentPlacementForLot(
     }
   }
   return current;
+}
+
+/**
+ * Whether a logical lot can still be hard-deleted (a mistaken/never-used
+ * registration). Mirrors the server's removeLot guards so the UI only offers a
+ * deletion that can succeed: any animal reference (active or inactive), any
+ * manejo reference, or movement history (two or more placements) makes the lot
+ * permanent — archive it instead.
+ */
+export function isLotDeletable(
+  lotId: string,
+  animals: Animal[],
+  manejoSessions: ManejoSession[],
+  placements: LotPlacement[]
+): boolean {
+  if (animals.some((animal) => animal.lotId === lotId)) return false;
+  const referenced = manejoSessions.some(
+    (session) =>
+      session.destinationLotId === lotId ||
+      session.animals.some((entry) => entry.previousLotId === lotId)
+  );
+  if (referenced) return false;
+  let placementCount = 0;
+  for (const placement of placements) {
+    if (placement.lotId === lotId && ++placementCount > 1) return false;
+  }
+  return true;
 }
 
 /** Logical lots with an open placement, eligible for new animal assignments. */

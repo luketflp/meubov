@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { Invernada, Lot, LotPlacement } from "@/lib/types";
+import type { Invernada, Lot, LotPlacement, ManejoSession } from "@/lib/types";
 import { makeAnimal } from "@/lib/domain/__tests__/fixtures";
 import {
   animalById,
   currentlyPlacedLots,
   herdStockingRateAuPerHa,
   invernadasWithSummary,
+  isLotDeletable,
   lotsWithSummary,
 } from "@/lib/store/selectors";
 
@@ -135,6 +136,70 @@ describe("lot and invernada summaries", () => {
     expect(recria?.headCount).toBe(1);
     expect(recria?.totalWeightKg).toBe(900);
     expect(herdStockingRateAuPerHa(animals, invernadas)).toBeCloseTo(0.05);
+  });
+
+  it("keeps a lot deletable only until anything references it", () => {
+    const onePlacement: LotPlacement[] = [
+      {
+        id: "placement-only",
+        lotId: "lot-new",
+        invernadaId: "invernada-1",
+        startedOn: "2026-07-01",
+      },
+    ];
+    const makeSession = (overrides: Partial<ManejoSession>): ManejoSession => ({
+      id: "session-1",
+      name: "Transferência",
+      date: "2026-07-10",
+      status: "closed",
+      kind: "transfer",
+      weighing: false,
+      animals: [],
+      ...overrides,
+    });
+
+    // Mistaken registration: no animals, no manejo, initial placement only.
+    expect(isLotDeletable("lot-new", [], [], onePlacement)).toBe(true);
+    // An archived never-used lot keeps its single (closed) placement.
+    expect(
+      isLotDeletable("lot-new", [], [], [
+        { ...onePlacement[0], endedOn: "2026-07-20" },
+      ])
+    ).toBe(true);
+
+    // An INACTIVE animal still references the lot; the herd summary shows zero.
+    const dead = makeAnimal({ id: "animal-dead", lotId: "lot-new", active: false });
+    expect(isLotDeletable("lot-new", [dead], [], onePlacement)).toBe(false);
+
+    // Manejo history: the lot was a destination, or an animal came from it.
+    expect(
+      isLotDeletable("lot-new", [], [makeSession({ destinationLotId: "lot-new" })], onePlacement)
+    ).toBe(false);
+    expect(
+      isLotDeletable(
+        "lot-new",
+        [],
+        [
+          makeSession({
+            animals: [{ earTag: "001", outcome: "done", previousLotId: "lot-new" }],
+          }),
+        ],
+        onePlacement
+      )
+    ).toBe(false);
+
+    // Two placements are movement history, which makes the lot permanent.
+    expect(
+      isLotDeletable("lot-new", [], [], [
+        { ...onePlacement[0], endedOn: "2026-07-10" },
+        {
+          id: "placement-next",
+          lotId: "lot-new",
+          invernadaId: "invernada-2",
+          startedOn: "2026-07-10",
+        },
+      ])
+    ).toBe(false);
   });
 
   it("uses the open placement after a movement, not the closed historical one", () => {

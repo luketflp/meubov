@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { Fence, Trash2 } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
-import { lotsWithSummary, type LotWithSummary } from "@/lib/store/selectors";
+import { isLotDeletable, lotsWithSummary, type LotWithSummary } from "@/lib/store/selectors";
 import { KG_PER_AU } from "@/lib/domain/stocking";
 import { kgToArroba } from "@/lib/domain/weights";
 import { formatArroba, formatKg, formatNumber } from "@/lib/domain/format";
@@ -21,11 +21,8 @@ import { ArchiveLotDialog } from "@/components/lots/archive-lot-dialog";
 function LotCard({ summary }: { summary: LotWithSummary }) {
   const { lot, headCount, totalWeightKg, currentPlacement, currentInvernada } = summary;
   const removeLot = useHerdStore((state) => state.removeLot);
-  const placementCount = useHerdStore((state) =>
-    state.lotPlacements.reduce(
-      (count, placement) => count + (placement.lotId === lot.id ? 1 : 0),
-      0
-    )
+  const deletable = useHerdStore((state) =>
+    isLotDeletable(lot.id, state.animals, state.manejoSessions, state.lotPlacements)
   );
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
@@ -92,7 +89,7 @@ function LotCard({ summary }: { summary: LotWithSummary }) {
         {currentPlacement && headCount === 0 ? (
           <ArchiveLotDialog lot={lot} currentPlacement={currentPlacement} />
         ) : null}
-        {headCount === 0 && placementCount <= 1 ? (
+        {deletable ? (
           <Button
             type="button"
             variant="ghost"
