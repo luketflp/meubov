@@ -37,6 +37,7 @@ import * as settings from "@/lib/api/services/settings";
 import * as animalsService from "@/lib/api/services/animals";
 import * as manejoService from "@/lib/api/services/manejo";
 import * as expensesService from "@/lib/api/services/expenses";
+import * as farmsService from "@/lib/api/services/farms";
 import * as categoriesService from "@/lib/api/services/categories";
 import * as reproductionService from "@/lib/api/services/reproduction";
 
@@ -117,6 +118,14 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
     "/farm",
     ({ farmId, body }) => settings.saveFarm(farmId, body),
     { farm: true, body: FarmDataBody }
+  )
+  .get(
+    "/farms",
+    async ({ user, farmId, superuser }) => ({
+      farms: await farmsService.listFarmsForUser(user.id, superuser),
+      activeFarmId: farmId,
+    }),
+    { farm: true }
   )
   .post(
     "/protocols",
