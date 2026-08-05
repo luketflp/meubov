@@ -12,11 +12,13 @@ import Link from "next/link";
 import { ArrowLeft, CheckCircle2, ClipboardX, Search, Undo2 } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
-import type { ManejoSessionAnimal } from "@/lib/types";
-import { formatDate } from "@/lib/domain/dates";
+import type { ManejoSession, ManejoSessionAnimal } from "@/lib/types";
+import { formatDate, todayISO } from "@/lib/domain/dates";
 import { CATEGORY_LABEL } from "@/lib/domain/labels";
-import { currentWeight } from "@/lib/domain/weights";
-import { formatKg } from "@/lib/domain/format";
+import { currentWeight, kgToArroba } from "@/lib/domain/weights";
+import { formatArroba, formatCurrency, formatKg } from "@/lib/domain/format";
+import { saleAmount } from "@/lib/domain/movements";
+import { EntryChuteForm } from "@/components/manejo/entry-chute-form";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -32,9 +34,30 @@ interface ManejoSessionRunnerProps {
   sessionId: string;
 }
 
+/** Subtitle line of a session that moves the herd: where to, for how much. */
+function movementSubtitle(session: ManejoSession, lotName: string | undefined): string {
+  if (session.kind === "transfer") {
+    return lotName ? `Destino: ${lotName}` : "Transferência entre lotes";
+  }
+  const who = session.counterparty ? ` · ${session.counterparty}` : "";
+  if (session.kind === "sale") {
+    const price =
+      session.pricePerArroba !== undefined
+        ? `${formatCurrency(session.pricePerArroba)}/@`
+        : session.totalAmountBrl !== undefined
+          ? `${formatCurrency(session.totalAmountBrl)} pelo lote`
+          : "sem preço";
+    return `Venda · ${price}${who}`;
+  }
+  const total =
+    session.totalAmountBrl !== undefined ? formatCurrency(session.totalAmountBrl) : "sem valor";
+  return `Compra · ${total}${lotName ? ` · entra em ${lotName}` : ""}${who}`;
+}
+
 export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
   const session = useHerdStore((s) => s.manejoSessions.find((m) => m.id === sessionId));
   const animals = useHerdStore((s) => s.animals);
+  const lots = useHerdStore((s) => s.lots);
   const completeManejoAnimal = useHerdStore((s) => s.completeManejoAnimal);
   const skipManejoAnimal = useHerdStore((s) => s.skipManejoAnimal);
   const reopenManejoAnimal = useHerdStore((s) => s.reopenManejoAnimal);
@@ -75,6 +98,21 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
   const pending = session.animals.filter((a) => a.outcome === "pending");
   const done = session.animals.filter((a) => a.outcome === "done");
   const skipped = session.animals.filter((a) => a.outcome === "skipped");
+
+  const isEntry = session.kind === "entry";
+  const isSale = session.kind === "sale";
+  const destinationName = lots.find((l) => l.id === session.destinationLotId)?.name;
+  // Live value of the animal on the scale, in a venda priced per arroba.
+  const typedWeight = Number(weight);
+  const passWeight =
+    weight.trim() === "" || !Number.isFinite(typedWeight) || typedWeight <= 0
+      ? null
+      : typedWeight;
+  const passValue =
+    isSale && session.pricePerArroba !== undefined && passWeight !== null
+      ? saleAmount(passWeight, session.pricePerArroba)
+      : null;
+  const soldTotal = done.reduce((sum, entry) => sum + (entry.amountBrl ?? 0), 0);
 
   const term = search.trim().toLowerCase();
   const visiblePending =
@@ -135,9 +173,13 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
     <div className="space-y-6">
       <PageHeader
         title={session.name}
-        subtitle={`Manejo de ${formatDate(session.date)}${
-          session.treatment?.dose ? ` · ${session.treatment.dose}` : ""
-        }${session.treatment?.responsible ? ` · ${session.treatment.responsible}` : ""}`}
+        subtitle={
+          session.kind === "health" || session.kind === "weighing"
+            ? `Manejo de ${formatDate(session.date)}${
+                session.treatment?.dose ? ` · ${session.treatment.dose}` : ""
+              }${session.treatment?.responsible ? ` · ${session.treatment.responsible}` : ""}`
+            : `${formatDate(session.date)} · ${movementSubtitle(session, destinationName)}`
+        }
         actions={
           <Link
             href="/manejo"
@@ -164,7 +206,9 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         ) : null}
       </SectionCard>
 
-      {open && current ? (
+      {open && isEntry ? <EntryChuteForm session={session} todayIso={todayISO()} /> : null}
+
+      {open && !isEntry && current ? (
         <SectionCard title="No brete agora">
           <form onSubmit={onComplete} className="space-y-4">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -182,6 +226,13 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
                 </span>
               ) : null}
             </div>
+
+            {session.kind === "transfer" && destinationName ? (
+              <p className="text-sm text-ink-soft">
+                Ao concluir, o animal passa a ocupar{" "}
+                <span className="font-medium text-ink">{destinationName}</span>.
+              </p>
+            ) : null}
 
             <div className="grid gap-4 sm:grid-cols-2">
               {session.weighing ? (
@@ -214,6 +265,22 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
                 />
               </div>
             </div>
+
+            {isSale && session.pricePerArroba !== undefined ? (
+              <p className="text-sm text-ink-soft">
+                {passWeight === null ? (
+                  "Digite o peso para calcular o valor deste animal."
+                ) : (
+                  <>
+                    {formatArroba(kgToArroba(passWeight))} ×{" "}
+                    {formatCurrency(session.pricePerArroba)}/@ ={" "}
+                    <span className="font-mono font-medium text-ink">
+                      {formatCurrency(passValue ?? 0)}
+                    </span>
+                  </>
+                )}
+              </p>
+            ) : null}
             {error ? <p className="text-xs text-overdue">{error}</p> : null}
 
             <div className="flex flex-wrap gap-2">
@@ -239,7 +306,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         </SectionCard>
       ) : null}
 
-      {open && !current && pending.length === 0 ? (
+      {open && !isEntry && !current && pending.length === 0 ? (
         <SectionCard title="No brete agora">
           <EmptyState
             icon={CheckCircle2}
@@ -249,7 +316,21 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         </SectionCard>
       ) : null}
 
-      <div className="grid items-start gap-4 lg:grid-cols-2">
+      {isSale && soldTotal > 0 ? (
+        <SectionCard title="Valor da venda">
+          <p className="text-sm text-ink-soft">
+            {done.length} {done.length === 1 ? "animal vendido" : "animais vendidos"} ·{" "}
+            <span className="font-mono text-lg font-semibold text-ink">
+              {formatCurrency(soldTotal)}
+            </span>
+          </p>
+        </SectionCard>
+      ) : null}
+
+      <div
+        className={cn("grid items-start gap-4", !isEntry && "lg:grid-cols-2")}
+      >
+        {isEntry ? null : (
         <SectionCard title={`Pendentes (${pending.length})`}>
           {open ? (
             <div className="relative mb-2">
@@ -308,11 +389,16 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
             </ul>
           )}
         </SectionCard>
+        )}
 
         <div className="space-y-4">
-          <SectionCard title={`Manejados (${done.length})`}>
+          <SectionCard title={`${isEntry ? "Registrados" : "Manejados"} (${done.length})`}>
             {done.length === 0 ? (
-              <p className="py-1 text-xs text-ink-soft">Nenhum animal manejado ainda.</p>
+              <p className="py-1 text-xs text-ink-soft">
+                {isEntry
+                  ? "Nenhum animal registrado ainda."
+                  : "Nenhum animal manejado ainda."}
+              </p>
             ) : (
               <HandledList
                 entries={done}
@@ -371,6 +457,9 @@ function HandledList({
           <span className="font-mono text-sm font-medium text-ink">{entry.earTag}</span>
           {entry.weightKg !== undefined ? (
             <span className="font-mono text-xs text-ink-soft">{formatKg(entry.weightKg)}</span>
+          ) : null}
+          {entry.amountBrl !== undefined ? (
+            <span className="font-mono text-xs text-ink">{formatCurrency(entry.amountBrl)}</span>
           ) : null}
           {entry.notes ? (
             <span className="truncate text-xs text-ink-soft">{entry.notes}</span>

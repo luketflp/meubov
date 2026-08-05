@@ -101,6 +101,8 @@ export function toAnimal(
     lotId: row.lotId,
     active: row.active,
     inactiveReason: orNothing(row.inactiveReason),
+    inactiveDate: orNothing(row.inactiveDate),
+    inactiveNotes: orNothing(row.inactiveNotes),
     weighings,
     reproduction: hasReproduction ? reproduction : undefined,
   };
@@ -125,8 +127,8 @@ export function toMovement(row: MovementRow): Movement {
     id: row.id,
     type: row.type,
     date: row.date,
-    quantity: row.quantity,
-    category: row.category,
+    quantity: orNothing(row.quantity),
+    category: orNothing(row.category),
     origin: row.origin,
     destination: row.destination,
     amountBrl: orNothing(row.amountBrl),
@@ -196,6 +198,9 @@ export function toManejoSessionAnimal(
     notes: orNothing(row.notes),
     treatmentId: orNothing(row.treatmentId),
     boosterId: orNothing(row.boosterId),
+    amountBrl: orNothing(row.amountBrl),
+    previousLotId: orNothing(row.previousLotId),
+    createdAnimal: row.createdAnimal,
   };
 }
 
@@ -209,9 +214,14 @@ export function toManejoSession(
     name: row.name,
     date: row.date,
     status: row.status,
+    kind: row.kind,
     weighing: row.weighing,
     treatment: toManejoPlan(row),
     animals,
+    destinationLotId: orNothing(row.destinationLotId),
+    counterparty: orNothing(row.counterparty),
+    pricePerArroba: orNothing(row.pricePerArroba),
+    totalAmountBrl: orNothing(row.totalAmountBrl),
     notes: orNothing(row.notes),
   };
 }

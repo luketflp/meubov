@@ -48,7 +48,7 @@ export const FIELD_LABEL: Record<ImportField, string> = {
   breed: "Raça",
   sex: "Sexo",
   birthDate: "Nascimento",
-  lot: "Pasto",
+  lot: "Lote",
   weightKg: "Peso",
 };
 
@@ -247,7 +247,7 @@ export interface ImportAnimalPayload {
   breed: string;
   sex: Sex;
   birthDate: string;
-  /** Pasto NAME; the server resolves it to a lot id (creating it if new). */
+  /** Lot NAME; the server resolves it to a lot id (creating it if new). */
   lot: string;
   weightKg?: number;
 }
@@ -399,7 +399,7 @@ export function buildImportRows(
       errors.birthDate = "O nascimento não pode ser no futuro.";
     }
 
-    if (cells.lot === "") errors.lot = "Informe o pasto.";
+    if (cells.lot === "") errors.lot = "Informe o lote.";
 
     let weightKg: number | undefined;
     if (cells.weightKg !== "") {
@@ -463,7 +463,7 @@ export const TEMPLATE_HEADERS = [
   "raça",
   "sexo",
   "nascimento",
-  "pasto",
+  "lote",
   "peso",
 ] as const;
 
@@ -474,6 +474,6 @@ export const TEMPLATE_HEADERS = [
  */
 export function buildTemplateCsv(): string {
   const header = TEMPLATE_HEADERS.join(",");
-  const example = "BR-1042,Novilha,Nelore,,15/03/2023,Pasto 1,320";
+  const example = "BR-1042,Novilha,Nelore,,15/03/2023,Lote 1,320";
   return `﻿${header}\n${example}\n`;
 }

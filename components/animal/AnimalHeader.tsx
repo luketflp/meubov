@@ -8,7 +8,11 @@ import { useHerdStore } from "@/lib/store/useHerdStore";
 import { formatDate, formatAge } from "@/lib/domain/dates";
 import { formatNumber } from "@/lib/domain/format";
 import { formatWeightWithArroba } from "@/lib/domain/weights";
-import { SEX_LABEL, animalCategoryName } from "@/lib/domain/labels";
+import {
+  INACTIVE_REASON_LABEL,
+  SEX_LABEL,
+  animalCategoryName,
+} from "@/lib/domain/labels";
 import { StatusPill } from "@/components/ui/status-pill";
 import { cn } from "@/lib/utils";
 
@@ -49,12 +53,18 @@ export function AnimalHeader({ derived, lotName }: AnimalHeaderProps) {
         <StatusPill status={status} withDot />
         {!animal.active ? (
           <span className="inline-flex items-center rounded-md border border-hairline bg-surface px-2 py-0.5 text-[11px] font-medium text-ink-soft">
-            Vendido
+            {animal.inactiveReason
+              ? INACTIVE_REASON_LABEL[animal.inactiveReason]
+              : "Fora do rebanho"}
+            {animal.inactiveDate ? ` · ${formatDate(animal.inactiveDate)}` : ""}
           </span>
         ) : null}
       </div>
 
       {reason ? <p className="mt-1.5 text-xs text-ink-soft">{reason}</p> : null}
+      {animal.inactiveNotes ? (
+        <p className="mt-1.5 text-xs text-ink-soft">{animal.inactiveNotes}</p>
+      ) : null}
 
       <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
         <Field label="Categoria" value={animalCategoryName(animal, customCategories)} />

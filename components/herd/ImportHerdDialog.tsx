@@ -5,7 +5,7 @@
  * pt-BR validation status, then bulk-import the valid ones. Parsing and
  * validation live in `lib/domain/herdImport` (pure); SheetJS is loaded on demand
  * so its weight stays out of the main bundle. The server re-validates and is the
- * authority on duplicates and auto-created raças/pastos.
+ * authority on duplicates and auto-created raças/lots.
  */
 import { useRef, useState } from "react";
 import { Download, FileUp, Upload } from "lucide-react";
@@ -197,7 +197,7 @@ export function ImportHerdDialog() {
           <DialogTitle>Importar rebanho</DialogTitle>
           <DialogDescription>
             Envie uma planilha (.csv ou .xlsx) com uma linha por animal. Raças e
-            pastos novos são criados automaticamente; brincos já cadastrados são
+            lotes novos são criados automaticamente; brincos já cadastrados são
             ignorados.
           </DialogDescription>
         </DialogHeader>
@@ -208,7 +208,7 @@ export function ImportHerdDialog() {
               <p className="font-medium">Colunas esperadas</p>
               <p className="text-ink-soft">
                 brinco, categoria, raça, sexo (opcional quando a categoria já
-                define), nascimento (DD/MM/AAAA), pasto, peso (kg, opcional).
+                define), nascimento (DD/MM/AAAA), lote, peso (kg, opcional).
               </p>
               <button
                 type="button"
@@ -321,7 +321,7 @@ export function ImportHerdDialog() {
             ) : null}
             {summary.createdLots.length > 0 ? (
               <p className="text-ink-soft">
-                Pastos criados: {summary.createdLots.join(", ")}. Ajuste área e capim
+                Lotes criados: {summary.createdLots.join(", ")}. Ajuste área e capim
                 em Configurações.
               </p>
             ) : null}

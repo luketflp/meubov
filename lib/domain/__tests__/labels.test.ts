@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   Category,
   DiagnosisResult,
+  InactiveReason,
   Sex,
   BreedingType,
   MovementType,
@@ -10,6 +11,7 @@ import type {
 import {
   CATEGORY_LABEL,
   DIAGNOSIS_RESULT_LABEL,
+  INACTIVE_REASON_LABEL,
   SEX_LABEL,
   SEX_LABEL_SHORT,
   BREEDING_TYPE_LABEL,
@@ -87,6 +89,18 @@ describe("DIAGNOSIS_RESULT_LABEL", () => {
       pending: "Pendente",
     };
     expect(DIAGNOSIS_RESULT_LABEL).toEqual(expected);
+  });
+});
+
+describe("INACTIVE_REASON_LABEL", () => {
+  it("maps every reason an animal leaves the herd, sale included", () => {
+    const expected: Record<InactiveReason, string> = {
+      sale: "Vendido",
+      death: "Morte",
+      loss: "Perda / extravio",
+      other: "Outro",
+    };
+    expect(INACTIVE_REASON_LABEL).toEqual(expected);
   });
 });
 

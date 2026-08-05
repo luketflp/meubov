@@ -25,6 +25,7 @@ import {
   weighings,
 } from "@/lib/db/schema";
 import type { HerdData, ReproductionRecord, Weighing } from "@/lib/types";
+import { herdMovements } from "@/lib/domain/movements";
 import {
   toAnimal,
   toBreeding,
@@ -155,18 +156,29 @@ export async function loadHerdData(farmId: number): Promise<HerdData> {
     sessionAnimalsBySession.set(row.sessionId, list);
   }
 
+  const herdAnimals = animalRows.map((row) =>
+    toAnimal(row, weighingsByAnimal.get(row.id) ?? [], reproductionByAnimal.get(row.id))
+  );
+  const herdLots = lotRows.map(toLot);
+  const sessions = sessionRows.map((row) =>
+    toManejoSession(row, sessionAnimalsBySession.get(row.id) ?? [])
+  );
+
   return {
-    animals: animalRows.map((row) =>
-      toAnimal(row, weighingsByAnimal.get(row.id) ?? [], reproductionByAnimal.get(row.id))
-    ),
+    animals: herdAnimals,
     treatments: treatmentRows.map(({ row, earTag }) => toTreatment(row, earTag)),
-    lots: lotRows.map(toLot),
-    movements: movementRows.map(toMovement),
+    lots: herdLots,
+    // The ledger is the legacy rows plus what the manejo sessions moved: head
+    // count and category always come from the animals that actually passed.
+    movements: herdMovements(
+      movementRows.map(toMovement),
+      sessions,
+      herdAnimals,
+      new Map(herdLots.map((lot) => [lot.id, lot.name]))
+    ),
     breeds: breedRows.map((row) => row.name),
     protocols: protocolRows.map(toProtocol),
-    manejoSessions: sessionRows.map((row) =>
-      toManejoSession(row, sessionAnimalsBySession.get(row.id) ?? [])
-    ),
+    manejoSessions: sessions,
     expenses: expenseRows.map(toExpense),
     customCategories: customCategoryRows.map(toCustomCategory),
     farm: farmRows.length

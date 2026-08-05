@@ -13,6 +13,7 @@ import type {
   FarmData,
   HerdData,
   Lot,
+  ManejoSession,
   Movement,
   Weighing,
   HealthProtocol,
@@ -52,13 +53,13 @@ const BREEDS: readonly string[] = [
  */
 const LOTS: readonly Lot[] = [
   {
-    id: "lot-1", name: "Pasto da Sede", grass: "Brachiaria brizantha", hectares: 42,
+    id: "lot-1", name: "Lote da Sede", grass: "Brachiaria brizantha", hectares: 42,
     boundary: [
       [-47.91, -19.72], [-47.90332, -19.72], [-47.90332, -19.71459], [-47.91, -19.71459],
     ],
   },
   {
-    id: "lot-2", name: "Pasto do Rio", grass: "Mombaça", hectares: 35,
+    id: "lot-2", name: "Lote do Rio", grass: "Mombaça", hectares: 35,
     boundary: [
       [-47.90294, -19.72], [-47.89626, -19.72], [-47.89626, -19.71549], [-47.90294, -19.71549],
     ],
@@ -103,6 +104,13 @@ const BREEDING_TYPES: readonly BreedingType[] = ["timedAI", "naturalMating"];
 
 /** Entry date of the second bull into the herd (registered purchase). */
 const BULL_2_PURCHASE_DATE = "2026-02-01";
+
+/** Session name of each kind that moves the herd (same as lib/domain/manejo). */
+const MOVEMENT_SESSION_NAME: Record<"transfer" | "sale" | "entry", string> = {
+  transfer: "Transferência",
+  sale: "Venda",
+  entry: "Entrada",
+};
 
 /** Breeds by position — Angus predominant, all others used at least once. */
 const COW_BREEDS: readonly string[] = [
@@ -485,18 +493,97 @@ export function generateInitialData(): HerdData {
   ];
   for (const item of schedule) recordTreatment(item.animal, item.protocol, item.date, "scheduled");
 
-  // ---- Movements (last 6 months) ----------------------------------------
-  const movementsWithoutId: readonly Omit<Movement, "id">[] = [
-    { type: "purchase", date: BULL_2_PURCHASE_DATE, quantity: 1, category: "bull", origin: "Externo", destination: "Pasto do Rio", amountBrl: 14000, notes: `Aquisição do touro ${bulls[1].earTag}` },
-    { type: "purchase", date: "2026-03-10", quantity: 2, category: "steer", origin: "Externo", destination: "Pasto do Rio", amountBrl: 7600 },
-    { type: "transfer", date: "2026-03-18", quantity: 4, category: "steer", origin: "Pasto do Rio", destination: "Invernada Alta" },
-    { type: "sale", date: "2026-04-08", quantity: 1, category: "steer", origin: "Invernada Alta", destination: "Externo", amountBrl: 8850, notes: `Venda do boi ${soldSteer.earTag} para frigorífico` },
-    { type: "sale", date: "2026-05-12", quantity: 1, category: "cow", origin: "Pasto da Sede", destination: "Externo", amountBrl: 6200, notes: `Descarte da vaca ${soldCow.earTag}` },
-    { type: "transfer", date: "2026-05-30", quantity: 3, category: "heifer", origin: "Reserva do Ipê", destination: "Piquete Norte" },
-    { type: "sale", date: "2026-06-02", quantity: 3, category: "calf", origin: "Piquete Norte", destination: "Externo", amountBrl: 8400, notes: "Bezerros desmamados vendidos em leilão (sem cadastro individual)" },
-    { type: "transfer", date: "2026-07-02", quantity: 6, category: "cow", origin: "Pasto da Sede", destination: "Reserva do Ipê" },
+  // ---- Manejo sessions that moved the herd (last 6 months) ---------------
+  // Compras, vendas e transferências are closed sessions of the curral: every
+  // animal below actually passed the chute, so the ledger derives its head
+  // count, category and value from them (lib/domain/movements.ts).
+  let nextSessionId = 0;
+  const movementSession = (
+    kind: "transfer" | "sale" | "entry",
+    date: string,
+    handled: readonly Animal[],
+    fields: {
+      /** Lot the animals were in before the pass (transferência/venda). */
+      from?: string;
+      destinationLotId?: string;
+      counterparty?: string;
+      totalAmountBrl?: number;
+      notes?: string;
+    } = {}
+  ): ManejoSession => {
+    const { from, ...session } = fields;
+    return {
+      id: `manejo-mov-${++nextSessionId}`,
+      name: MOVEMENT_SESSION_NAME[kind],
+      date,
+      status: "closed",
+      kind,
+      weighing: false,
+      animals: handled.map((animal) => ({
+        earTag: animal.earTag,
+        outcome: "done" as const,
+        previousLotId: kind === "entry" ? undefined : from,
+        createdAnimal: kind === "entry",
+      })),
+      ...session,
+    };
+  };
+
+  const movementSessions: ManejoSession[] = [
+    movementSession("entry", BULL_2_PURCHASE_DATE, [bulls[1]], {
+      destinationLotId: "lot-2",
+      counterparty: "Cabanha São Jorge",
+      totalAmountBrl: 14000,
+      notes: `Aquisição do touro ${bulls[1].earTag}`,
+    }),
+    movementSession("entry", "2026-03-10", [heifers[4], heifers[5]], {
+      destinationLotId: "lot-2",
+      counterparty: "Leilão Uberaba",
+      totalAmountBrl: 7600,
+    }),
+    movementSession("transfer", "2026-03-18", steers.slice(0, 4), {
+      from: "lot-2",
+      destinationLotId: "lot-3",
+    }),
+    movementSession("sale", "2026-04-08", [soldSteer], {
+      from: "lot-3",
+      counterparty: "Frigorífico Boi Forte",
+      totalAmountBrl: 8850,
+      notes: `Venda do boi ${soldSteer.earTag} para frigorífico`,
+    }),
+    movementSession("sale", "2026-05-12", [soldCow], {
+      from: "lot-1",
+      counterparty: "Frigorífico Boi Forte",
+      totalAmountBrl: 6200,
+      notes: `Descarte da vaca ${soldCow.earTag}`,
+    }),
+    movementSession("transfer", "2026-05-30", heifers.slice(0, 3), {
+      from: "lot-5",
+      destinationLotId: "lot-4",
+    }),
+    movementSession("transfer", "2026-07-02", cows.slice(0, 6), {
+      from: "lot-1",
+      destinationLotId: "lot-5",
+    }),
   ];
-  const movements: Movement[] = movementsWithoutId.map((m, i) => ({ ...m, id: `mov-${i + 1}` }));
+
+  // ---- Legacy movement row ----------------------------------------------
+  // Written by the old "Registrar movimentação" screen, before compras e vendas
+  // became manejo sessions: a head count with no animal behind it. Kept in the
+  // demo so the ledger keeps proving it still renders that history.
+  const movements: Movement[] = [
+    {
+      id: "mov-legacy-1",
+      type: "sale",
+      date: "2026-06-02",
+      quantity: 3,
+      category: "calf",
+      origin: "Piquete Norte",
+      destination: "Externo",
+      amountBrl: 8400,
+      notes: "Bezerros desmamados vendidos em leilão (sem cadastro individual)",
+    },
+  ];
 
   return {
     animals: [
@@ -508,7 +595,7 @@ export function generateInitialData(): HerdData {
     movements,
     breeds: [...BREEDS],
     protocols: PROTOCOLS.map((p) => ({ ...p })),
-    manejoSessions: [],
+    manejoSessions: movementSessions,
     expenses: buildExpenses(),
     customCategories: [],
     farm: { ...FARM },

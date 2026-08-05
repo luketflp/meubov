@@ -14,10 +14,10 @@ import type {
   InactiveReason,
   HerdData,
   Lot,
+  ManejoKind,
   ManejoSession,
   ManejoSessionAnimal,
   ManejoTreatmentPlan,
-  Movement,
   PregnancyDiagnosis,
   ReproductionRecord,
   Sex,
@@ -31,9 +31,6 @@ import { ApiHerdRepository } from "@/lib/repository/ApiHerdRepository";
 import { api } from "@/lib/api/client";
 import type { ImportAnimalPayload } from "@/lib/domain/herdImport";
 
-/** Movement to record; optional earTags apply sale/transfer to the animals. */
-export type NewMovement = Omit<Movement, "id"> & { earTags?: string[] };
-
 /** Animal to register; the optional initial weight becomes the first weighing. */
 export type NewAnimal = Omit<Animal, "active" | "weighings" | "reproduction"> & {
   initialWeightKg?: number;
@@ -41,21 +38,52 @@ export type NewAnimal = Omit<Animal, "active" | "weighings" | "reproduction"> & 
 
 /**
  * New manejo session (curral working session). Opens with every selected
- * animal pending; effects (treatments, weighings) are applied one animal at a
- * time via completeManejoAnimal — a manejo takes hours, not one click.
+ * animal pending; effects (treatments, weighings, lot changes, sales) are
+ * applied one animal at a time via completeManejoAnimal — a manejo takes hours,
+ * not one click. An entry (compra) opens with NO animals: they do not exist yet
+ * and are registered as they arrive, via registerEntryAnimal.
  */
 export interface NewManejoSession {
   date: string;
+  kind: ManejoKind;
   earTags: string[];
   /** Capture one weight per animal as it passes the chute. */
   weighing: boolean;
   treatment?: ManejoTreatmentPlan;
+  /** Lot every animal lands in — transfer and entry sessions. */
+  destinationLotId?: string;
+  /** Buyer (sale) or seller (entry). */
+  counterparty?: string;
+  /** R$/@ of a sale priced by weight. */
+  pricePerArroba?: number;
+  /** Closed price of the batch, or the purchase total of an entry. */
+  totalAmountBrl?: number;
   notes?: string;
 }
+
+/** Animal arriving in an entry session: registered and handled in one pass. */
+export type EntryAnimal = Omit<NewAnimal, "lotId"> & { notes?: string };
 
 /** Data captured for one animal at the chute. */
 export interface ManejoPassData {
   weightKg?: number;
+  notes?: string;
+}
+
+/** Herd change a manejo pass applied to one animal (lot, herd membership). */
+interface PassAnimalPatch {
+  earTag: string;
+  active: boolean;
+  lotId: string;
+}
+
+/**
+ * Baixa of an animal: why it left the herd, when, and what happened. A sale is
+ * not one of these — it is recorded by a manejo de venda, which knows the price.
+ */
+export interface NewBaixa {
+  reason: Exclude<InactiveReason, "sale">;
+  date: string;
   notes?: string;
 }
 
@@ -80,7 +108,7 @@ export interface ImportSummary {
   imported: number;
   skipped: number;
   createdBreeds: string[];
-  /** Names of the pastos auto-created by the import. */
+  /** Names of the lots auto-created by the import. */
   createdLots: string[];
 }
 
@@ -107,14 +135,22 @@ export interface HerdStore extends HerdData {
   reopenManejoAnimal: (sessionId: string, earTag: string) => Promise<void>;
   /** Closes the session (remaining animals stay recorded as they are). */
   closeManejoSession: (sessionId: string) => Promise<void>;
+  /**
+   * Registers one animal arriving in an entry session (compra): it joins the
+   * herd in the session's destination lot, already handled. False when the ear
+   * tag is already in use.
+   */
+  registerEntryAnimal: (sessionId: string, animal: EntryAnimal) => Promise<boolean>;
   recordWeighing: (earTag: string, w: Weighing) => Promise<void>;
-  recordMovement: (m: NewMovement) => Promise<void>;
   addBreed: (name: string) => Promise<void>;
   /** Removes the breed via the API; false when an active animal uses it. */
   removeBreed: (name: string) => Promise<boolean>;
-  addLot: (l: Omit<Lot, "id">) => Promise<void>;
+  /** Creates the lot via the API and returns it with its server-generated id. */
+  addLot: (l: Omit<Lot, "id">) => Promise<Lot>;
   /** Removes the lot via the API; false when an active animal occupies it. */
   removeLot: (id: string) => Promise<boolean>;
+  /** Edits a lot's fields; `boundary: null` erases the drawing. */
+  updateLot: (id: string, patch: LotPatch) => Promise<void>;
   saveFarm: (d: FarmData) => Promise<void>;
   addProtocol: (p: Omit<HealthProtocol, "id">, generateSchedule: boolean) => Promise<void>;
   removeProtocol: (id: string) => Promise<void>;
@@ -132,8 +168,11 @@ export interface HerdStore extends HerdData {
   recordCalving: (earTag: string, input: NewCalving) => Promise<boolean>;
   /** Edits an animal's registration fields (category/breed/birth/lot). */
   updateAnimal: (earTag: string, patch: AnimalPatch) => Promise<void>;
-  /** Deactivates an animal with a reason (sales go through movements). */
-  deactivateAnimal: (earTag: string, reason: Exclude<InactiveReason, "sale">) => Promise<void>;
+  /**
+   * Gives an animal a baixa: why it left, when, and what happened. A sale never
+   * comes through here — it is a manejo de venda.
+   */
+  deactivateAnimal: (earTag: string, input: NewBaixa) => Promise<void>;
 }
 
 /** Editable fields of an animal (only sent ones change). */
@@ -143,6 +182,17 @@ export interface AnimalPatch {
   breed?: string;
   birthDate?: string;
   lotId?: string;
+}
+
+/**
+ * Editable fields of a lot (only sent ones change). `boundary` is three-valued:
+ * absent leaves the outline alone, `null` erases it, a ring replaces it.
+ */
+export interface LotPatch {
+  name?: string;
+  grass?: string;
+  hectares?: number;
+  boundary?: [number, number][] | null;
 }
 
 /**
@@ -246,7 +296,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       createdLots: result.createdLots.map((lot) => lot.name),
     };
     // The import already committed on the server. Re-fetch the whole herd so
-    // animals plus any new raças/pastos stay consistent, but never let a refresh
+    // animals plus any new raças/lots stay consistent, but never let a refresh
     // failure mask a successful import — return the server-reported summary
     // regardless; the store refreshes on the next successful load.
     try {
@@ -291,6 +341,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       entry: ManejoSessionAnimal;
       treatments: Treatment[];
       weighing?: Weighing;
+      animal?: PassAnimalPatch;
     };
     set((s) => {
       let animals = s.animals;
@@ -299,6 +350,16 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
         animals = animals.map((a) =>
           a.earTag === earTag
             ? { ...a, weighings: [...a.weighings, weighing].sort(compareByDate) }
+            : a
+        );
+      }
+      // A transferência/venda pass moved the animal: take the server's word for
+      // its lot and herd membership.
+      const patch = result.animal;
+      if (patch) {
+        animals = animals.map((a) =>
+          a.earTag === patch.earTag
+            ? { ...a, active: patch.active, lotId: patch.lotId }
             : a
         );
       }
@@ -332,11 +393,27 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       entry: ManejoSessionAnimal;
       removedTreatmentIds: string[];
       removedWeighing?: Weighing;
+      animal?: PassAnimalPatch;
+      removedEarTag?: string;
     };
     set((s) => {
       const removedIds = new Set(result.removedTreatmentIds);
       const treatments =
         removedIds.size > 0 ? s.treatments.filter((t) => !removedIds.has(t.id)) : s.treatments;
+
+      // Undoing an entry pass unregisters the animal it created.
+      if (result.removedEarTag !== undefined) {
+        const gone = result.removedEarTag;
+        return {
+          treatments,
+          animals: s.animals.filter((a) => a.earTag !== gone),
+          manejoSessions: s.manejoSessions.map((session) =>
+            session.id === sessionId
+              ? { ...session, animals: session.animals.filter((a) => a.earTag !== gone) }
+              : session
+          ),
+        };
+      }
 
       let animals = s.animals;
       const removed = result.removedWeighing;
@@ -354,6 +431,16 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
           if (index === -1) return a;
           return { ...a, weighings: a.weighings.filter((_, i) => i !== index) };
         });
+      }
+
+      // The undo put the animal back in its lot / in the active herd.
+      const patch = result.animal;
+      if (patch) {
+        animals = animals.map((a) =>
+          a.earTag === patch.earTag
+            ? { ...a, active: patch.active, lotId: patch.lotId }
+            : a
+        );
       }
 
       return {
@@ -387,24 +474,22 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     }));
   },
 
-  recordMovement: async (m) => {
-    const { data, error } = await api.movements.post(m);
-    if (error) apiFail("registrar a movimentação", error.status);
-    const { movement, animals: patches } = data as {
-      movement: Movement;
-      animals: { earTag: string; active: boolean; lotId: string }[];
-    };
-    const patchByEarTag = new Map(patches.map((p) => [p.earTag, p]));
+  registerEntryAnimal: async (sessionId, animal) => {
+    const { data, error } = await api.manejo({ id: sessionId }).animals.post(animal);
+    if (error) {
+      if (error.status === CONFLICT) return false; // ear tag already in use
+      apiFail("registrar o animal na entrada", error.status);
+    }
+    const result = data as { entry: ManejoSessionAnimal; animal: Animal };
     set((s) => ({
-      animals:
-        patchByEarTag.size === 0
-          ? s.animals
-          : s.animals.map((a) => {
-              const patch = patchByEarTag.get(a.earTag);
-              return patch ? { ...a, active: patch.active, lotId: patch.lotId } : a;
-            }),
-      movements: [...s.movements, movement],
+      animals: [...s.animals, result.animal],
+      manejoSessions: s.manejoSessions.map((session) =>
+        session.id === sessionId
+          ? { ...session, animals: [...session.animals, result.entry] }
+          : session
+      ),
     }));
+    return true;
   },
 
   addBreed: async (name) => {
@@ -428,6 +513,19 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     if (error) apiFail("criar o lote", error.status);
     const lot = data as Lot;
     set((s) => ({ lots: [...s.lots, lot] }));
+    return lot;
+  },
+
+  updateLot: async (id, patch) => {
+    const { data, error } = await api.lots({ id }).patch(patch);
+    if (error) apiFail("salvar o lote", error.status);
+    /*
+     * Replace the whole lot instead of spreading the patch over it: `boundary`
+     * is optional, so a merge could never erase an outline — clearing it would
+     * succeed on the server and change nothing here.
+     */
+    const lot = data as Lot;
+    set((s) => ({ lots: s.lots.map((l) => (l.id === id ? lot : l)) }));
   },
 
   removeLot: async (id) => {
@@ -559,12 +657,25 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     }));
   },
 
-  deactivateAnimal: async (earTag, reason) => {
-    const { error } = await api.animals({ earTag }).deactivate.post({ reason });
+  deactivateAnimal: async (earTag, input) => {
+    const notes = input.notes?.trim();
+    const { error } = await api.animals({ earTag }).deactivate.post({
+      reason: input.reason,
+      date: input.date,
+      notes: notes ? notes : undefined,
+    });
     if (error) apiFail("dar baixa no animal", error.status);
     set((s) => ({
       animals: s.animals.map((a) =>
-        a.earTag === earTag ? { ...a, active: false, inactiveReason: reason } : a
+        a.earTag === earTag
+          ? {
+              ...a,
+              active: false,
+              inactiveReason: input.reason,
+              inactiveDate: input.date,
+              inactiveNotes: notes ? notes : undefined,
+            }
+          : a
       ),
     }));
   },

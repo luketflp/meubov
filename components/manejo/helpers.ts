@@ -3,18 +3,31 @@
  * atividades), history sessions (one row per batch/day) and form validation.
  * Stateless functions; business rules live in lib/domain.
  */
-import type { Animal, ManejoSession, Treatment, TreatmentType } from "@/lib/types";
+import type {
+  Animal,
+  ManejoKind,
+  ManejoSession,
+  Treatment,
+  TreatmentType,
+} from "@/lib/types";
 import { daysBetween } from "@/lib/domain/dates";
 import { TREATMENT_TYPE_LABEL } from "@/lib/domain/labels";
 import { deriveTreatmentStatus, isFootAndMouth } from "@/lib/domain/status";
 
-/** Action selectable in the register dialog: a health treatment or a weighing. */
-export type ManejoAction = TreatmentType | "weighing";
+/**
+ * Action selectable in the register dialog: a health treatment, a weighing, or
+ * one of the three that move the herd — the farm's compras, vendas e
+ * transferências, which used to live on a screen of their own.
+ */
+export type ManejoAction = TreatmentType | "weighing" | "transfer" | "sale" | "entry";
 
 /** pt-BR label of each manejo action (treatment labels are canonical). */
 export const MANEJO_ACTION_LABEL: Record<ManejoAction, string> = {
   ...TREATMENT_TYPE_LABEL,
   weighing: "Pesagem",
+  transfer: "Transferência",
+  sale: "Venda",
+  entry: "Entrada (compra)",
 };
 
 /** Ordered list of the actions offered by the register dialog. */
@@ -24,7 +37,28 @@ export const MANEJO_ACTION_LIST: readonly ManejoAction[] = [
   "medication",
   "exam",
   "weighing",
+  "transfer",
+  "sale",
+  "entry",
 ];
+
+/** The actions that move the herd instead of only recording its history. */
+const MOVEMENT_ACTIONS = new Set<ManejoAction>(["transfer", "sale", "entry"]);
+
+/** True when the action moves animals between lots, or in/out of the farm. */
+export function isMovementAction(action: ManejoAction): boolean {
+  return MOVEMENT_ACTIONS.has(action);
+}
+
+/** True when the action applies a sanitary treatment (the plan fields show). */
+export function isSanitaryAction(action: ManejoAction): boolean {
+  return action !== "weighing" && !MOVEMENT_ACTIONS.has(action);
+}
+
+/** Session kind stored for an action: every treatment type is one `health`. */
+export function actionKind(action: ManejoAction): ManejoKind {
+  return isSanitaryAction(action) ? "health" : (action as ManejoKind);
+}
 
 /** Pending treatments grouped into one actionable activity (same day/type/name). */
 export interface ManejoActivity {
@@ -81,23 +115,32 @@ export function activityDueLabel(activity: ManejoActivity, todayIso: string): st
   return `em ${ahead === 1 ? "1 dia" : `${ahead} dias`}`;
 }
 
-/** One history row: a batch of done treatments or the weighings of one day. */
+/** One history row: a batch of done treatments, a day's weighings, or a trade. */
 export interface ManejoHistoryRow {
   key: string;
   date: string;
   kind: ManejoAction;
   name: string;
   headCount: number;
+  /** Person in charge, or the counterparty of a compra/venda. */
   responsible?: string;
-  /** Sum of the per-animal costs, or null when no treatment has a cost. */
-  totalCostBrl: number | null;
+  /**
+   * Money of the row: the sum of the per-animal sanitary costs, or the traded
+   * value of a compra/venda. Null when the row has no value at all.
+   */
+  amountBrl: number | null;
 }
 
 /**
  * History of executed manejos, one row per batch: done treatments grouped by
- * (date, type, name) plus the weighings grouped by date, sorted by date desc.
+ * (date, type, name), the weighings grouped by date, and one row per session
+ * that moved the herd (transferência, venda, entrada), sorted by date desc.
  */
-export function manejoHistory(treatments: Treatment[], animals: Animal[]): ManejoHistoryRow[] {
+export function manejoHistory(
+  treatments: Treatment[],
+  animals: Animal[],
+  sessions: ManejoSession[] = []
+): ManejoHistoryRow[] {
   const map = new Map<string, ManejoHistoryRow>();
 
   for (const t of treatments) {
@@ -107,7 +150,7 @@ export function manejoHistory(treatments: Treatment[], animals: Animal[]): Manej
     if (existing) {
       existing.headCount += 1;
       if (t.costBrl !== undefined) {
-        existing.totalCostBrl = (existing.totalCostBrl ?? 0) + t.costBrl;
+        existing.amountBrl = (existing.amountBrl ?? 0) + t.costBrl;
       }
     } else {
       map.set(key, {
@@ -117,7 +160,7 @@ export function manejoHistory(treatments: Treatment[], animals: Animal[]): Manej
         name: t.name,
         headCount: 1,
         responsible: t.responsible,
-        totalCostBrl: t.costBrl ?? null,
+        amountBrl: t.costBrl ?? null,
       });
     }
   }
@@ -135,10 +178,31 @@ export function manejoHistory(treatments: Treatment[], animals: Animal[]): Manej
           kind: "weighing",
           name: "Pesagem",
           headCount: 1,
-          totalCostBrl: null,
+          amountBrl: null,
         });
       }
     }
+  }
+
+  for (const session of sessions) {
+    if (!isMovementAction(session.kind as ManejoAction)) continue;
+    const handled = session.animals.filter((a) => a.outcome === "done");
+    if (handled.length === 0) continue;
+    let value = session.totalAmountBrl ?? null;
+    if (value === null) {
+      for (const animal of handled) {
+        if (animal.amountBrl !== undefined) value = (value ?? 0) + animal.amountBrl;
+      }
+    }
+    map.set(session.id, {
+      key: session.id,
+      date: session.date,
+      kind: session.kind as ManejoAction,
+      name: session.name,
+      headCount: handled.length,
+      responsible: session.counterparty,
+      amountBrl: value,
+    });
   }
 
   return [...map.values()].sort((a, b) =>
@@ -177,8 +241,12 @@ export function sessionProgress(session: ManejoSession): ManejoProgress {
 
 /** Action kind of a session, for pills and filters. */
 export function sessionKind(session: ManejoSession): ManejoAction {
-  return session.treatment ? session.treatment.type : "weighing";
+  if (session.kind === "health") return session.treatment?.type ?? "weighing";
+  return session.kind;
 }
+
+/** How a venda is priced: by the weight at the chute, or as one closed deal. */
+export type SalePricing = "perArroba" | "total";
 
 /** Raw state of the start-manejo form (numeric fields as input text). */
 export interface ManejoFields {
@@ -194,27 +262,80 @@ export interface ManejoFields {
   /** Also weigh each animal during the same chute pass (sanitary actions). */
   weighAlso: boolean;
   earTags: string[];
+  /** Lot every animal lands in — transferência and entrada. */
+  destinationLotId: string;
+  /** Buyer (venda) or seller (entrada). */
+  counterparty: string;
+  /** Venda: priced per arroba, or a closed price for the whole batch. */
+  pricing: SalePricing;
+  /** R$/@ paid for each arroba (venda priced by weight). */
+  pricePerArroba: string;
+  /** Closed value of the batch (venda) or the purchase total (entrada). */
+  totalAmountBrl: string;
 }
 
 export type ManejoErrors = Partial<
-  Record<"date" | "name" | "withdrawalDays" | "costBrl" | "nextDate" | "earTags", string>
+  Record<
+    | "date"
+    | "name"
+    | "withdrawalDays"
+    | "costBrl"
+    | "nextDate"
+    | "earTags"
+    | "destinationLotId"
+    | "pricePerArroba"
+    | "totalAmountBrl",
+    string
+  >
 >;
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-/** True when the session captures one weight per animal at the chute. */
-export function sessionWeighs(fields: Pick<ManejoFields, "action" | "weighAlso">): boolean {
-  return fields.action === "weighing" || fields.weighAlso;
+/**
+ * True when the session captures one weight per animal at the chute. A venda
+ * priced per arroba always weighs: the scale is what sets the price.
+ */
+export function sessionWeighs(
+  fields: Pick<ManejoFields, "action" | "weighAlso" | "pricing">
+): boolean {
+  if (fields.action === "weighing") return true;
+  if (fields.action === "sale") return fields.pricing === "perArroba" || fields.weighAlso;
+  return fields.weighAlso;
 }
+
+/** Positive number typed in a form field ("310", "1.234,50" is not accepted). */
+const positiveNumber = (raw: string): number | null => {
+  const value = Number(raw.replace(",", "."));
+  return raw.trim() === "" || !Number.isFinite(value) || value <= 0 ? null : value;
+};
 
 /** Pure form validation; returns pt-BR messages per field. */
 export function validateManejo(fields: ManejoFields): ManejoErrors {
   const errors: ManejoErrors = {};
-  const sanitary = fields.action !== "weighing";
+  const sanitary = isSanitaryAction(fields.action);
 
   if (!ISO_DATE_PATTERN.test(fields.date)) {
     errors.date = "Informe a data do manejo.";
   }
+
+  if (fields.action === "transfer" || fields.action === "entry") {
+    if (fields.destinationLotId === "") {
+      errors.destinationLotId = "Selecione o lote de destino.";
+    }
+  }
+  if (fields.action === "sale") {
+    if (fields.pricing === "perArroba") {
+      if (positiveNumber(fields.pricePerArroba) === null) {
+        errors.pricePerArroba = "Informe o preço por arroba (R$/@).";
+      }
+    } else if (positiveNumber(fields.totalAmountBrl) === null) {
+      errors.totalAmountBrl = "Informe o valor total da venda.";
+    }
+  }
+  if (fields.action === "entry" && positiveNumber(fields.totalAmountBrl) === null) {
+    errors.totalAmountBrl = "Informe o valor total da compra.";
+  }
+
   if (sanitary) {
     if (fields.name.trim() === "") {
       errors.name = "Informe o nome do produto ou procedimento.";
@@ -237,7 +358,8 @@ export function validateManejo(fields: ManejoFields): ManejoErrors {
       }
     }
   }
-  if (fields.earTags.length === 0) {
+  // An entrada opens empty: its animals are registered as the truck unloads.
+  if (fields.action !== "entry" && fields.earTags.length === 0) {
     errors.earTags = "Selecione ao menos um animal.";
   }
   return errors;

@@ -9,6 +9,7 @@ import { formatWeightWithArroba } from "@/lib/domain/weights";
 import {
   DIAGNOSIS_RESULT_LABEL,
   BREEDING_TYPE_LABEL,
+  INACTIVE_REASON_LABEL,
 } from "@/lib/domain/labels";
 import { deriveTreatmentStatus } from "@/lib/domain/status";
 import { SectionCard } from "@/components/ui/section-card";
@@ -107,6 +108,21 @@ function buildEvents(animal: Animal, treatments: Treatment[]): TimelineEvent[] {
         dot: <ColorDot className="bg-fmd" />,
       });
     }
+  }
+
+  // The animal's last event: when it left the herd and why. Legacy baixas carry
+  // no date, so there is no point on the line to place them at.
+  if (!animal.active && animal.inactiveDate) {
+    const label = animal.inactiveReason
+      ? INACTIVE_REASON_LABEL[animal.inactiveReason]
+      : "Saída do rebanho";
+    events.push({
+      key: "baixa",
+      date: animal.inactiveDate,
+      label: "Baixa",
+      description: animal.inactiveNotes ? `${label} — ${animal.inactiveNotes}` : label,
+      dot: <ColorDot className="bg-overdue" />,
+    });
   }
 
   return events.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));

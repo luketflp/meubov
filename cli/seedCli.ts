@@ -206,6 +206,48 @@ async function seed(email: string, force: boolean): Promise<void> {
         );
       }
 
+      // Compras, vendas e transferências of the demo: closed manejo sessions
+      // whose animals all passed the chute (the ledger derives from them).
+      for (const session of data.manejoSessions) {
+        const [sessionRow] = await tx
+          .insert(schema.manejoSessions)
+          .values({
+            id: randomUUID(),
+            farmId,
+            name: session.name,
+            date: session.date,
+            status: session.status,
+            kind: session.kind,
+            weighing: session.weighing,
+            notes: session.notes,
+            destinationLotId:
+              session.destinationLotId === undefined
+                ? undefined
+                : lotIdMap.get(session.destinationLotId)!,
+            counterparty: session.counterparty,
+            pricePerArroba: session.pricePerArroba,
+            totalAmountBrl: session.totalAmountBrl,
+          })
+          .returning({ id: schema.manejoSessions.id });
+        if (session.animals.length === 0) continue;
+        await tx.insert(schema.manejoSessionAnimals).values(
+          session.animals.map((entry, position) => ({
+            sessionId: sessionRow.id,
+            animalId: animalIdMap.get(entry.earTag)!,
+            position,
+            outcome: entry.outcome,
+            weightKg: entry.weightKg,
+            notes: entry.notes,
+            amountBrl: entry.amountBrl,
+            previousLotId:
+              entry.previousLotId === undefined
+                ? undefined
+                : lotIdMap.get(entry.previousLotId)!,
+            createdAnimal: entry.createdAnimal ?? false,
+          }))
+        );
+      }
+
       if (data.expenses.length > 0) {
         await tx.insert(schema.expenses).values(
           data.expenses.map((e) => ({
@@ -237,7 +279,8 @@ async function seed(email: string, force: boolean): Promise<void> {
         `Seeded farm "${data.farm.name}" (id ${farmId}) for ${email}: ` +
           `${data.animals.length} animals, ${weighingRows.length} weighings, ` +
           `${data.treatments.length} treatments, ${data.lots.length} lots, ` +
-          `${data.movements.length} movements, ${data.protocols.length} protocols, ` +
+          `${data.manejoSessions.length} manejo sessions, ` +
+          `${data.movements.length} legacy movements, ${data.protocols.length} protocols, ` +
           `${data.expenses.length} expenses.`
       );
     });
