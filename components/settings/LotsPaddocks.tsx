@@ -68,7 +68,7 @@ export function LotsPaddocks() {
   }
 
   return (
-    <SectionCard title="Lotes e pastos">
+    <SectionCard title="Lotes">
       <Table>
         <TableHeader>
           <TableRow>

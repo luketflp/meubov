@@ -34,7 +34,8 @@ Ferramenta de **gestão de rebanho bovino de corte** para o produtor ou gerente 
 - **Rebanho** — lista com busca, filtros (categoria, lote, status) e ordenação por qualquer coluna.
 - **Ficha do animal** — identificação, evolução de peso com registro de pesagem, linha do tempo, histórico sanitário e ficha reprodutiva das fêmeas (registro de cobertura, diagnóstico de gestação e parto — o bezerro entra no rebanho junto).
 - **Calendário Sanitário** — visão mensal de tratamentos agendados e atrasados, com destaque para a campanha de aftosa.
-- **Movimentação / Lotes** — cards por pasto (taxa de lotação UA/ha), histórico de entradas e saídas e registro de movimentações.
+- **Manejo** — sessões de curral: vacina, vermifugação, medicação, exame, pesagem e também **transferência, venda e entrada (compra)**. Os animais passam um a um no brete, a sessão fica salva e pode ser retomada, e cada passagem pode ser desfeita.
+- **Lotes** — cards por lote com ocupação e taxa de lotação (UA/ha) e cadastro de novos lotes.
 - **Financeiro** — indicadores da pecuária de corte (preço da @, valor do rebanho, margens, relação de troca) com gráficos. Receitas vêm das vendas com valor, custos das despesas lançadas + tratamentos com custo; a cotação da arroba é real (Scot Consultoria + histórico IPEADATA).
 - **Configurações** — dados da fazenda, categorias, raças, lotes e protocolos sanitários (que geram a agenda).
 
@@ -140,7 +141,7 @@ app/                     # rotas (App Router) — cada tela é uma page client
   (app)/                 # grupo de rotas AUTENTICADAS (não altera as URLs)
     layout.tsx           # envolve as telas no AppShell (sidebar + tab bar)
     page.tsx             # redireciona / -> /dashboard
-    dashboard/ herd/ herd/[earTag]/ calendar/ movements/ finance/ settings/
+    dashboard/ herd/ herd/[earTag]/ calendar/ manejo/ manejo/[id]/ lots/ map/ finance/ settings/
   (auth)/                # grupo de rotas de autenticação (sem AppShell)
     layout.tsx           # área centralizada com a marca MeuBov
     login/ signup/       # telas de entrar e criar conta
@@ -151,7 +152,7 @@ components/
   layout/                # AppShell, Sidebar, MobileTabBar, PageHeader
   ui/                    # shadcn + primitivos do app (StatusPill, KpiCard, SectionCard...)
   charts/                # LineChart, BarChart, DonutChart (SVG puro)
-  dashboard/ herd/ animal/ calendar/ movements/ finance/ settings/
+  dashboard/ herd/ animal/ calendar/ manejo/ lots/ map/ finance/ settings/
                          # componentes específicos de cada tela
 
 lib/
@@ -186,14 +187,16 @@ lib/domain  →  lib/repository  →  lib/store (zustand)  →  telas (app + com
 
 A camada de dados real vive em **[Elysia](https://elysiajs.com)**, montado no route handler `app/api/herd/[[...slugs]]/route.ts` (Next 16 entrega `Request` padrão Web, que o `herdApi.handle()` consome direto).
 
-- **App e rotas:** `lib/api/app.ts` — leitura (`GET /api/herd`) e todas as mutações (animais, pesagens, tratamentos, reprodução, manejo, movimentações, raças, lotes, fazenda, protocolos), validadas com TypeBox (`lib/api/models.ts`).
+- **App e rotas:** `lib/api/app.ts` — leitura (`GET /api/herd`) e todas as mutações (animais, pesagens, tratamentos, reprodução, manejo — inclusive compras, vendas e transferências —, raças, lotes, fazenda, protocolos), validadas com TypeBox (`lib/api/models.ts`).
 - **Contexto de fazenda:** `lib/api/plugins/farm.ts` resolve sessão (Better Auth) + fazenda ativa; usuário sem fazenda ganha uma automaticamente (`lib/api/services/onboarding.ts`).
 - **Serviços:** `lib/api/services/*` — consultas/transações Drizzle escopadas por `farm_id`; o manejo roda cada passagem em transação com lock (`FOR UPDATE`), impedindo passagem dupla no brete.
 - **Cliente:** `lib/api/client.ts` usa **Eden Treaty** (`treaty<HerdApi>`), com tipos ponta a ponta derivados do próprio app Elysia (import apenas de tipo). O store (`useHerdStore`) chama a API e mescla a resposta no estado; `ApiHerdRepository` faz a carga inicial.
 
 **Cotação de mercado** — real, sem mock. `GET /api/market/quote` busca em paralelo o preço atual na **Scot Consultoria** (boi gordo à vista C. Grande-MS, cache 6h) e o histórico mensal no **IPEADATA** (série Seab/Deral-PR, cache 24h), mesclados por `mergeQuotePayload` (`lib/data/market.ts`). Se ambas as fontes falharem, o cliente mostra "—" em todos os valores dependentes da arroba — nunca um número falso.
 
-**Financeiro real** — receita = movimentações de **venda** com `amountBrl` (obrigatório para compra/venda desde a v0.2); custo = **despesas** (`expenses`, 7 categorias, CRUD na tela Financeiro) + tratamentos concluídos com `costBrl`. As derivações (série mensal, composição de custos, indicadores) são funções puras em `lib/domain/economics.ts`; indicadores sem dados suficientes mostram "—".
+**Financeiro real** — receita = movimentações de **venda** com `amountBrl`; custo = **despesas** (`expenses`, 7 categorias, CRUD na tela Financeiro) + tratamentos concluídos com `costBrl`. As derivações (série mensal, composição de custos, indicadores) são funções puras em `lib/domain/economics.ts`; indicadores sem dados suficientes mostram "—".
+
+**Movimentações derivadas** — compra, venda e transferência não são mais digitadas: são **sessões de manejo** (`kind` = `entry` / `sale` / `transfer`) em que cada animal passa no brete. O razão de entradas e saídas (`Movement[]`) é uma **projeção** dessas sessões (`lib/domain/movements.ts`), então quantidade e categoria sempre vêm dos animais reais — nunca de um campo de formulário. A venda pode ser precificada por **R$/@** (valor de cada animal = peso na balança em arrobas × preço) ou por um **valor fechado** do lote. Linhas antigas da tela "Registrar movimentação" continuam no razão como histórico legado.
 
 ## Testes
 

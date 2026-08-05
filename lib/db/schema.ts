@@ -94,6 +94,19 @@ export const manejoSessionStatusEnum = pgEnum("manejo_session_status", [
   "closed",
 ]);
 
+/**
+ * What a manejo session does to each animal at the chute. Health and weighing
+ * only record history; transfer, sale and entry also move the herd (lot, active
+ * flag, registration) and feed the financial ledger.
+ */
+export const manejoKindEnum = pgEnum("manejo_kind", [
+  "health",
+  "weighing",
+  "transfer",
+  "sale",
+  "entry",
+]);
+
 /** Outcome of one animal inside a manejo session. */
 export const manejoOutcomeEnum = pgEnum("manejo_outcome", [
   "pending",
@@ -131,7 +144,7 @@ export const farm = pgTable("farm", {
   municipality: text("municipality").notNull(),
   stateRegistration: text("state_registration").notNull(),
   manager: text("manager").notNull(),
-  /** Farm HQ (sede) coordinates — map center before any pasto is drawn. */
+  /** Farm HQ (sede) coordinates — map center before any lot is drawn. */
   headquartersLat: numeric("headquarters_lat", { mode: "number" }),
   headquartersLng: numeric("headquarters_lng", { mode: "number" }),
 });
@@ -166,7 +179,7 @@ export const lots = pgTable("lots", {
   hectares: numeric("hectares", { mode: "number" }).notNull(),
   /**
    * Pasture outline on the map: open ring of [lng, lat] pairs (GeoJSON axis
-   * order, first point not repeated). Absent while the pasto was never drawn.
+   * order, first point not repeated). Absent while the lot was never drawn.
    */
   boundary: jsonb("boundary").$type<[number, number][]>(),
 });
@@ -225,6 +238,10 @@ export const animals = pgTable(
     active: boolean("active").notNull().default(true),
     /** Why the animal left the herd; null while active. */
     inactiveReason: inactiveReasonEnum("inactive_reason"),
+    /** The day it left (morte, perda, venda); null while active. */
+    inactiveDate: date("inactive_date"),
+    /** What happened, in the farmer's words: "encontrada morta no pasto". */
+    inactiveNotes: text("inactive_notes"),
   },
   (t) => [
     uniqueIndex("animals_farm_id_ear_tag_unique").on(t.farmId, t.earTag),
@@ -299,7 +316,14 @@ export const calvings = pgTable("calvings", {
   calfEarTag: text("calf_ear_tag").notNull(),
 });
 
-/** Animal movement (purchase, sale or transfer). */
+/**
+ * Animal movement (purchase, sale or transfer) — LEGACY, read-only.
+ *
+ * New movements are manejo sessions of kind transfer/sale/entry, and the
+ * ledger derives from them (lib/domain/movements.ts). These rows predate that
+ * model: their head count and category were typed by hand and no animal is
+ * linked, hence both columns are nullable for anything written since.
+ */
 export const movements = pgTable("movements", {
   id: text("id").primaryKey(),
   farmId: integer("farm_id")
@@ -307,8 +331,8 @@ export const movements = pgTable("movements", {
     .references(() => farm.id, { onDelete: "cascade" }),
   type: movementTypeEnum("type").notNull(),
   date: date("date").notNull(),
-  quantity: integer("quantity").notNull(),
-  category: categoryEnum("category").notNull(),
+  quantity: integer("quantity"),
+  category: categoryEnum("category"),
   origin: text("origin").notNull(),
   destination: text("destination").notNull(),
   /** Total value in BRL; present for purchase/sale, null for transfer. */
@@ -360,8 +384,17 @@ export const manejoSessions = pgTable(
     name: text("name").notNull(),
     date: date("date").notNull(),
     status: manejoSessionStatusEnum("status").notNull().default("open"),
+    kind: manejoKindEnum("kind").notNull().default("health"),
     weighing: boolean("weighing").notNull(),
     notes: text("notes"),
+    /** Lot every animal lands in — transfer and entry sessions. */
+    destinationLotId: text("destination_lot_id").references(() => lots.id),
+    /** Buyer (sale) or seller (entry), free text: they are outside the farm. */
+    counterparty: text("counterparty"),
+    /** Sale priced per arroba: R$/@ applied to each animal's chute weight. */
+    pricePerArroba: numeric("price_per_arroba", { mode: "number" }),
+    /** Closed price in BRL: a sale sold as one lot, or an entry's purchase total. */
+    totalAmountBrl: numeric("total_amount_brl", { mode: "number" }),
     planType: treatmentTypeEnum("plan_type"),
     planName: text("plan_name"),
     planWithdrawalDays: integer("plan_withdrawal_days"),
@@ -393,6 +426,12 @@ export const manejoSessionAnimals = pgTable(
     outcome: manejoOutcomeEnum("outcome").notNull().default("pending"),
     weightKg: numeric("weight_kg", { mode: "number" }),
     notes: text("notes"),
+    /** What this animal was worth in a priced sale (R$/@ × its chute weight). */
+    amountBrl: numeric("amount_brl", { mode: "number" }),
+    /** Lot the animal came from, so undoing a transfer pass can restore it. */
+    previousLotId: text("previous_lot_id").references(() => lots.id),
+    /** True when an entry session registered this animal — undo deletes it. */
+    createdAnimal: boolean("created_animal").notNull().default(false),
     treatmentId: text("treatment_id").references(() => treatments.id, {
       onDelete: "set null",
     }),

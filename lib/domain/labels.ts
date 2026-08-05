@@ -7,6 +7,7 @@ import type {
   Category,
   DiagnosisResult,
   ExpenseCategory,
+  InactiveReason,
   Sex,
   BreedingType,
   MovementType,
@@ -70,6 +71,14 @@ export const DIAGNOSIS_RESULT_LABEL: Record<DiagnosisResult, string> = {
   pregnant: "Prenhe",
   open: "Vazia",
   pending: "Pendente",
+};
+
+/** Why an animal left the herd, e.g.: "Morte". Shown on the animal's ficha. */
+export const INACTIVE_REASON_LABEL: Record<InactiveReason, string> = {
+  sale: "Vendido",
+  death: "Morte",
+  loss: "Perda / extravio",
+  other: "Outro",
 };
 
 /** Label of each animal movement type, e.g.: "Transferência". */

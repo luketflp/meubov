@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildPassEffects, sessionName, WEIGHING_SESSION_NAME } from "@/lib/domain/manejo";
+import { KG_PER_ARROBA } from "@/lib/domain/weights";
 import type { ManejoTreatmentPlan } from "@/lib/types";
 
 const plan: ManejoTreatmentPlan = {
@@ -12,7 +13,12 @@ const plan: ManejoTreatmentPlan = {
   nextDate: "2026-12-01",
 };
 
-const session = { date: "2026-08-02", weighing: true, treatment: plan };
+const session = {
+  date: "2026-08-02",
+  kind: "health" as const,
+  weighing: true,
+  treatment: plan,
+};
 
 describe("sessionName", () => {
   it("uses the plan name when there is a sanitary plan", () => {
@@ -21,6 +27,12 @@ describe("sessionName", () => {
 
   it("falls back to the weighing-only default without a plan", () => {
     expect(sessionName(undefined)).toBe(WEIGHING_SESSION_NAME);
+  });
+
+  it("names the sessions that move the herd after their kind", () => {
+    expect(sessionName(undefined, "transfer")).toBe("Transferência");
+    expect(sessionName(undefined, "sale")).toBe("Venda");
+    expect(sessionName(undefined, "entry")).toBe("Entrada");
   });
 });
 
@@ -57,7 +69,7 @@ describe("buildPassEffects", () => {
 
   it("creates no treatment for a weighing-only session", () => {
     const effects = buildPassEffects(
-      { date: "2026-08-02", weighing: true },
+      { date: "2026-08-02", kind: "weighing", weighing: true },
       { weightKg: 300 }
     );
     expect(effects.treatment).toBeUndefined();
@@ -73,5 +85,44 @@ describe("buildPassEffects", () => {
   it("creates no weighing when no weight was captured", () => {
     const effects = buildPassEffects(session, {});
     expect(effects.weighing).toBeUndefined();
+  });
+
+  it("lands the animal in the destination lot on a transfer pass", () => {
+    const effects = buildPassEffects({
+      date: "2026-08-02",
+      kind: "transfer",
+      weighing: false,
+      destinationLotId: "lot-2",
+    });
+    expect(effects.lotId).toBe("lot-2");
+    expect(effects.sold).toBeUndefined();
+  });
+
+  it("prices and sells the animal with the weight read at the chute", () => {
+    const effects = buildPassEffects(
+      { date: "2026-08-02", kind: "sale", weighing: true, pricePerArroba: 310 },
+      { weightKg: KG_PER_ARROBA * 17 }
+    );
+    expect(effects.sold).toBe(true);
+    expect(effects.amountBrl).toBeCloseTo(17 * 310, 6);
+    expect(effects.weighing).toEqual({
+      date: "2026-08-02",
+      weightKg: KG_PER_ARROBA * 17,
+    });
+  });
+
+  it("sells without a per-animal value when the batch has a closed price", () => {
+    const effects = buildPassEffects(
+      { date: "2026-08-02", kind: "sale", weighing: false },
+      { weightKg: 500 }
+    );
+    expect(effects.sold).toBe(true);
+    expect(effects.amountBrl).toBeUndefined();
+  });
+
+  it("does not move the herd on a health pass", () => {
+    const effects = buildPassEffects(session, { weightKg: 400 });
+    expect(effects.lotId).toBeUndefined();
+    expect(effects.sold).toBeUndefined();
   });
 });

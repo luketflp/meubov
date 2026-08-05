@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Farm map route: satellite view with the pastos as colored polygons.
+ * Farm map route: satellite view with the lots as colored polygons.
  * The map component is client-only (Leaflet needs `window`), hence the
  * dynamic import with ssr disabled.
  */
@@ -25,7 +25,7 @@ export default function MapPage() {
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 md:px-8">
       <PageHeader
         title="Mapa da fazenda"
-        subtitle="Visão de satélite dos pastos, coloridos pela taxa de lotação"
+        subtitle="Visão de satélite dos lotes, coloridos pela taxa de lotação"
       />
       <FarmMap />
     </div>

@@ -9,14 +9,17 @@
  */
 import { Elysia } from "elysia";
 import { farmPlugin } from "@/lib/api/plugins/farm";
+import { todayISO } from "@/lib/domain/dates";
 import { loadHerdData } from "@/lib/api/services/herd";
 import {
   AnimalPatchBody,
   BreedBody,
   CompleteTreatmentsBody,
   DeactivateAnimalBody,
+  EntryAnimalBody,
   FarmDataBody,
   ImportAnimalsBody,
+  LotPatchBody,
   ManejoPassBody,
   ManejoSkipBody,
   NewAnimalBody,
@@ -27,20 +30,39 @@ import {
   NewExpenseBody,
   NewLotBody,
   NewManejoSessionBody,
-  NewMovementBody,
   NewProtocolBody,
   WeighingBody,
 } from "@/lib/api/models";
 import * as settings from "@/lib/api/services/settings";
 import * as animalsService from "@/lib/api/services/animals";
-import * as movementsService from "@/lib/api/services/movements";
 import * as manejoService from "@/lib/api/services/manejo";
 import * as expensesService from "@/lib/api/services/expenses";
 import * as categoriesService from "@/lib/api/services/categories";
 import * as reproductionService from "@/lib/api/services/reproduction";
 
+/** Postgres `foreign_key_violation`. */
+const FOREIGN_KEY_VIOLATION = "23503";
+
+function isForeignKeyViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === FOREIGN_KEY_VIOLATION
+  );
+}
+
 export const herdApi = new Elysia({ prefix: "/api/herd" })
   .use(farmPlugin)
+  /*
+   * A delete can still fail at the database after its own guard passed: the
+   * lot guard only looks at ACTIVE animals, while inactive animals and manejo
+   * history reference the lot with ON DELETE NO ACTION. Answering 409 keeps
+   * the client's "still in use" branch working instead of an opaque 500.
+   */
+  .onError(({ error, status }) => {
+    if (isForeignKeyViolation(error)) return status(409, { error: "in_use" });
+  })
   .get("/health", ({ farmId }) => ({ ok: true, farmId }), { farm: true })
   .get("/", ({ farmId }) => loadHerdData(farmId), { farm: true })
 
@@ -64,8 +86,23 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
   )
   .post(
     "/lots",
-    ({ farmId, body }) => settings.addLot(farmId, body),
+    async ({ farmId, body, status }) => {
+      const lot = await settings.addLot(farmId, body);
+      if (lot === "invalid_boundary") return status(422, { error: lot });
+      return lot;
+    },
     { farm: true, body: NewLotBody }
+  )
+  .patch(
+    "/lots/:id",
+    async ({ farmId, params, body, status }) => {
+      const result = await settings.updateLot(farmId, params.id, body);
+      if (result === "empty_patch") return status(422, { error: result });
+      if (result === "invalid_boundary") return status(422, { error: result });
+      if (result === null) return status(404, { error: "not_found" });
+      return result;
+    },
+    { farm: true, body: LotPatchBody }
   )
   .delete(
     "/lots/:id",
@@ -124,13 +161,16 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
   .post(
     "/animals/:earTag/deactivate",
     async ({ farmId, params, body, status }) => {
-      const done = await animalsService.deactivateAnimal(
-        farmId,
-        params.earTag,
-        body.reason
-      );
+      // A baixa is history: it can be backdated, never postdated.
+      if (body.date > todayISO()) return status(422, { error: "future_date" });
+      const done = await animalsService.deactivateAnimal(farmId, params.earTag, body);
       if (!done) return status(404, { error: "animal_not_found" });
-      return { earTag: params.earTag, reason: body.reason };
+      return {
+        earTag: params.earTag,
+        reason: body.reason,
+        date: body.date,
+        notes: body.notes,
+      };
     },
     { farm: true, body: DeactivateAnimalBody }
   )
@@ -186,18 +226,6 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
     { farm: true, body: NewCalvingBody }
   )
 
-  /* ---- Movements --------------------------------------------------------- */
-  .post(
-    "/movements",
-    ({ farmId, body, status }) => {
-      if (body.type !== "transfer" && body.amountBrl === undefined) {
-        return status(422, { error: "amount_required" });
-      }
-      return movementsService.recordMovement(farmId, body);
-    },
-    { farm: true, body: NewMovementBody }
-  )
-
   /* ---- Custom herd categories -------------------------------------------- */
   .post(
     "/categories",
@@ -238,11 +266,33 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
   .post(
     "/manejo",
     async ({ farmId, body, status }) => {
+      // Only an entry (compra) starts with no animals: they are registered as
+      // they arrive. Transfers need somewhere to land.
+      if (body.earTags.length === 0 && body.kind !== "entry") {
+        return status(422, { error: "animals_required" });
+      }
+      if (
+        (body.kind === "transfer" || body.kind === "entry") &&
+        body.destinationLotId === undefined
+      ) {
+        return status(422, { error: "destination_required" });
+      }
       const session = await manejoService.startSession(farmId, body);
       if (session === null) return status(404, { error: "animal_not_found" });
       return session;
     },
     { farm: true, body: NewManejoSessionBody }
+  )
+  .post(
+    "/manejo/:id/animals",
+    async ({ farmId, params, body, status }) => {
+      const result = await manejoService.registerEntryAnimal(farmId, params.id, body);
+      if (result === null) return status(404, { error: "not_found" });
+      if (result === "duplicate") return status(409, { error: "duplicate_ear_tag" });
+      if ("conflict" in result) return status(409, { error: result.conflict });
+      return result;
+    },
+    { farm: true, body: EntryAnimalBody }
   )
   .post(
     "/manejo/:id/animals/:earTag/complete",

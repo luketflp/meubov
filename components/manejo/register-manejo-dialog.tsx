@@ -14,7 +14,7 @@ import { Play, Search } from "lucide-react";
 import { useHerdStore, type NewManejoSession } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
 import { activeAnimals } from "@/lib/store/selectors";
-import type { Animal, Category } from "@/lib/types";
+import type { Animal, Category, TreatmentType } from "@/lib/types";
 import { todayISO, formatAge } from "@/lib/domain/dates";
 import { CATEGORY_LABEL } from "@/lib/domain/labels";
 import { currentWeight } from "@/lib/domain/weights";
@@ -42,6 +42,9 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  actionKind,
+  isMovementAction,
+  isSanitaryAction,
   MANEJO_ACTION_LABEL,
   MANEJO_ACTION_LIST,
   sessionWeighs,
@@ -49,12 +52,19 @@ import {
   type ManejoAction,
   type ManejoErrors,
   type ManejoFields,
+  type SalePricing,
 } from "@/components/manejo/helpers";
 
 /** Sentinel of the "all" option in the lot/category filters. */
 const ALL = "all";
 
 const CATEGORY_LIST = Object.keys(CATEGORY_LABEL) as Category[];
+
+/** Number typed in a form field, or undefined when it is empty/invalid. */
+function typedNumber(raw: string): number | undefined {
+  const value = Number(raw.replace(",", "."));
+  return raw.trim() === "" || !Number.isFinite(value) || value <= 0 ? undefined : value;
+}
 
 function createInitialFields(): ManejoFields {
   return {
@@ -69,6 +79,11 @@ function createInitialFields(): ManejoFields {
     notes: "",
     weighAlso: false,
     earTags: [],
+    destinationLotId: "",
+    counterparty: "",
+    pricing: "perArroba",
+    pricePerArroba: "",
+    totalAmountBrl: "",
   };
 }
 
@@ -124,7 +139,10 @@ export function RegisterManejoDialog() {
   const [category, setCategory] = useState<Category | typeof ALL>(ALL);
   const [search, setSearch] = useState("");
 
-  const sanitary = fields.action !== "weighing";
+  const sanitary = isSanitaryAction(fields.action);
+  const moves = isMovementAction(fields.action);
+  // An entrada registers its animals at the chute, so there is nothing to pick.
+  const picksAnimals = fields.action !== "entry";
 
   function onOpenChange(next: boolean) {
     if (next) {
@@ -171,7 +189,8 @@ export function RegisterManejoDialog() {
   }
 
   function onChangeAction(action: ManejoAction) {
-    setFields((f) => ({ ...f, action, weighAlso: false }));
+    setErrors({});
+    setFields((f) => ({ ...f, action, weighAlso: false, earTags: [] }));
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -182,16 +201,30 @@ export function RegisterManejoDialog() {
 
     const input: NewManejoSession = {
       date: fields.date,
+      kind: actionKind(fields.action),
       earTags: fields.earTags,
       weighing: sessionWeighs(fields),
     };
+    if (moves) {
+      const counterparty = fields.counterparty.trim();
+      if (fields.action === "transfer" || fields.action === "entry") {
+        input.destinationLotId = fields.destinationLotId;
+      }
+      if (counterparty !== "") input.counterparty = counterparty;
+      if (fields.action === "sale" && fields.pricing === "perArroba") {
+        input.pricePerArroba = typedNumber(fields.pricePerArroba);
+      } else if (fields.action === "sale" || fields.action === "entry") {
+        input.totalAmountBrl = typedNumber(fields.totalAmountBrl);
+      }
+    }
     if (sanitary) {
       const dose = fields.dose.trim();
       const responsible = fields.responsible.trim();
       const notes = fields.notes.trim();
       const cost = fields.costBrl.trim();
       input.treatment = {
-        type: fields.action as Exclude<ManejoAction, "weighing">,
+        // `sanitary` already narrowed the action down to the treatment types.
+        type: fields.action as TreatmentType,
         name: fields.name.trim(),
         withdrawalDays: Number(fields.withdrawalDays),
         dose: dose === "" ? undefined : dose,
@@ -219,8 +252,9 @@ export function RegisterManejoDialog() {
         <DialogHeader>
           <DialogTitle>Iniciar manejo</DialogTitle>
           <DialogDescription>
-            Monte a lista do curral e comece o trabalho: os animais são manejados
-            um a um no brete, e o andamento fica salvo na sessão.
+            {fields.action === "entry"
+              ? "Os animais comprados entram no rebanho um a um, conforme passam no brete e recebem o brinco."
+              : "Monte a lista do curral e comece o trabalho: os animais são manejados um a um no brete, e o andamento fica salvo na sessão."}
           </DialogDescription>
         </DialogHeader>
 
@@ -255,6 +289,168 @@ export function RegisterManejoDialog() {
               <ErrorMessage message={errors.date} />
             </div>
           </div>
+
+          {moves ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {fields.action !== "sale" ? (
+                <div className="grid gap-1.5">
+                  <Label htmlFor="manejo-destination">Lote de destino</Label>
+                  <Select
+                    value={fields.destinationLotId === "" ? undefined : fields.destinationLotId}
+                    onValueChange={(destinationLotId) =>
+                      setFields((f) => ({ ...f, destinationLotId }))
+                    }
+                  >
+                    <SelectTrigger
+                      id="manejo-destination"
+                      className="min-h-11 w-full"
+                      aria-invalid={errors.destinationLotId ? true : undefined}
+                    >
+                      <SelectValue placeholder="Selecione o lote" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {lots.map((lot) => (
+                        <SelectItem key={lot.id} value={lot.id}>
+                          {lot.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <ErrorMessage message={errors.destinationLotId} />
+                </div>
+              ) : null}
+
+              {fields.action !== "transfer" ? (
+                <div className="grid gap-1.5">
+                  <Label htmlFor="manejo-counterparty">
+                    {fields.action === "sale" ? "Comprador" : "Vendedor"} (opcional)
+                  </Label>
+                  <Input
+                    id="manejo-counterparty"
+                    value={fields.counterparty}
+                    onChange={(e) =>
+                      setFields((f) => ({ ...f, counterparty: e.target.value }))
+                    }
+                    placeholder={
+                      fields.action === "sale"
+                        ? "Ex.: frigorífico, leilão…"
+                        : "Ex.: fazenda vizinha, leilão…"
+                    }
+                    className="min-h-11"
+                  />
+                </div>
+              ) : null}
+
+              {fields.action === "sale" ? (
+                <>
+                  <div className="grid gap-1.5 sm:col-span-2">
+                    <span className="text-sm font-medium text-ink">Preço</span>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {(
+                        [
+                          ["perArroba", "Por arroba (R$/@)"],
+                          ["total", "Valor fechado do lote"],
+                        ] as [SalePricing, string][]
+                      ).map(([pricing, label]) => (
+                        <label
+                          key={pricing}
+                          className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-hairline px-3 text-sm text-ink"
+                        >
+                          <input
+                            type="radio"
+                            name="manejo-pricing"
+                            value={pricing}
+                            checked={fields.pricing === pricing}
+                            onChange={() => setFields((f) => ({ ...f, pricing }))}
+                            className="size-4 shrink-0 accent-brand"
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-ink-soft">
+                      {fields.pricing === "perArroba"
+                        ? "O valor de cada animal sai do peso lido na balança, no brete."
+                        : "O lote inteiro vale o valor informado, sem preço por animal."}
+                    </p>
+                  </div>
+
+                  {fields.pricing === "perArroba" ? (
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="manejo-arroba">Preço da arroba (R$/@)</Label>
+                      <Input
+                        id="manejo-arroba"
+                        type="number"
+                        min={0.01}
+                        step="0.01"
+                        inputMode="decimal"
+                        value={fields.pricePerArroba}
+                        onChange={(e) =>
+                          setFields((f) => ({ ...f, pricePerArroba: e.target.value }))
+                        }
+                        aria-invalid={errors.pricePerArroba ? true : undefined}
+                        className="min-h-11 font-mono"
+                      />
+                      <ErrorMessage message={errors.pricePerArroba} />
+                    </div>
+                  ) : (
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="manejo-total">Valor total (R$)</Label>
+                      <Input
+                        id="manejo-total"
+                        type="number"
+                        min={0.01}
+                        step="0.01"
+                        inputMode="decimal"
+                        value={fields.totalAmountBrl}
+                        onChange={(e) =>
+                          setFields((f) => ({ ...f, totalAmountBrl: e.target.value }))
+                        }
+                        aria-invalid={errors.totalAmountBrl ? true : undefined}
+                        className="min-h-11 font-mono"
+                      />
+                      <ErrorMessage message={errors.totalAmountBrl} />
+                    </div>
+                  )}
+                </>
+              ) : null}
+
+              {fields.action === "entry" ? (
+                <div className="grid gap-1.5">
+                  <Label htmlFor="manejo-purchase">Valor total da compra (R$)</Label>
+                  <Input
+                    id="manejo-purchase"
+                    type="number"
+                    min={0.01}
+                    step="0.01"
+                    inputMode="decimal"
+                    value={fields.totalAmountBrl}
+                    onChange={(e) =>
+                      setFields((f) => ({ ...f, totalAmountBrl: e.target.value }))
+                    }
+                    aria-invalid={errors.totalAmountBrl ? true : undefined}
+                    className="min-h-11 font-mono"
+                  />
+                  <ErrorMessage message={errors.totalAmountBrl} />
+                </div>
+              ) : null}
+
+              {fields.action !== "sale" ? (
+                <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-hairline px-3 py-2 sm:col-span-2">
+                  <span className="text-sm font-medium text-ink">
+                    Pesar na mesma passagem
+                    <span className="block text-xs font-normal text-ink-soft">
+                      O peso é digitado animal a animal, na hora do brete.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={fields.weighAlso}
+                    onCheckedChange={(weighAlso) => setFields((f) => ({ ...f, weighAlso }))}
+                  />
+                </label>
+              ) : null}
+            </div>
+          ) : null}
 
           {sanitary ? (
             <div className="grid gap-4 sm:grid-cols-2">
@@ -356,6 +552,7 @@ export function RegisterManejoDialog() {
             </div>
           ) : null}
 
+          {picksAnimals ? (
           <fieldset className="grid gap-1.5">
             <legend className="mb-1.5 text-sm font-medium text-ink">Selecionar animais</legend>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -440,15 +637,20 @@ export function RegisterManejoDialog() {
             ) : null}
             <ErrorMessage message={errors.earTags} />
           </fieldset>
+          ) : null}
 
-          {sanitary ? (
+          {sanitary || moves ? (
             <div className="grid gap-1.5">
               <Label htmlFor="manejo-notes">Observação (opcional)</Label>
               <Textarea
                 id="manejo-notes"
                 value={fields.notes}
                 onChange={(e) => setFields((f) => ({ ...f, notes: e.target.value }))}
-                placeholder="Ex.: lote do produto, reação de algum animal…"
+                placeholder={
+                  moves
+                    ? "Ex.: nota fiscal, transporte, ajuste de lotação…"
+                    : "Ex.: lote do produto, reação de algum animal…"
+                }
               />
             </div>
           ) : null}

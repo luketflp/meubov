@@ -25,7 +25,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "MeuBov · Gestão de Rebanho de Corte",
   description:
-    "Gestão de rebanho bovino de corte: painel do rebanho, calendário sanitário, pesagens, movimentações e financeiro da fazenda.",
+    "Gestão de rebanho bovino de corte: painel do rebanho, calendário sanitário, manejo de curral, lotes e financeiro da fazenda.",
 };
 
 export default function RootLayout({

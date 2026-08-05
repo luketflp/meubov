@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * "Novo pasto" dialog on the Movements screen: registers a lot (paddock)
+ * "Novo lote" dialog on the Lots screen: registers a lot (paddock)
  * right where the farmer watches occupancy, instead of only in Settings.
  * Same store action (addLot) and validation rules as the Settings form.
  */
@@ -30,6 +30,7 @@ export function AddLotDialog() {
   const [grass, setGrass] = useState("");
   const [hectares, setHectares] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   function onOpenChange(next: boolean) {
     if (next) {
@@ -41,25 +42,34 @@ export function AddLotDialog() {
     setOpen(next);
   }
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const cleanName = name.trim();
     const cleanGrass = grass.trim();
     const hectaresNumber = Number(hectares.replace(",", "."));
     if (cleanName === "") {
-      setError("Informe o nome do pasto.");
+      setError("Informe o nome do lote.");
       return;
     }
     if (cleanGrass === "") {
-      setError("Informe o capim do pasto.");
+      setError("Informe o capim do lote.");
       return;
     }
     if (!Number.isFinite(hectaresNumber) || hectaresNumber <= 0) {
       setError("Hectares deve ser um número maior que zero.");
       return;
     }
-    addLot({ name: cleanName, grass: cleanGrass, hectares: hectaresNumber });
-    setOpen(false);
+    setSaving(true);
+    try {
+      await addLot({ name: cleanName, grass: cleanGrass, hectares: hectaresNumber });
+      setOpen(false);
+    } catch {
+      // The store already raised the failure toast; keeping the dialog open is
+      // what saves the typed values from disappearing with it.
+      setError("Não foi possível cadastrar. Tente novamente.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -67,14 +77,14 @@ export function AddLotDialog() {
       <DialogTrigger asChild>
         <Button variant="outline" className="min-h-11">
           <Plus aria-hidden />
-          Novo pasto
+          Novo lote
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Novo pasto</DialogTitle>
+          <DialogTitle>Novo lote</DialogTitle>
           <DialogDescription>
-            Cadastre o lote/pasto para acompanhar a ocupação e transferir animais.
+            Cadastre o lote para acompanhar a ocupação e transferir animais.
           </DialogDescription>
         </DialogHeader>
 
@@ -85,7 +95,7 @@ export function AddLotDialog() {
               id="lot-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ex.: Pasto da Sede"
+              placeholder="Ex.: Lote da Sede"
               className="min-h-11"
             />
           </div>
@@ -121,8 +131,8 @@ export function AddLotDialog() {
                 Cancelar
               </Button>
             </DialogClose>
-            <Button type="submit" className="min-h-11">
-              Cadastrar pasto
+            <Button type="submit" disabled={saving} className="min-h-11">
+              {saving ? "Cadastrando…" : "Cadastrar lote"}
             </Button>
           </DialogFooter>
         </form>

@@ -13,6 +13,7 @@ import { formatArroba, formatKg, formatNumber } from "@/lib/domain/format";
 import { SectionCard } from "@/components/ui/section-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusPill } from "@/components/ui/status-pill";
+import { EditLotDialog } from "@/components/lots/edit-lot-dialog";
 
 function LotCard({ summary }: { summary: LotWithSummary }) {
   const { lot, headCount, totalWeightKg, auPerHa, classification } = summary;
@@ -27,7 +28,10 @@ function LotCard({ summary }: { summary: LotWithSummary }) {
             {lot.grass} · {formatNumber(lot.hectares)} ha
           </p>
         </div>
-        <StatusPill status={classification} withDot />
+        <div className="flex shrink-0 items-center gap-1">
+          <StatusPill status={classification} withDot />
+          <EditLotDialog lot={lot} />
+        </div>
       </div>
 
       <div className="mt-3 flex items-baseline gap-1.5">
@@ -61,12 +65,12 @@ export function LotsPaddocks() {
   const summaries = lotsWithSummary(lots, animals);
 
   return (
-    <SectionCard title="Lotes e pastos">
+    <SectionCard title="Lotes">
       {summaries.length === 0 ? (
         <EmptyState
           icon={Fence}
           title="Nenhum lote cadastrado"
-          description="Use o botão &quot;Novo pasto&quot; acima para cadastrar os lotes da fazenda e acompanhar a ocupação."
+          description="Use o botão &quot;Novo lote&quot; acima para cadastrar os lotes da fazenda e acompanhar a ocupação."
         />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

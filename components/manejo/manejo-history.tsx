@@ -28,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  isMovementAction,
   MANEJO_ACTION_LABEL,
   MANEJO_ACTION_LIST,
   manejoHistory,
@@ -45,9 +46,13 @@ function headsLabel(session: ManejoHistoryRow): string {
 export function ManejoHistory() {
   const treatments = useHerdStore((s) => s.treatments);
   const animals = useHerdStore((s) => s.animals);
+  const manejoSessions = useHerdStore((s) => s.manejoSessions);
   const [filter, setFilter] = useState<ManejoAction | typeof ALL>(ALL);
 
-  const sessions = useMemo(() => manejoHistory(treatments, animals), [treatments, animals]);
+  const sessions = useMemo(
+    () => manejoHistory(treatments, animals, manejoSessions),
+    [treatments, animals, manejoSessions]
+  );
   const filtered = filter === ALL ? sessions : sessions.filter((s) => s.kind === filter);
 
   return (
@@ -87,7 +92,7 @@ export function ManejoHistory() {
                   <TableHead>Manejo</TableHead>
                   <TableHead className="text-right">Animais</TableHead>
                   <TableHead>Responsável</TableHead>
-                  <TableHead className="text-right">Custo</TableHead>
+                  <TableHead className="text-right">Custo / Valor</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -105,7 +110,7 @@ export function ManejoHistory() {
                     </TableCell>
                     <TableCell className="text-ink-soft">{session.responsible ?? "—"}</TableCell>
                     <TableCell className="text-right font-mono text-ink">
-                      {session.totalCostBrl === null ? "—" : formatCurrency(session.totalCostBrl)}
+                      {session.amountBrl === null ? "—" : formatCurrency(session.amountBrl)}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -129,11 +134,11 @@ export function ManejoHistory() {
                   {headsLabel(session)}
                   {session.responsible ? ` · ${session.responsible}` : ""}
                 </p>
-                {session.totalCostBrl !== null ? (
+                {session.amountBrl !== null ? (
                   <p className="mt-1 text-xs text-ink-soft">
-                    Custo total:{" "}
+                    {isMovementAction(session.kind) ? "Valor" : "Custo total"}:{" "}
                     <span className="font-mono text-ink">
-                      {formatCurrency(session.totalCostBrl)}
+                      {formatCurrency(session.amountBrl)}
                     </span>
                   </p>
                 ) : null}

@@ -134,7 +134,7 @@ export async function addAnimal(
   }
 }
 
-/** One row of a herd import: like NewAnimalInput but the pasto is a NAME. */
+/** One row of a herd import: like NewAnimalInput but the lot is a NAME. */
 export interface ImportAnimalInput {
   earTag: string;
   category: Category;
@@ -142,7 +142,7 @@ export interface ImportAnimalInput {
   breed: string;
   sex: Sex;
   birthDate: string;
-  /** Pasto name; resolved to a lot id, creating the lot when it is new. */
+  /** Lot name; resolved to a lot id, creating the lot when it is new. */
   lot: string;
   weightKg?: number;
 }
@@ -162,7 +162,7 @@ const IMPORT_LOT_HECTARES = 1;
 /**
  * Bulk-imports animals in one transaction. Add-only and idempotent: rows whose
  * ear tag already exists on the farm (or repeats earlier in the batch) are
- * skipped, not updated. Missing breeds and pastos are auto-created (the pasto
+ * skipped, not updated. Missing breeds and lots are auto-created (the lot
  * with placeholder area/grass to edit later). An optional weight becomes the
  * animal's first weighing dated today.
  */
@@ -223,7 +223,7 @@ export async function importAnimals(
         .onConflictDoNothing();
     }
 
-    // 4. Auto-create the pastos this batch introduces (placeholder area/grass).
+    // 4. Auto-create the lots this batch introduces (placeholder area/grass).
     const newLotNames = [...new Set(toImport.map((r) => r.lot))].filter(
       (name) => !lotByName.has(name)
     );
@@ -397,18 +397,33 @@ export async function updateAnimal(
   };
 }
 
+/** The baixa of an animal: why it left, when, and what happened. */
+export interface DeactivateInput {
+  reason: InactiveReason;
+  date: string;
+  notes?: string;
+}
+
 /**
- * Deactivates an animal with a reason (death, loss, other — sales go through
- * movements). Returns false when the animal does not exist on this farm.
+ * Deactivates an animal (morte, perda, outro — a sale goes through a manejo de
+ * venda). The date and the note ARE the record of the baixa: without them the
+ * herd only knows the animal is gone, never when or why.
+ * Returns false when the animal does not exist on this farm.
  */
 export async function deactivateAnimal(
   farmId: number,
   earTag: string,
-  reason: InactiveReason
+  input: DeactivateInput
 ): Promise<boolean> {
+  const notes = input.notes?.trim();
   const rows = await db
     .update(animals)
-    .set({ active: false, inactiveReason: reason })
+    .set({
+      active: false,
+      inactiveReason: input.reason,
+      inactiveDate: input.date,
+      inactiveNotes: notes ? notes : null,
+    })
     .where(and(eq(animals.farmId, farmId), eq(animals.earTag, earTag)))
     .returning({ id: animals.id });
   return rows.length > 0;

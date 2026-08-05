@@ -27,10 +27,17 @@ export const TreatmentTypeModel = t.Union([
   t.Literal("exam"),
 ]);
 
-export const MovementTypeModel = t.Union([
-  t.Literal("purchase"),
-  t.Literal("sale"),
+/**
+ * What a manejo session does at the chute. `transfer`, `sale` and `entry` are
+ * the compras, vendas e transferências of the farm — there is no separate
+ * movement endpoint anymore.
+ */
+export const ManejoKindModel = t.Union([
+  t.Literal("health"),
+  t.Literal("weighing"),
   t.Literal("transfer"),
+  t.Literal("sale"),
+  t.Literal("entry"),
 ]);
 
 /** Body of POST /animals (NewAnimal in the store). */
@@ -46,7 +53,7 @@ export const NewAnimalBody = t.Object({
 });
 
 /**
- * One row of POST /animals/import. Mirrors NewAnimalBody but carries the pasto
+ * One row of POST /animals/import. Mirrors NewAnimalBody but carries the lot
  * as a NAME (`lot`) instead of a lot id: the server resolves it to a lot,
  * creating the lot (and any missing breed) on the fly.
  */
@@ -125,12 +132,45 @@ export const CompleteTreatmentsBody = t.Object({
 /** Body of POST /breeds. */
 export const BreedBody = t.Object({ name: t.String({ minLength: 1 }) });
 
+/**
+ * Ceiling on the vertices of one pasture outline. A hand-drawn lot is a
+ * couple of dozen points; anything near this came from an import and must be
+ * simplified before it bloats the jsonb column and the request payload.
+ */
+export const MAX_BOUNDARY_VERTICES = 2000;
+
+/**
+ * Pasture outline: open ring of [lng, lat] pairs (GeoJSON axis order, first
+ * point not repeated), matching `Lot.boundary` and the `lots.boundary` column.
+ * Three vertices is the minimum that encloses an area. What JSON Schema cannot
+ * express — self-intersection, zero area, swapped axes — is not checked here.
+ */
+export const BoundaryModel = t.Array(
+  t.Tuple([
+    t.Number({ minimum: -180, maximum: 180 }),
+    t.Number({ minimum: -90, maximum: 90 }),
+  ]),
+  { minItems: 3, maxItems: MAX_BOUNDARY_VERTICES }
+);
+
 /** Body of POST /lots (Lot without the server-generated id). */
 export const NewLotBody = t.Object({
   name: t.String({ minLength: 1 }),
   grass: t.String({ minLength: 1 }),
   hectares: t.Number({ exclusiveMinimum: 0 }),
-  boundary: t.Optional(t.Array(t.Tuple([t.Number(), t.Number()]))),
+  boundary: t.Optional(BoundaryModel),
+});
+
+/**
+ * Body of PATCH /lots/:id (all fields optional). `boundary` is three-valued on
+ * purpose: absent leaves the outline untouched, `null` erases it, a ring
+ * replaces it.
+ */
+export const LotPatchBody = t.Object({
+  name: t.Optional(t.String({ minLength: 1 })),
+  grass: t.Optional(t.String({ minLength: 1 })),
+  hectares: t.Optional(t.Number({ exclusiveMinimum: 0 })),
+  boundary: t.Optional(t.Union([BoundaryModel, t.Null()])),
 });
 
 /** Body of PUT /farm (FarmData). */
@@ -152,20 +192,6 @@ export const NewProtocolBody = t.Object({
     mandatory: t.Boolean(),
   }),
   generateSchedule: t.Boolean(),
-});
-
-/** Body of POST /movements (NewMovement in the store). */
-export const NewMovementBody = t.Object({
-  type: MovementTypeModel,
-  date: DateString,
-  quantity: t.Integer({ minimum: 1 }),
-  category: CategoryModel,
-  origin: t.String({ minLength: 1 }),
-  destination: t.String({ minLength: 1 }),
-  /** Total value in BRL; the route rejects purchase/sale without it (422). */
-  amountBrl: t.Optional(t.Number({ exclusiveMinimum: 0 })),
-  notes: t.Optional(t.String()),
-  earTags: t.Optional(t.Array(t.String(), { minItems: 1 })),
 });
 
 export const ExpenseCategoryModel = t.Union([
@@ -201,9 +227,17 @@ export const AnimalPatchBody = t.Object({
   lotId: t.Optional(t.String({ minLength: 1 })),
 });
 
-/** Body of POST /animals/:earTag/deactivate (sales go through movements). */
+/**
+ * Body of POST /animals/:earTag/deactivate — the baixa of an animal: why it
+ * left, when, and what happened. A sale never comes through here; it is a
+ * manejo de venda, which also carries the price.
+ */
 export const DeactivateAnimalBody = t.Object({
   reason: t.Union([t.Literal("death"), t.Literal("loss"), t.Literal("other")]),
+  /** The day the animal left the herd; the route rejects a future date (422). */
+  date: DateString,
+  /** What happened, in the farmer's words. */
+  notes: t.Optional(t.String()),
 });
 
 /** Sanitary plan applied per animal in a manejo session. */
@@ -218,12 +252,41 @@ export const ManejoPlanBody = t.Object({
   nextDate: t.Optional(DateString),
 });
 
-/** Body of POST /manejo (NewManejoSession in the store). */
+/**
+ * Body of POST /manejo (NewManejoSession in the store). An entry session opens
+ * empty — its animals do not exist yet and are registered one by one as they
+ * arrive at the chute — so `earTags` may be empty; the route rejects the other
+ * kinds without animals (422).
+ */
 export const NewManejoSessionBody = t.Object({
   date: DateString,
-  earTags: t.Array(t.String(), { minItems: 1 }),
+  kind: ManejoKindModel,
+  earTags: t.Array(t.String()),
   weighing: t.Boolean(),
   treatment: t.Optional(ManejoPlanBody),
+  /** Destination lot of a transfer/entry session. */
+  destinationLotId: t.Optional(t.String({ minLength: 1 })),
+  /** Buyer (sale) or seller (entry). */
+  counterparty: t.Optional(t.String()),
+  /** R$/@ of a sale priced by weight. */
+  pricePerArroba: t.Optional(t.Number({ exclusiveMinimum: 0 })),
+  /** Closed price of the batch, or the purchase total of an entry. */
+  totalAmountBrl: t.Optional(t.Number({ exclusiveMinimum: 0 })),
+  notes: t.Optional(t.String()),
+});
+
+/**
+ * Body of POST /manejo/:id/animals — one animal arriving in an entry session.
+ * It joins the herd in the destination lot of the session, already handled.
+ */
+export const EntryAnimalBody = t.Object({
+  earTag: t.String({ minLength: 1 }),
+  category: CategoryModel,
+  customCategoryId: t.Optional(t.String()),
+  breed: t.String({ minLength: 1 }),
+  sex: SexModel,
+  birthDate: DateString,
+  weightKg: t.Optional(t.Number({ exclusiveMinimum: 0 })),
   notes: t.Optional(t.String()),
 });
 

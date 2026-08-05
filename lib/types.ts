@@ -91,6 +91,10 @@ export interface Animal {
   active: boolean;
   /** Why the animal left the herd; absent while active. */
   inactiveReason?: InactiveReason;
+  /** The day it left (morte, perda, venda); absent while active. */
+  inactiveDate?: string;
+  /** What happened, in the farmer's words: "encontrada morta no pasto". */
+  inactiveNotes?: string;
   weighings: Weighing[];
   reproduction?: ReproductionRecord;
 }
@@ -128,6 +132,12 @@ export interface ManejoSessionAnimal {
   treatmentId?: string;
   /** Id of the scheduled booster this pass created (for undo). */
   boosterId?: string;
+  /** What this animal was worth in a priced sale (R$/@ × its chute weight). */
+  amountBrl?: number;
+  /** Lot the animal came from, so undoing a transfer pass can restore it. */
+  previousLotId?: string;
+  /** True when an entry session registered this animal — undo deletes it. */
+  createdAnimal?: boolean;
 }
 
 /** Sanitary action a manejo session applies to each animal that passes. */
@@ -144,19 +154,36 @@ export interface ManejoTreatmentPlan {
 }
 
 /**
+ * What a manejo session does to each animal at the chute. `health` and
+ * `weighing` only record history; `transfer`, `sale` and `entry` also move the
+ * herd — they are the compras, vendas e transferências of the farm.
+ */
+export type ManejoKind = "health" | "weighing" | "transfer" | "sale" | "entry";
+
+/**
  * Manejo session: a curral working session that stays open while the animals
- * pass one by one through the chute. Effects (treatments, weighings) are
- * applied incrementally per animal, never as one atomic batch.
+ * pass one by one through the chute. Effects (treatments, weighings, lot
+ * changes, sales) are applied incrementally per animal, never as one atomic
+ * batch.
  */
 export interface ManejoSession {
   id: string;
   name: string;
   date: string;
   status: "open" | "closed";
+  kind: ManejoKind;
   /** Capture one weight per animal during the pass. */
   weighing: boolean;
   treatment?: ManejoTreatmentPlan;
   animals: ManejoSessionAnimal[];
+  /** Lot every animal lands in — transfer and entry sessions. */
+  destinationLotId?: string;
+  /** Buyer (sale) or seller (entry): they live outside the farm, so free text. */
+  counterparty?: string;
+  /** Sale priced per arroba: R$/@ applied to each animal's chute weight. */
+  pricePerArroba?: number;
+  /** Closed price in BRL: a sale sold as one lot, or an entry's purchase total. */
+  totalAmountBrl?: number;
   notes?: string;
 }
 
@@ -168,19 +195,28 @@ export interface Lot {
   hectares: number;
   /**
    * Pasture outline on the map: open ring of [lng, lat] pairs (GeoJSON axis
-   * order, first point not repeated). Absent while the pasto was never drawn.
+   * order, first point not repeated). Absent while the lot was never drawn.
    */
   boundary?: [number, number][];
 }
 
-/** Animal movement (purchase, sale or transfer). */
+/**
+ * Animal movement (purchase, sale or transfer) — the farm's entry/exit ledger.
+ *
+ * Movements are no longer typed by hand: they are DERIVED from the manejo
+ * sessions of kind transfer/sale/entry (lib/domain/movements.ts), so head count
+ * and category always come from real animals. Rows recorded by the old
+ * "Registrar movimentação" screen survive as legacy history and are the only
+ * ones that may lack `quantity`/`category` linkage.
+ */
 export interface Movement {
   id: string;
   type: MovementType;
   date: string;
-  quantity: number;
-  /** Predominant category of the animals moved. */
-  category: Category;
+  /** Head count; absent on a legacy row that never carried one. */
+  quantity?: number;
+  /** Predominant category of the animals moved; absent on legacy rows. */
+  category?: Category;
   origin: string;
   destination: string;
   /**
@@ -226,7 +262,7 @@ export interface FarmData {
   municipality: string;
   stateRegistration: string;
   manager: string;
-  /** Farm HQ (sede) coordinates — map center before any pasto is drawn. */
+  /** Farm HQ (sede) coordinates — map center before any lot is drawn. */
   headquarters?: { lat: number; lng: number };
 }
 

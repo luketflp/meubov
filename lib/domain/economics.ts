@@ -172,11 +172,14 @@ export function annualRevenue(movements: Movement[], refIso: string): number {
   return total;
 }
 
-/** Heads sold in the rolling year ending at refIso (all sales count). */
+/**
+ * Heads sold in the rolling year ending at refIso (all sales count). Legacy
+ * rows with no head count contribute nothing — they have no animals to count.
+ */
 export function headSoldLast12m(movements: Movement[], refIso: string): number {
   let total = 0;
   for (const m of movements) {
-    if (m.type === "sale" && inLastYear(m.date, refIso)) total += m.quantity;
+    if (m.type === "sale" && inLastYear(m.date, refIso)) total += m.quantity ?? 0;
   }
   return total;
 }
@@ -193,6 +196,7 @@ export function averageCalfPrice(movements: Movement[], refIso: string): number 
       m.type === "purchase" &&
       m.category === "calf" &&
       m.amountBrl !== undefined &&
+      m.quantity !== undefined &&
       inLastYear(m.date, refIso)
     ) {
       amount += m.amountBrl;

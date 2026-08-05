@@ -3,7 +3,18 @@ import type { HerdData } from "@/lib/types";
 
 import { currentDiagnosis } from "@/lib/domain/reproduction";
 import { deriveTreatmentStatus } from "@/lib/domain/status";
+import { herdMovements } from "@/lib/domain/movements";
 import { generateInitialData, SEED_TODAY_ISO as TODAY_ISO } from "@/lib/data/seed";
+
+/** The farm's ledger: legacy rows plus the sessions that moved the herd. */
+function ledgerOf(data: HerdData) {
+  return herdMovements(
+    data.movements,
+    data.manejoSessions,
+    data.animals,
+    new Map(data.lots.map((lot) => [lot.id, lot.name]))
+  );
+}
 
 function reproductiveSituations(data: HerdData): Map<string, string> {
   const situations = new Map<string, string>();
@@ -23,12 +34,26 @@ describe("generateInitialData", () => {
   });
 
   it("prices every purchase/sale and never a transfer", () => {
-    for (const m of data.movements) {
+    for (const m of ledgerOf(data)) {
       if (m.type === "transfer") {
         expect(m.amountBrl).toBeUndefined();
       } else {
         expect(m.amountBrl).toBeGreaterThan(0);
       }
+    }
+  });
+
+  it("derives the ledger from the manejo sessions, keeping the legacy row", () => {
+    const ledger = ledgerOf(data);
+    // Every trade of the demo passed the chute, except the old auction row.
+    expect(ledger).toHaveLength(data.manejoSessions.length + data.movements.length);
+    const legacy = ledger.find((m) => m.id === "mov-legacy-1");
+    expect(legacy?.quantity).toBe(3);
+    // Derived rows count the animals that actually passed, never a typed number.
+    for (const session of data.manejoSessions) {
+      const derived = ledger.find((m) => m.id === session.id);
+      expect(derived?.quantity).toBe(session.animals.length);
+      expect(derived?.category).toBeDefined();
     }
   });
 
@@ -50,7 +75,7 @@ describe("generateInitialData", () => {
     const active = data.animals.filter((a) => a.active);
     expect(active).toHaveLength(39);
     expect(data.animals.filter((a) => !a.active)).toHaveLength(2);
-    expect(data.movements.filter((m) => m.type === "sale").length).toBeGreaterThanOrEqual(2);
+    expect(ledgerOf(data).filter((m) => m.type === "sale").length).toBeGreaterThanOrEqual(2);
   });
 
   it("has the expected composition by category among the active animals", () => {
