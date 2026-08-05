@@ -14,6 +14,8 @@ import type {
   Animal,
 } from "@/lib/types";
 import { todayISO } from "@/lib/domain/dates";
+import { normalizeEarTag } from "@/lib/domain/earTags";
+import { isUniqueViolation } from "@/lib/api/dbErrors";
 import { toAnimal, toWeighing } from "@/lib/api/services/mappers";
 
 export interface NewAnimalInput {
@@ -30,16 +32,6 @@ export interface NewAnimalInput {
   initialWeightDate?: string;
 }
 
-/** Postgres unique-violation SQLSTATE. */
-const UNIQUE_VIOLATION = "23505";
-
-/** True for a duplicate-key error, raw or wrapped by the driver in `cause`. */
-export const isUniqueViolation = (error: unknown): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  ((error as { code?: string }).code === UNIQUE_VIOLATION ||
-    isUniqueViolation((error as { cause?: unknown }).cause));
-
 /** Transaction handle of the app's Drizzle client. */
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -54,7 +46,7 @@ export async function insertAnimal(
   farmId: number,
   input: NewAnimalInput
 ): Promise<Animal> {
-  const earTag = input.earTag.trim();
+  const earTag = normalizeEarTag(input.earTag);
 
   // Resolve the custom category first: when valid it forces the base category.
   let customCategoryId: string | null = null;
@@ -199,7 +191,7 @@ export async function importAnimals(
     const seen = new Set<string>();
     const toImport: ImportAnimalInput[] = [];
     for (const row of rows) {
-      const earTag = row.earTag.trim();
+      const earTag = normalizeEarTag(row.earTag);
       if (earTag === "") continue; // guarded client + schema side; ignore defensively
       if (existingTags.has(earTag) || seen.has(earTag)) {
         markSkipped(earTag);
@@ -327,6 +319,8 @@ export async function recordWeighing(
 
 /** Editable fields of an animal (all optional; only sent ones change). */
 export interface AnimalPatchInput {
+  /** New ear tag; must stay unique within the farm. */
+  earTag?: string;
   /** Canonical category; clears the custom category unless one is also sent. */
   category?: Category;
   /** Custom category id (null clears it). Overrides `category` with its base. */
@@ -337,7 +331,11 @@ export interface AnimalPatchInput {
 }
 
 /** Outcome of updateAnimal signalling why nothing was updated. */
-export type AnimalUpdateError = "animal_not_found" | "category_not_found";
+export type AnimalUpdateError =
+  | "animal_not_found"
+  | "category_not_found"
+  | "duplicate_ear_tag"
+  | "invalid_ear_tag";
 
 /**
  * Updates an animal's registration fields. When customCategoryId is set, the
@@ -357,6 +355,20 @@ export async function updateAnimal(
   if (!animal) return "animal_not_found";
 
   const set: Record<string, unknown> = {};
+  const newEarTag =
+    patch.earTag === undefined ? undefined : normalizeEarTag(patch.earTag);
+  if (newEarTag !== undefined && newEarTag.length === 0) {
+    return "invalid_ear_tag";
+  }
+  if (newEarTag !== undefined && newEarTag !== earTag) {
+    const [taken] = await db
+      .select({ id: animals.id })
+      .from(animals)
+      .where(and(eq(animals.farmId, farmId), eq(animals.earTag, newEarTag)))
+      .limit(1);
+    if (taken) return "duplicate_ear_tag";
+    set.earTag = newEarTag;
+  }
   if (patch.breed !== undefined) set.breed = patch.breed;
   if (patch.birthDate !== undefined) set.birthDate = patch.birthDate;
   if (patch.lotId !== undefined) set.lotId = patch.lotId;
@@ -380,14 +392,23 @@ export async function updateAnimal(
     set.customCategoryId = null;
   }
 
-  const [updated] = await db
-    .update(animals)
-    .set(set)
-    .where(eq(animals.id, animal.id))
-    .returning();
+  let updated: typeof animals.$inferSelect;
+  try {
+    [updated] = await db
+      .update(animals)
+      .set(set)
+      .where(eq(animals.id, animal.id))
+      .returning();
+  } catch (error) {
+    // The lookup above gives a useful early response, while the constraint is
+    // the final authority if two requests claim the same tag concurrently.
+    if (isUniqueViolation(error)) return "duplicate_ear_tag";
+    throw error;
+  }
   return {
     earTag,
     changes: {
+      earTag: updated.earTag,
       category: updated.category,
       customCategoryId: updated.customCategoryId ?? undefined,
       breed: updated.breed,

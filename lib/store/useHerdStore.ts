@@ -167,7 +167,8 @@ export interface HerdStore extends HerdData {
   /** Records a calving; false when the calf's ear tag is already in use. */
   recordCalving: (earTag: string, input: NewCalving) => Promise<boolean>;
   /** Edits an animal's registration fields (category/breed/birth/lot). */
-  updateAnimal: (earTag: string, patch: AnimalPatch) => Promise<void>;
+  /** False when the new ear tag is already taken (409). */
+  updateAnimal: (earTag: string, patch: AnimalPatch) => Promise<boolean>;
   /**
    * Gives an animal a baixa: why it left, when, and what happened. A sale never
    * comes through here — it is a manejo de venda.
@@ -177,6 +178,8 @@ export interface HerdStore extends HerdData {
 
 /** Editable fields of an animal (only sent ones change). */
 export interface AnimalPatch {
+  /** New ear tag; must stay unique within the farm. */
+  earTag?: string;
   category?: Animal["category"];
   customCategoryId?: string | null;
   breed?: string;
@@ -650,11 +653,31 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   updateAnimal: async (earTag, patch) => {
     const { data, error } = await api.animals({ earTag }).patch(patch);
-    if (error) apiFail("salvar o animal", error.status);
+    if (error) {
+      if (error.status === CONFLICT) return false;
+      apiFail("salvar o animal", error.status);
+    }
     const { changes } = data as { earTag: string; changes: Partial<Animal> };
+    const newTag = changes.earTag ?? earTag;
     set((s) => ({
       animals: s.animals.map((a) => (a.earTag === earTag ? { ...a, ...changes } : a)),
+      // A renamed ear tag must follow the animal into its history, which the
+      // server joins by internal id — mirror that here without a refetch.
+      ...(newTag !== earTag
+        ? {
+            treatments: s.treatments.map((t) =>
+              t.animalEarTag === earTag ? { ...t, animalEarTag: newTag } : t
+            ),
+            manejoSessions: s.manejoSessions.map((session) => ({
+              ...session,
+              animals: session.animals.map((a) =>
+                a.earTag === earTag ? { ...a, earTag: newTag } : a
+              ),
+            })),
+          }
+        : {}),
     }));
+    return true;
   },
 
   deactivateAnimal: async (earTag, input) => {
