@@ -7,10 +7,10 @@
  * is shared so active-state matching stays identical everywhere.
  */
 import {
-  ArrowLeftRight,
   Beef,
   CalendarDays,
   CircleDollarSign,
+  Fence,
   LayoutDashboard,
   Map,
   Settings,
@@ -31,7 +31,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: "Rebanho", href: "/herd", icon: Beef },
   { label: "Manejo", href: "/manejo", icon: Syringe },
   { label: "Calendário Sanitário", href: "/calendar", icon: CalendarDays },
-  { label: "Movimentação", href: "/movements", icon: ArrowLeftRight },
+  { label: "Lotes", href: "/lots", icon: Fence },
   { label: "Mapa", href: "/map", icon: Map },
   { label: "Financeiro", href: "/finance", icon: CircleDollarSign },
   { label: "Configurações", href: "/settings", icon: Settings },
