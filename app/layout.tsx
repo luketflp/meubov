@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Zilla_Slab } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { ToastProvider } from "@/components/providers/Toasts";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
@@ -41,6 +42,7 @@ export default function RootLayout({
       <body className="min-h-full" suppressHydrationWarning>
         <ToastProvider>{children}</ToastProvider>
         <Toaster />
+        <Analytics />
       </body>
     </html>
   );
