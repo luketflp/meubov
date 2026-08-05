@@ -93,7 +93,7 @@ export default function HerdPage() {
           <ul className="flex flex-col gap-2 md:hidden">
             {sorted.map((item) => (
               <AnimalCard
-                key={item.animal.earTag}
+                key={item.animal.id}
                 item={item}
                 lotName={lotNames.get(item.animal.lotId) ?? "—"}
               />

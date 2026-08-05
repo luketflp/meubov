@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { StatusDot } from "@/components/ui/status-dot";
 import { StatusPill } from "@/components/ui/status-pill";
 import { TYPE_LABEL } from "@/components/calendar/helpers";
+import { useHerdStore } from "@/lib/store/useHerdStore";
+import { animalByEarTag } from "@/lib/store/selectors";
 
 interface TreatmentRowProps {
   treatment: Treatment;
@@ -16,6 +18,9 @@ interface TreatmentRowProps {
 
 /** Treatment row reused in the day dialog and in the month list. */
 export function TreatmentRow({ treatment, status, onMarkDone }: TreatmentRowProps) {
+  const animal = useHerdStore((state) =>
+    animalByEarTag(state.animals, treatment.animalEarTag)
+  );
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5">
       <div className="min-w-0 flex-1">
@@ -25,12 +30,16 @@ export function TreatmentRow({ treatment, status, onMarkDone }: TreatmentRowProp
         </p>
         <p className="mt-0.5 text-xs text-ink-soft">
           {TYPE_LABEL[treatment.type]} ·{" "}
-          <Link
-            href={`/herd/${treatment.animalEarTag}`}
-            className="font-mono text-brand hover:underline"
-          >
-            {treatment.animalEarTag}
-          </Link>
+          {animal ? (
+            <Link
+              href={`/herd/${animal.id}`}
+              className="font-mono text-brand hover:underline"
+            >
+              {treatment.animalEarTag}
+            </Link>
+          ) : (
+            <span className="font-mono">{treatment.animalEarTag}</span>
+          )}
         </p>
       </div>
       <StatusPill status={status} />

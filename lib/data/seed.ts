@@ -297,31 +297,35 @@ export function generateInitialData(): HerdData {
   const earTags = generateUniqueEarTags(rng, 41);
   let nextEarTag = 0;
   const takeEarTag = (): string => earTags[nextEarTag++];
+  const takeAnimalIdentity = (): Pick<Animal, "id" | "earTag"> => {
+    const earTag = takeEarTag();
+    return { id: `animal-${earTag}`, earTag };
+  };
 
   // ---- Animals ----------------------------------------------------------
   const bulls: Animal[] = [
     {
-      earTag: takeEarTag(), category: "bull", breed: "Angus", sex: "male",
+      ...takeAnimalIdentity(), category: "bull", breed: "Angus", sex: "male",
       birthDate: addDays(TODAY_ISO, -2200), lotId: "lot-1", active: true,
       weighings: bullWeighings(rng),
     },
     {
       // Bought in Feb/2026 (purchase movement); weighings only after arrival.
-      earTag: takeEarTag(), category: "bull", breed: "Angus", sex: "male",
+      ...takeAnimalIdentity(), category: "bull", breed: "Angus", sex: "male",
       birthDate: addDays(TODAY_ISO, -1650), lotId: "lot-2", active: true,
       weighings: bullWeighings(rng, 160),
     },
   ];
 
   const cows: Animal[] = COW_BREEDS.map((breed, i) => ({
-    earTag: takeEarTag(), category: "cow", breed, sex: "female",
+    ...takeAnimalIdentity(), category: "cow", breed, sex: "female",
     birthDate: addDays(TODAY_ISO, -intBetween(rng, 1250, 3200)),
     lotId: i < 7 ? "lot-1" : "lot-5", active: true,
     weighings: cowWeighings(rng),
   }));
 
   const heifers: Animal[] = HEIFER_BREEDS.map((breed, i) => ({
-    earTag: takeEarTag(), category: "heifer", breed, sex: "female",
+    ...takeAnimalIdentity(), category: "heifer", breed, sex: "female",
     // heifer 0 older (fit for reproduction); 4 and 5 bought in Mar/2026.
     birthDate: addDays(TODAY_ISO, i === 0 ? -980 : -intBetween(rng, 430, 1000)),
     lotId: i >= 4 ? "lot-2" : "lot-4", active: true,
@@ -329,14 +333,14 @@ export function generateInitialData(): HerdData {
   }));
 
   const steers: Animal[] = STEER_BREEDS.map((breed, i) => ({
-    earTag: takeEarTag(), category: "steer", breed, sex: "male",
+    ...takeAnimalIdentity(), category: "steer", breed, sex: "male",
     birthDate: addDays(TODAY_ISO, -intBetween(rng, 460, 950)),
     lotId: i < 7 ? "lot-3" : "lot-2", active: true,
     weighings: steerWeighings(rng),
   }));
 
   const calfOffspring: Animal[] = CALVINGS.map((calving) => ({
-    earTag: takeEarTag(), category: "calf", breed: calving.breed, sex: calving.sex,
+    ...takeAnimalIdentity(), category: "calf", breed: calving.breed, sex: calving.sex,
     birthDate: calving.date, lotId: "lot-1", active: true,
     weighings: calfWeighings(rng, calving.date),
   }));
@@ -344,19 +348,19 @@ export function generateInitialData(): HerdData {
   const weanedCalves: Animal[] = WEANED_SEXES.map((sex, i) => {
     const birthDate = addDays(TODAY_ISO, -intBetween(rng, 150, 330));
     return {
-      earTag: takeEarTag(), category: "calf", breed: WEANED_BREEDS[i], sex,
+      ...takeAnimalIdentity(), category: "calf", breed: WEANED_BREEDS[i], sex,
       birthDate, lotId: "lot-4", active: true,
       weighings: calfWeighings(rng, birthDate),
     };
   });
 
   const soldSteer: Animal = {
-    earTag: takeEarTag(), category: "steer", breed: "Nelore", sex: "male",
+    ...takeAnimalIdentity(), category: "steer", breed: "Nelore", sex: "male",
     birthDate: addDays(TODAY_ISO, -880), lotId: "lot-3", active: false,
     weighings: steerWeighings(rng, "2026-03-30"),
   };
   const soldCow: Animal = {
-    earTag: takeEarTag(), category: "cow", breed: "Angus", sex: "female",
+    ...takeAnimalIdentity(), category: "cow", breed: "Angus", sex: "female",
     birthDate: addDays(TODAY_ISO, -2600), lotId: "lot-1", active: false,
     weighings: cowWeighings(rng, "2026-05-05"),
   };

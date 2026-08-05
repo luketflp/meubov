@@ -32,7 +32,7 @@ import { api } from "@/lib/api/client";
 import type { ImportAnimalPayload } from "@/lib/domain/herdImport";
 
 /** Animal to register; the optional initial weight becomes the first weighing. */
-export type NewAnimal = Omit<Animal, "active" | "weighings" | "reproduction"> & {
+export type NewAnimal = Omit<Animal, "id" | "active" | "weighings" | "reproduction"> & {
   initialWeightKg?: number;
 };
 
@@ -214,6 +214,13 @@ const repository: HerdRepository = new ApiHerdRepository();
 const compareByDate = (a: Weighing, b: Weighing): number =>
   a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
 
+/** Resolves the editable ear tag to the stable id used by API path segments. */
+function animalIdByEarTag(animals: Animal[], earTag: string): string {
+  const animalId = animals.find((animal) => animal.earTag === earTag)?.id;
+  if (animalId === undefined) throw new Error(`Animal ${earTag} not found in herd store`);
+  return animalId;
+}
+
 /** Conflict statuses a manejo pass can hit (stale UI); treated as a no-op. */
 const CONFLICT = 409;
 
@@ -335,7 +342,8 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   },
 
   completeManejoAnimal: async (sessionId, earTag, data = {}) => {
-    const response = await api.manejo({ id: sessionId }).animals({ earTag }).complete.post(data);
+    const animalId = animalIdByEarTag(get().animals, earTag);
+    const response = await api.manejo({ id: sessionId }).animals({ animalId }).complete.post(data);
     if (response.error) {
       if (response.error.status === CONFLICT) return; // stale UI: pass already recorded
       apiFail("concluir o animal no manejo", response.error.status);
@@ -375,7 +383,8 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   },
 
   skipManejoAnimal: async (sessionId, earTag, notes) => {
-    const { data, error } = await api.manejo({ id: sessionId }).animals({ earTag }).skip.post({ notes });
+    const animalId = animalIdByEarTag(get().animals, earTag);
+    const { data, error } = await api.manejo({ id: sessionId }).animals({ animalId }).skip.post({ notes });
     if (error) {
       if (error.status === CONFLICT) return;
       apiFail("pular o animal no manejo", error.status);
@@ -387,7 +396,8 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   },
 
   reopenManejoAnimal: async (sessionId, earTag) => {
-    const { data, error } = await api.manejo({ id: sessionId }).animals({ earTag }).reopen.post();
+    const animalId = animalIdByEarTag(get().animals, earTag);
+    const { data, error } = await api.manejo({ id: sessionId }).animals({ animalId }).reopen.post();
     if (error) {
       if (error.status === CONFLICT) return;
       apiFail("desfazer o registro do animal", error.status);
@@ -465,7 +475,8 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   },
 
   recordWeighing: async (earTag, w) => {
-    const { data, error } = await api.animals({ earTag }).weighings.post(w);
+    const id = animalIdByEarTag(get().animals, earTag);
+    const { data, error } = await api.animals({ id }).weighings.post(w);
     if (error) apiFail("registrar a pesagem", error.status);
     const weighing = data as Weighing;
     set((s) => ({
@@ -601,7 +612,8 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   },
 
   recordBreeding: async (earTag, input) => {
-    const { data, error } = await api.animals({ earTag }).breedings.post(input);
+    const id = animalIdByEarTag(get().animals, earTag);
+    const { data, error } = await api.animals({ id }).breedings.post(input);
     if (error) apiFail("registrar a cobertura", error.status);
     const breeding = data as Breeding;
     set((s) => ({
@@ -613,7 +625,8 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   },
 
   recordDiagnosis: async (earTag, input) => {
-    const { data, error } = await api.animals({ earTag }).diagnoses.post(input);
+    const id = animalIdByEarTag(get().animals, earTag);
+    const { data, error } = await api.animals({ id }).diagnoses.post(input);
     if (error) apiFail("registrar o diagnóstico", error.status);
     const diagnosis = data as PregnancyDiagnosis;
     set((s) => ({
@@ -631,8 +644,9 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   recordCalving: async (earTag, input) => {
     const calfEarTag = input.calfEarTag.trim();
     if (get().animals.some((a) => a.earTag === calfEarTag)) return false;
+    const id = animalIdByEarTag(get().animals, earTag);
     const { data, error } = await api
-      .animals({ earTag })
+      .animals({ id })
       .calvings.post({ ...input, calfEarTag });
     if (error) {
       if (error.status === 409) return false;
@@ -652,7 +666,8 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   },
 
   updateAnimal: async (earTag, patch) => {
-    const { data, error } = await api.animals({ earTag }).patch(patch);
+    const id = animalIdByEarTag(get().animals, earTag);
+    const { data, error } = await api.animals({ id }).patch(patch);
     if (error) {
       if (error.status === CONFLICT) return false;
       apiFail("salvar o animal", error.status);
@@ -682,7 +697,8 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   deactivateAnimal: async (earTag, input) => {
     const notes = input.notes?.trim();
-    const { error } = await api.animals({ earTag }).deactivate.post({
+    const id = animalIdByEarTag(get().animals, earTag);
+    const { error } = await api.animals({ id }).deactivate.post({
       reason: input.reason,
       date: input.date,
       notes: notes ? notes : undefined,

@@ -48,6 +48,11 @@ export function animalByEarTag(animals: Animal[], earTag: string): Animal | unde
   return animals.find((a) => a.earTag === earTag);
 }
 
+/** Finds an animal by its stable internal identifier. */
+export function animalById(animals: Animal[], id: string): Animal | undefined {
+  return animals.find((animal) => animal.id === id);
+}
+
 /** Treatments linked to the given ear tag. */
 export function animalTreatments(treatments: Treatment[], earTag: string): Treatment[] {
   return treatments.filter((t) => t.animalEarTag === earTag);

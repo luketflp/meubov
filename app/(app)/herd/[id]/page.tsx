@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Animal record (/herd/[earTag]): identification, weight evolution,
+ * Animal record (/herd/[id]): identification, weight evolution,
  * timeline, health history and reproduction (females).
  */
 import Link from "next/link";
@@ -9,7 +9,7 @@ import { useParams } from "next/navigation";
 import { ArrowLeft, SearchX } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { todayISO } from "@/lib/domain/dates";
-import { animalByEarTag, withStatus, animalTreatments } from "@/lib/store/selectors";
+import { animalById, withStatus, animalTreatments } from "@/lib/store/selectors";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AnimalHeader } from "@/components/animal/AnimalHeader";
 import { EditAnimalDialog } from "@/components/animal/EditAnimalDialog";
@@ -31,14 +31,13 @@ function BackLink() {
 }
 
 export default function AnimalRecordPage() {
-  const params = useParams<{ earTag: string }>();
-  const earTag = decodeURIComponent(params.earTag);
+  const params = useParams<{ id: string }>();
 
   const animals = useHerdStore((s) => s.animals);
   const treatments = useHerdStore((s) => s.treatments);
   const lots = useHerdStore((s) => s.lots);
 
-  const animal = animalByEarTag(animals, earTag);
+  const animal = animalById(animals, params.id);
 
   if (!animal) {
     return (
@@ -47,8 +46,8 @@ export default function AnimalRecordPage() {
         <div className="rounded-lg border border-hairline bg-panel pb-8">
           <EmptyState
             icon={SearchX}
-            title={`Brinco ${earTag} não encontrado`}
-            description="Nenhum animal do rebanho usa este brinco. Verifique o número ou volte à lista."
+            title="Animal não encontrado"
+            description="Este cadastro não existe neste rebanho. Volte à lista e tente novamente."
           />
           <div className="flex justify-center">
             <Link
