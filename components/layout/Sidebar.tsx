@@ -7,13 +7,24 @@ import { authClient } from "@/lib/auth/client";
 import { useSignOut } from "@/lib/auth/navigation";
 import { displayName, getInitials } from "@/lib/auth/user";
 import { NAV_ITEMS, isActiveRoute } from "@/lib/nav";
+import { useHerdStore } from "@/lib/store/useHerdStore";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export function Sidebar() {
   const pathname = usePathname();
   const signOut = useSignOut();
   const { data: session, isPending } = authClient.useSession();
   const user = session?.user;
+  const farms = useHerdStore((s) => s.farms);
+  const activeFarmId = useHerdStore((s) => s.activeFarmId);
+  const switchFarm = useHerdStore((s) => s.switchFarm);
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col bg-sidebar md:flex">
@@ -21,6 +32,29 @@ export function Sidebar() {
         <p className="font-heading text-xl font-semibold text-surface">MeuBov</p>
         <p className="mt-0.5 text-[11px] text-surface/60">Gestão de rebanho de corte</p>
       </div>
+
+      {farms.length > 1 && (
+        <div className="px-4 pb-4">
+          <Select
+            value={activeFarmId === null ? undefined : String(activeFarmId)}
+            onValueChange={(value) => void switchFarm(Number(value))}
+          >
+            <SelectTrigger
+              aria-label="Selecionar fazenda"
+              className="w-full border-surface/15 bg-sidebar-active/40 text-surface hover:bg-sidebar-active/60 [&_svg]:text-surface/60"
+            >
+              <SelectValue placeholder="Fazenda" />
+            </SelectTrigger>
+            <SelectContent>
+              {farms.map((f) => (
+                <SelectItem key={f.id} value={String(f.id)}>
+                  {f.name.trim() || `Fazenda #${f.id}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       <nav className="flex-1 space-y-0.5 px-2" aria-label="Navegação principal">
         {NAV_ITEMS.map((item) => {
