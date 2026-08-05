@@ -136,9 +136,6 @@ export function EditAnimalDialog({ animal }: { animal: Animal }) {
     }
     addToast({ messageType: "success", text: `Animal ${newTag} atualizado` });
     setOpen(false);
-    // The URL carries the ear tag; follow the rename so the page keeps
-    // resolving this animal.
-    if (renamed) router.replace(`/herd/${encodeURIComponent(newTag)}`);
   }
 
   async function onDeactivate() {

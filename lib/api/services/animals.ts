@@ -1,6 +1,6 @@
 /**
- * Write path — animals and weighings. Farm-scoped; clients address animals by
- * ear tag, the surrogate id stays server-side.
+ * Write path — animals and weighings. Farm-scoped; existing animals are
+ * addressed by stable id while ear tags remain editable identifiers.
  */
 import { randomUUID } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
@@ -98,6 +98,7 @@ export async function insertAnimal(
   }
 
   return {
+    id: row.id,
     earTag: row.earTag,
     category: row.category,
     customCategoryId: row.customCategoryId ?? undefined,
@@ -301,13 +302,13 @@ export async function importAnimals(
  */
 export async function recordWeighing(
   farmId: number,
-  earTag: string,
+  animalId: string,
   input: Weighing
 ): Promise<Weighing | null> {
   const [animal] = await db
     .select({ id: animals.id })
     .from(animals)
-    .where(and(eq(animals.farmId, farmId), eq(animals.earTag, earTag)))
+    .where(and(eq(animals.farmId, farmId), eq(animals.id, animalId)))
     .limit(1);
   if (!animal) return null;
   const [row] = await db
@@ -344,13 +345,13 @@ export type AnimalUpdateError =
  */
 export async function updateAnimal(
   farmId: number,
-  earTag: string,
+  animalId: string,
   patch: AnimalPatchInput
 ): Promise<{ earTag: string; changes: Partial<Animal> } | AnimalUpdateError> {
   const [animal] = await db
-    .select({ id: animals.id })
+    .select({ id: animals.id, earTag: animals.earTag })
     .from(animals)
-    .where(and(eq(animals.farmId, farmId), eq(animals.earTag, earTag)))
+    .where(and(eq(animals.farmId, farmId), eq(animals.id, animalId)))
     .limit(1);
   if (!animal) return "animal_not_found";
 
@@ -360,7 +361,7 @@ export async function updateAnimal(
   if (newEarTag !== undefined && newEarTag.length === 0) {
     return "invalid_ear_tag";
   }
-  if (newEarTag !== undefined && newEarTag !== earTag) {
+  if (newEarTag !== undefined && newEarTag !== animal.earTag) {
     const [taken] = await db
       .select({ id: animals.id })
       .from(animals)
@@ -406,7 +407,7 @@ export async function updateAnimal(
     throw error;
   }
   return {
-    earTag,
+    earTag: animal.earTag,
     changes: {
       earTag: updated.earTag,
       category: updated.category,
@@ -433,7 +434,7 @@ export interface DeactivateInput {
  */
 export async function deactivateAnimal(
   farmId: number,
-  earTag: string,
+  animalId: string,
   input: DeactivateInput
 ): Promise<boolean> {
   const notes = input.notes?.trim();
@@ -445,7 +446,7 @@ export async function deactivateAnimal(
       inactiveDate: input.date,
       inactiveNotes: notes ? notes : null,
     })
-    .where(and(eq(animals.farmId, farmId), eq(animals.earTag, earTag)))
+    .where(and(eq(animals.farmId, farmId), eq(animals.id, animalId)))
     .returning({ id: animals.id });
   return rows.length > 0;
 }

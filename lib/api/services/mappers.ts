@@ -1,9 +1,9 @@
 /**
  * Row → domain converters for the herd API.
  *
- * The DB uses surrogate animal ids; the domain (and every client) speaks ear
- * tags. Converters that touch animal children take the earTag resolved by the
- * caller (via join or map). Numeric columns already come back as numbers
+ * The DB uses stable animal ids while ear tags remain editable identifiers.
+ * Converters that touch animal children take the earTag resolved by the caller
+ * (via join or map). Numeric columns already come back as numbers
  * (`numeric({ mode: "number" })` in the schema).
  */
 import type {
@@ -92,6 +92,7 @@ export function toAnimal(
       reproduction.diagnoses.length > 0 ||
       reproduction.calvings.length > 0);
   return {
+    id: row.id,
     earTag: row.earTag,
     category: row.category,
     customCategoryId: orNothing(row.customCategoryId),

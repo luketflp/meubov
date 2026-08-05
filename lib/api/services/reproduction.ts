@@ -1,7 +1,6 @@
 /**
  * Write path — reproduction of the females: breeding, pregnancy diagnosis and
- * calving. Farm-scoped and addressed by ear tag, like the rest of the API; the
- * surrogate animal id stays server-side.
+ * calving. Farm-scoped and addressed by the animal's stable id.
  *
  * A calving also puts the calf in the herd, in the SAME transaction — a birth
  * that leaves no animal behind would silently shrink the herd count.
@@ -60,10 +59,10 @@ interface Dam {
 }
 
 /**
- * Resolves the dam by ear tag inside the farm. Reproduction belongs to females
- * only, so a male ear tag is rejected instead of silently accepted.
+ * Resolves the dam by stable id inside the farm. Reproduction belongs to
+ * females only, so a male is rejected instead of silently accepted.
  */
-async function findDam(farmId: number, earTag: string): Promise<Dam | DamError> {
+async function findDam(farmId: number, animalId: string): Promise<Dam | DamError> {
   const [row] = await db
     .select({
       id: animals.id,
@@ -72,7 +71,7 @@ async function findDam(farmId: number, earTag: string): Promise<Dam | DamError> 
       lotId: animals.lotId,
     })
     .from(animals)
-    .where(and(eq(animals.farmId, farmId), eq(animals.earTag, earTag)))
+    .where(and(eq(animals.farmId, farmId), eq(animals.id, animalId)))
     .limit(1);
   if (!row) return "animal_not_found";
   if (row.sex !== "female") return "not_female";
@@ -82,10 +81,10 @@ async function findDam(farmId: number, earTag: string): Promise<Dam | DamError> 
 /** Records a breeding (timed AI or natural mating) for one female. */
 export async function addBreeding(
   farmId: number,
-  earTag: string,
+  animalId: string,
   input: NewBreedingInput
 ): Promise<Breeding | DamError> {
-  const dam = await findDam(farmId, earTag);
+  const dam = await findDam(farmId, animalId);
   if (typeof dam === "string") return dam;
 
   const [row] = await db
@@ -108,10 +107,10 @@ export async function addBreeding(
  */
 export async function setDiagnosis(
   farmId: number,
-  earTag: string,
+  animalId: string,
   input: NewDiagnosisInput
 ): Promise<PregnancyDiagnosis | DamError | "breeding_not_found"> {
-  const dam = await findDam(farmId, earTag);
+  const dam = await findDam(farmId, animalId);
   if (typeof dam === "string") return dam;
 
   // The breeding must belong to THIS female — which also scopes it to the farm.
@@ -141,10 +140,10 @@ export async function setDiagnosis(
  */
 export async function addCalving(
   farmId: number,
-  earTag: string,
+  animalId: string,
   input: NewCalvingInput
 ): Promise<{ calving: Calving; calf: Animal } | DamError | "duplicate_ear_tag"> {
-  const dam = await findDam(farmId, earTag);
+  const dam = await findDam(farmId, animalId);
   if (typeof dam === "string") return dam;
 
   try {

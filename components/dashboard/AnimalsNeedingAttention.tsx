@@ -29,9 +29,9 @@ export function AnimalsNeedingAttention({
       ) : (
         <ul className={cn("-my-1 divide-y divide-hairline", compact && "-my-0.5")}>
           {items.map(({ animal, status, reason }) => (
-            <li key={animal.earTag}>
+            <li key={animal.id}>
               <Link
-                href={`/herd/${animal.earTag}`}
+                href={`/herd/${animal.id}`}
                 className={cn(
                   "flex min-h-11 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-md px-1 py-2.5 transition-colors hover:bg-surface",
                   compact && "py-1.5"

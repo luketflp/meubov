@@ -18,7 +18,7 @@ export function AnimalCard({ item, lotName }: AnimalCardProps) {
   return (
     <li>
       <Link
-        href={`/herd/${animal.earTag}`}
+        href={`/herd/${animal.id}`}
         aria-label={`Abrir ficha do animal ${animal.earTag}`}
         className="flex min-h-11 flex-col gap-1.5 rounded-xl border border-hairline bg-panel p-4 transition-colors active:bg-surface"
       >

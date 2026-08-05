@@ -152,12 +152,12 @@ export async function startSession(
   });
 }
 
-/** Loads and locks one session + one entry, resolving the animal by ear tag. */
+/** Loads and locks one session + one entry by the animal's stable id. */
 async function lockEntry(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   farmId: number,
   sessionId: string,
-  earTag: string
+  animalId: string
 ) {
   const [session] = await tx
     .select()
@@ -166,9 +166,9 @@ async function lockEntry(
     .for("update");
   if (!session) return { session: undefined, entry: undefined, animal: undefined };
   const [animal] = await tx
-    .select({ id: animals.id, lotId: animals.lotId })
+    .select({ id: animals.id, earTag: animals.earTag, lotId: animals.lotId })
     .from(animals)
-    .where(and(eq(animals.farmId, farmId), eq(animals.earTag, earTag)))
+    .where(and(eq(animals.farmId, farmId), eq(animals.id, animalId)))
     .limit(1);
   if (!animal) return { session, entry: undefined, animal: undefined };
   const [entry] = await tx
@@ -195,15 +195,15 @@ const ANIMAL_PATCH_COLUMNS = {
 export async function completeAnimal(
   farmId: number,
   sessionId: string,
-  earTag: string,
+  animalId: string,
   data: ManejoPassData
 ): Promise<CompleteResult | { conflict: ManejoConflict } | null> {
   return db.transaction(async (tx) => {
-    const { session, entry, animal } = await lockEntry(tx, farmId, sessionId, earTag);
+    const { session, entry, animal } = await lockEntry(tx, farmId, sessionId, animalId);
     if (!session || !entry || !animal) return null;
     if (session.status !== "open") return conflict("session_not_open");
     if (entry.outcome !== "pending") return conflict("entry_not_actionable");
-    const animalId = animal.id;
+    const earTag = animal.earTag;
 
     const effects = buildPassEffects(
       {
@@ -368,11 +368,11 @@ export async function registerEntryAnimal(
 export async function skipAnimal(
   farmId: number,
   sessionId: string,
-  earTag: string,
+  animalId: string,
   notes: string | undefined
 ): Promise<ManejoSessionAnimal | { conflict: ManejoConflict } | null> {
   return db.transaction(async (tx) => {
-    const { session, entry, animal } = await lockEntry(tx, farmId, sessionId, earTag);
+    const { session, entry, animal } = await lockEntry(tx, farmId, sessionId, animalId);
     if (!session || !entry || !animal) return null;
     if (session.status !== "open") return conflict("session_not_open");
     if (entry.outcome !== "pending") return conflict("entry_not_actionable");
@@ -388,7 +388,7 @@ export async function skipAnimal(
         )
       )
       .returning();
-    return toManejoSessionAnimal(updated, earTag);
+    return toManejoSessionAnimal(updated, animal.earTag);
   });
 }
 
@@ -396,14 +396,14 @@ export async function skipAnimal(
 export async function reopenAnimal(
   farmId: number,
   sessionId: string,
-  earTag: string
+  animalId: string
 ): Promise<ReopenResult | { conflict: ManejoConflict } | null> {
   return db.transaction(async (tx) => {
-    const { session, entry, animal } = await lockEntry(tx, farmId, sessionId, earTag);
+    const { session, entry, animal } = await lockEntry(tx, farmId, sessionId, animalId);
     if (!session || !entry || !animal) return null;
     if (session.status !== "open") return conflict("session_not_open");
     if (entry.outcome === "pending") return conflict("entry_not_actionable");
-    const animalId = animal.id;
+    const earTag = animal.earTag;
 
     // An entry pass CREATED the animal, so undoing it removes the registration
     // altogether (weighings and the chute entry cascade with it).
