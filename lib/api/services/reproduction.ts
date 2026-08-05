@@ -20,7 +20,8 @@ import type {
   Sex,
 } from "@/lib/types";
 import { toBreeding, toCalving, toDiagnosis } from "@/lib/api/services/mappers";
-import { insertAnimal, isUniqueViolation } from "@/lib/api/services/animals";
+import { insertAnimal } from "@/lib/api/services/animals";
+import { isUniqueViolation } from "@/lib/api/dbErrors";
 
 /** Why the dam could not be used; every write starts by resolving her. */
 export type DamError = "animal_not_found" | "not_female";

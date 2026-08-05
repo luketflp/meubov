@@ -220,6 +220,8 @@ export const NewCustomCategoryBody = t.Object({
 
 /** Body of PATCH /animals/:earTag (all fields optional). */
 export const AnimalPatchBody = t.Object({
+  /** New ear tag; must stay unique within the farm (409 on conflict). */
+  earTag: t.Optional(t.String({ minLength: 1 })),
   category: t.Optional(CategoryModel),
   customCategoryId: t.Optional(t.Union([t.String(), t.Null()])),
   breed: t.Optional(t.String({ minLength: 1 })),

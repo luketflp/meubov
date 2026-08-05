@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * "Editar animal" dialog: category (canonical or custom, filtered by the
- * animal's sex), breed, birth date and lot — plus the danger zone that
+ * "Editar animal" dialog: ear tag, category (canonical or custom, filtered by
+ * the animal's sex), breed, birth date and lot — plus the danger zone that
  * deactivates the animal with a reason (a sale goes through a manejo de venda).
  */
 import { useState, type FormEvent } from "react";
@@ -53,6 +53,7 @@ const baseValue = (category: Category): string => `base:${category}`;
 const customValue = (id: string): string => `custom:${id}`;
 
 export function EditAnimalDialog({ animal }: { animal: Animal }) {
+  const animals = useHerdStore((s) => s.animals);
   const breeds = useHerdStore((s) => s.breeds);
   const lots = useHerdStore((s) => s.lots);
   const customCategories = useHerdStore((s) => s.customCategories);
@@ -62,6 +63,7 @@ export function EditAnimalDialog({ animal }: { animal: Animal }) {
   const router = useRouter();
 
   const [open, setOpen] = useState(false);
+  const [earTag, setEarTag] = useState("");
   const [categoryValue, setCategoryValue] = useState("");
   const [breed, setBreed] = useState("");
   const [birthDate, setBirthDate] = useState("");
@@ -78,6 +80,7 @@ export function EditAnimalDialog({ animal }: { animal: Animal }) {
 
   function onOpenChange(next: boolean) {
     if (next) {
+      setEarTag(animal.earTag);
       setCategoryValue(
         animal.customCategoryId
           ? customValue(animal.customCategoryId)
@@ -96,6 +99,18 @@ export function EditAnimalDialog({ animal }: { animal: Animal }) {
 
   async function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const newTag = earTag.trim();
+    if (newTag === "") {
+      setError("Informe o brinco do animal.");
+      return;
+    }
+    if (
+      newTag !== animal.earTag &&
+      animals.some((a) => a.earTag === newTag)
+    ) {
+      setError(`Já existe um animal com o brinco ${newTag}.`);
+      return;
+    }
     if (birthDate === "" || birthDate > todayISO()) {
       setError("Informe uma data de nascimento válida (não futura).");
       return;
@@ -107,9 +122,23 @@ export function EditAnimalDialog({ animal }: { animal: Animal }) {
             category: categoryValue.slice("base:".length) as Category,
             customCategoryId: null,
           };
-    await updateAnimal(animal.earTag, { ...patch, breed, birthDate, lotId });
-    addToast({ messageType: "success", text: `Animal ${animal.earTag} atualizado` });
+    const renamed = newTag !== animal.earTag;
+    const saved = await updateAnimal(animal.earTag, {
+      ...patch,
+      ...(renamed ? { earTag: newTag } : {}),
+      breed,
+      birthDate,
+      lotId,
+    });
+    if (!saved) {
+      setError(`Já existe um animal com o brinco ${newTag}.`);
+      return;
+    }
+    addToast({ messageType: "success", text: `Animal ${newTag} atualizado` });
     setOpen(false);
+    // The URL carries the ear tag; follow the rename so the page keeps
+    // resolving this animal.
+    if (renamed) router.replace(`/herd/${encodeURIComponent(newTag)}`);
   }
 
   async function onDeactivate() {
@@ -149,12 +178,22 @@ export function EditAnimalDialog({ animal }: { animal: Animal }) {
         <DialogHeader>
           <DialogTitle>Editar animal {animal.earTag}</DialogTitle>
           <DialogDescription>
-            Categoria, raça, nascimento e lote. Vendas são registradas em um
-            manejo de venda.
+            Brinco, categoria, raça, nascimento e lote. Vendas são registradas
+            em um manejo de venda.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={onSave} noValidate className="grid gap-4">
+          <div className="grid gap-1.5">
+            <Label htmlFor="edit-ear-tag">Brinco</Label>
+            <Input
+              id="edit-ear-tag"
+              value={earTag}
+              onChange={(e) => setEarTag(e.target.value)}
+              className="min-h-11 font-mono"
+            />
+          </div>
+
           <div className="grid gap-1.5">
             <Label htmlFor="edit-category">Categoria</Label>
             <Select value={categoryValue} onValueChange={setCategoryValue}>

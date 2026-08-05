@@ -154,6 +154,8 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
       const result = await animalsService.updateAnimal(farmId, params.earTag, body);
       if (result === "animal_not_found") return status(404, { error: result });
       if (result === "category_not_found") return status(404, { error: result });
+      if (result === "duplicate_ear_tag") return status(409, { error: result });
+      if (result === "invalid_ear_tag") return status(422, { error: result });
       return result;
     },
     { farm: true, body: AnimalPatchBody }
