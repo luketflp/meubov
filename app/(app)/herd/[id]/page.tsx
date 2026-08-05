@@ -36,6 +36,8 @@ export default function AnimalRecordPage() {
   const animals = useHerdStore((s) => s.animals);
   const treatments = useHerdStore((s) => s.treatments);
   const lots = useHerdStore((s) => s.lots);
+  const invernadas = useHerdStore((s) => s.invernadas);
+  const lotPlacements = useHerdStore((s) => s.lotPlacements);
 
   const animal = animalById(animals, params.id);
 
@@ -65,6 +67,12 @@ export default function AnimalRecordPage() {
   const derived = withStatus([animal], treatments, todayISO())[0];
   const forAnimal = animalTreatments(treatments, animal.earTag);
   const lot = lots.find((l) => l.id === animal.lotId) ?? null;
+  const placement = lotPlacements.find(
+    (item) => item.lotId === animal.lotId && item.endedOn === undefined
+  );
+  const invernada = placement
+    ? invernadas.find((item) => item.id === placement.invernadaId) ?? null
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 md:px-8">
@@ -73,7 +81,15 @@ export default function AnimalRecordPage() {
         <EditAnimalDialog animal={animal} />
       </div>
 
-      <AnimalHeader derived={derived} lotName={lot?.name ?? null} />
+      <AnimalHeader
+        derived={derived}
+        lotName={lot?.name ?? null}
+        invernadaName={
+          invernada
+            ? `${invernada.code}${invernada.name ? ` · ${invernada.name}` : ""}`
+            : null
+        }
+      />
 
       <WeightEvolution animal={animal} adg={derived.adg} />
 

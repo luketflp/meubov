@@ -1,9 +1,9 @@
 /**
- * Pasture geometry — pure functions over the outline of a lot.
+ * Pasture geometry — pure functions over the outline of an invernada.
  *
  * A ring is OPEN and in GeoJSON axis order: `[lng, lat]` pairs, the first point
- * NOT repeated at the end. That is the contract of `Lot.boundary` and of the
- * `lots.boundary` jsonb column, and every conversion in and out of it belongs
+ * NOT repeated at the end. That is the contract of `Invernada.boundary` and of
+ * the `invernadas.boundary` jsonb column, and every conversion in and out of it belongs
  * here — Leaflet speaks `[lat, lng]`, and the inversion silently produces a
  * plausible polygon in the wrong hemisphere when it is done by hand.
  *
@@ -28,6 +28,8 @@ export const COORD_DECIMALS = 6;
 const MAX_LNG = 180;
 const MAX_LAT = 90;
 const SQUARE_METERS_PER_HECTARE = 10_000;
+/** Below the precision of a six-decimal-coordinate pasture outline. */
+const MIN_PLANAR_DOUBLE_AREA = 1e-12;
 
 function isFinitePair(value: unknown): value is [number, number] {
   return (
@@ -106,7 +108,7 @@ export function closeRing(ring: Ring): Ring {
  * without throwing. Invalid rings return 0 rather than a fabricated number.
  *
  * Known bias: turf integrates on a sphere of mean radius, which overstates
- * area by ~0.3% at Uberaba's latitude. Cosmetic at the scale of a lot; an
+ * area by ~0.3% at Uberaba's latitude. Cosmetic at the scale of an invernada; an
  * ellipsoidal correction is the fix if that ever stops being true.
  */
 export function ringAreaHectares(ring: Ring): number {
@@ -125,8 +127,26 @@ export function fromLatLngRing(positions: [number, number][]): Ring {
   return positions.map(([lat, lng]) => [lng, lat]);
 }
 
-/** True when segments ab and cd cross, endpoints excluded. */
-function segmentsCross(
+/** True when point p lies on the closed segment ab. */
+function pointOnSegment(
+  a: [number, number],
+  b: [number, number],
+  p: [number, number]
+): boolean {
+  const cross =
+    (b[0] - a[0]) * (p[1] - a[1]) -
+    (b[1] - a[1]) * (p[0] - a[0]);
+  if (Math.abs(cross) > MIN_PLANAR_DOUBLE_AREA) return false;
+  return (
+    p[0] >= Math.min(a[0], b[0]) &&
+    p[0] <= Math.max(a[0], b[0]) &&
+    p[1] >= Math.min(a[1], b[1]) &&
+    p[1] <= Math.max(a[1], b[1])
+  );
+}
+
+/** True when non-neighbouring segments cross, touch or overlap. */
+function segmentsIntersect(
   a: [number, number],
   b: [number, number],
   c: [number, number],
@@ -142,8 +162,13 @@ function segmentsCross(
   const d2 = cross(a, b, d);
   const d3 = cross(c, d, a);
   const d4 = cross(c, d, b);
-  // Strict signs only: touching endpoints are how a ring's segments connect.
-  return d1 * d2 < 0 && d3 * d4 < 0;
+  if (d1 * d2 < 0 && d3 * d4 < 0) return true;
+  return (
+    pointOnSegment(a, b, c) ||
+    pointOnSegment(a, b, d) ||
+    pointOnSegment(c, d, a) ||
+    pointOnSegment(c, d, b)
+  );
 }
 
 /**
@@ -151,7 +176,7 @@ function segmentsCross(
  * pasture: `@turf/area` measures its lobes against each other and can report
  * zero, so it must be rejected on the way in rather than displayed.
  *
- * O(n²) — fine for a hand-drawn lot, which is dozens of points, not
+ * O(n²) — fine for a hand-drawn invernada, which is dozens of points, not
  * thousands. Imported outlines must be simplified before they reach here.
  */
 export function isSelfIntersecting(ring: Ring): boolean {
@@ -161,10 +186,51 @@ export function isSelfIntersecting(ring: Ring): boolean {
     // Skip the neighbour (shares a vertex) and, for i = 0, the closing segment.
     const last = i === 0 ? segments - 1 : segments;
     for (let j = i + 2; j < last; j++) {
-      if (segmentsCross(closed[i], closed[i + 1], closed[j], closed[j + 1])) {
+      if (
+        segmentsIntersect(closed[i], closed[i + 1], closed[j], closed[j + 1])
+      ) {
         return true;
       }
     }
   }
   return false;
+}
+
+/**
+ * Shoelace area in coordinate space, translated near zero for stable math.
+ * Turf's spherical calculation can report a tiny positive residue for points
+ * on one straight latitude, so it cannot by itself identify degenerate rings.
+ */
+function hasPlanarArea(ring: Ring): boolean {
+  const [originLng, originLat] = ring[0];
+  let doubleArea = 0;
+  for (let index = 0; index < ring.length; index += 1) {
+    const current = ring[index];
+    const next = ring[(index + 1) % ring.length];
+    const currentLng = current[0] - originLng;
+    const currentLat = current[1] - originLat;
+    const nextLng = next[0] - originLng;
+    const nextLat = next[1] - originLat;
+    doubleArea += currentLng * nextLat - nextLng * currentLat;
+  }
+  return Math.abs(doubleArea) > MIN_PLANAR_DOUBLE_AREA;
+}
+
+/**
+ * True when a ring is safe to persist as a physical pasture outline.
+ *
+ * Shape/range validation alone still accepts three collinear points and some
+ * repeated-point traces. Normalizing first and requiring a positive measured
+ * area keeps those zero-area "fences" out of both the map and the database.
+ */
+export function isUsableRing(value: unknown): value is Ring {
+  if (!isValidRing(value)) return false;
+  const ring = normalizeRing(value);
+  const uniqueVertices = new Set(ring.map(([lng, lat]) => `${lng},${lat}`));
+  return (
+    isValidRing(ring) &&
+    uniqueVertices.size === ring.length &&
+    !isSelfIntersecting(ring) &&
+    hasPlanarArea(ring)
+  );
 }

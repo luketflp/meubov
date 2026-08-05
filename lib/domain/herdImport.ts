@@ -14,6 +14,11 @@
 import type { Category, CustomCategory, Sex } from "@/lib/types";
 import { CATEGORY_LABEL } from "@/lib/domain/labels";
 import { toISO } from "@/lib/domain/dates";
+import {
+  resolveImportLocations,
+  type ExistingImportLot,
+  type ImportLocationInvernada,
+} from "@/lib/domain/importLocations";
 
 /** Max rows accepted in a single import (mirrored by the API `maxItems`). */
 export const MAX_IMPORT_ROWS = 2000;
@@ -30,6 +35,7 @@ export type ImportField =
   | "sex"
   | "birthDate"
   | "lot"
+  | "invernada"
   | "weightKg";
 
 /** Columns that must be present (a header must map to each). */
@@ -39,6 +45,7 @@ const REQUIRED_FIELDS: readonly ImportField[] = [
   "breed",
   "birthDate",
   "lot",
+  "invernada",
 ];
 
 /** pt-BR label of each field, for headers and error messages. */
@@ -49,6 +56,7 @@ export const FIELD_LABEL: Record<ImportField, string> = {
   sex: "Sexo",
   birthDate: "Nascimento",
   lot: "Lote",
+  invernada: "Invernada",
   weightKg: "Peso",
 };
 
@@ -73,9 +81,10 @@ const HEADER_SYNONYMS: Record<string, ImportField> = {
   "data de nascimento": "birthDate",
   "data nascimento": "birthDate",
   "data de nasc": "birthDate",
-  pasto: "lot",
   lote: "lot",
-  "pasto lote": "lot",
+  invernada: "invernada",
+  pasto: "invernada",
+  piquete: "invernada",
   peso: "weightKg",
   "peso kg": "weightKg",
   "peso atual": "weightKg",
@@ -90,6 +99,11 @@ export function normalizeHeader(raw: string): string {
     .replace(/[().]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** Resolves a spreadsheet header to its canonical import field, when known. */
+export function importFieldForHeader(raw: string): ImportField | undefined {
+  return HEADER_SYNONYMS[normalizeHeader(raw)];
 }
 
 /* -------------------------------------------------------------------------- */
@@ -249,6 +263,8 @@ export interface ImportAnimalPayload {
   birthDate: string;
   /** Lot NAME; the server resolves it to a lot id (creating it if new). */
   lot: string;
+  /** Fixed invernada CODE where the logical lot must currently be placed. */
+  invernada: string;
   weightKg?: number;
 }
 
@@ -316,12 +332,27 @@ export function buildImportRows(
   // Map header cells to columns (first occurrence of each field wins).
   const columns: Partial<Record<ImportField, number>> = {};
   matrix[0].forEach((cell, index) => {
-    const field = HEADER_SYNONYMS[normalizeHeader(cellText(cell))];
+    const field = importFieldForHeader(cellText(cell));
     if (field && columns[field] === undefined) columns[field] = index;
   });
 
   const missing = REQUIRED_FIELDS.filter((f) => columns[f] === undefined);
   if (missing.length) {
+    const hasLegacyCombinedLocation = matrix[0].some((cell) => {
+      const header = normalizeHeader(cellText(cell));
+      return header === "pasto/lote" || header === "pasto lote";
+    });
+    if (
+      hasLegacyCombinedLocation &&
+      (missing.includes("lot") || missing.includes("invernada"))
+    ) {
+      return {
+        headerError:
+          'Separe a antiga coluna "Pasto/Lote" em duas colunas: "Lote" (grupo de animais) e "Invernada" (código da área física).',
+        rows: [],
+        counts: empty,
+      };
+    }
     return {
       headerError: `Colunas obrigatórias ausentes: ${missing
         .map((f) => FIELD_LABEL[f])
@@ -365,6 +396,7 @@ export function buildImportRows(
       sex: cellText(at(row, "sex")),
       birthDate: cellText(at(row, "birthDate")),
       lot: cellText(at(row, "lot")),
+      invernada: cellText(at(row, "invernada")),
       weightKg: cellText(at(row, "weightKg")),
     };
     const errors: Partial<Record<ImportField, string>> = {};
@@ -400,6 +432,7 @@ export function buildImportRows(
     }
 
     if (cells.lot === "") errors.lot = "Informe o lote.";
+    if (cells.invernada === "") errors.invernada = "Informe a invernada.";
 
     let weightKg: number | undefined;
     if (cells.weightKg !== "") {
@@ -433,6 +466,7 @@ export function buildImportRows(
         sex: sex as Sex,
         birthDate: birthDate as string,
         lot: cells.lot,
+        invernada: cells.invernada,
         weightKg,
       };
     }
@@ -443,6 +477,80 @@ export function buildImportRows(
   });
 
   return { rows, counts };
+}
+
+/**
+ * Adds farm-aware location validation to a syntactically parsed preview.
+ * Unknown fixed codes and lot/location conflicts are marked on every affected
+ * row before the user can confirm; the server repeats the same validation as
+ * the transactional authority.
+ */
+export function validateImportRowLocations(
+  result: ImportParseResult,
+  existingLots: readonly ExistingImportLot[],
+  invernadas: readonly ImportLocationInvernada[]
+): ImportParseResult {
+  if (result.headerError) return result;
+  const candidates = result.rows.flatMap((row) =>
+    row.status === "ok" && row.payload ? [row.payload] : []
+  );
+  if (candidates.length === 0) return result;
+
+  // The server resolver intentionally fails fast on unknown codes. The preview
+  // must go further: after excluding those already-invalid rows, validate the
+  // remainder again so an independent lot conflict cannot survive as "ok" and
+  // fail only after the user confirms the import.
+  const missingCodes = new Set<string>();
+  const conflictingLots = new Set<string>();
+  let remaining = candidates;
+  while (remaining.length > 0) {
+    const resolution = resolveImportLocations(
+      remaining,
+      existingLots,
+      invernadas
+    );
+    if (resolution.ok) break;
+
+    if (resolution.error === "invernada_not_found") {
+      for (const code of resolution.codes) missingCodes.add(code);
+      const codes = new Set(resolution.codes);
+      remaining = remaining.filter((row) => !codes.has(row.invernada));
+    } else {
+      for (const lot of resolution.lots) conflictingLots.add(lot);
+      const lots = new Set(resolution.lots);
+      remaining = remaining.filter((row) => !lots.has(row.lot));
+    }
+  }
+
+  if (missingCodes.size === 0 && conflictingLots.size === 0) return result;
+
+  let changed = 0;
+  const rows = result.rows.map((row): ImportRow => {
+    if (row.status !== "ok" || !row.payload) return row;
+    const message = missingCodes.has(row.payload.invernada)
+      ? "Código de invernada não cadastrado."
+      : conflictingLots.has(row.payload.lot)
+        ? "Este lote está ou aparece em outra invernada."
+        : null;
+    if (message === null) return row;
+    changed += 1;
+    return {
+      ...row,
+      status: "error",
+      errors: { ...row.errors, invernada: message },
+      payload: undefined,
+    };
+  });
+
+  return {
+    ...result,
+    rows,
+    counts: {
+      ...result.counts,
+      ok: result.counts.ok - changed,
+      error: result.counts.error + changed,
+    },
+  };
 }
 
 /** Payloads of the rows worth sending (status "ok"). */
@@ -464,6 +572,7 @@ export const TEMPLATE_HEADERS = [
   "sexo",
   "nascimento",
   "lote",
+  "invernada",
   "peso",
 ] as const;
 
@@ -474,6 +583,6 @@ export const TEMPLATE_HEADERS = [
  */
 export function buildTemplateCsv(): string {
   const header = TEMPLATE_HEADERS.join(",");
-  const example = "BR-1042,Novilha,Nelore,,15/03/2023,Lote 1,320";
+  const example = "BR-1042,Novilha,Nelore,,15/03/2023,Lote 1,01,320";
   return `﻿${header}\n${example}\n`;
 }

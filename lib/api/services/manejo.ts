@@ -31,7 +31,12 @@ import type {
 } from "@/lib/types";
 import type { ManejoPassData, NewManejoSession } from "@/lib/store/useHerdStore";
 import { buildPassEffects, sessionName } from "@/lib/domain/manejo";
-import { insertAnimal, type NewAnimalInput } from "@/lib/api/services/animals";
+import {
+  insertAnimal,
+  validateLotAssignment,
+  type LotAssignmentError,
+  type NewAnimalInput,
+} from "@/lib/api/services/animals";
 import {
   toManejoPlan,
   toManejoSession,
@@ -84,12 +89,13 @@ const conflict = (code: ManejoConflict): { conflict: ManejoConflict } => ({
  *
  * An entry session opens EMPTY on purpose: the animals it registers do not
  * exist yet and join the herd one by one, as the truck unloads at the curral
- * (see `registerEntryAnimal`).
+ * (see `registerEntryAnimal`). Any destination is resolved inside this farm
+ * before the session row is written.
  */
 export async function startSession(
   farmId: number,
   input: NewManejoSession
-): Promise<ManejoSession | null> {
+): Promise<ManejoSession | LotAssignmentError | null> {
   return db.transaction(async (tx) => {
     const herd =
       input.earTags.length === 0
@@ -100,6 +106,11 @@ export async function startSession(
             .where(and(eq(animals.farmId, farmId), inArray(animals.earTag, input.earTags)));
     const idByEarTag = new Map(herd.map((a) => [a.earTag, a.id]));
     if (input.earTags.some((earTag) => !idByEarTag.has(earTag))) return null;
+
+    if (input.destinationLotId !== undefined) {
+      const lotError = await validateLotAssignment(tx, farmId, input.destinationLotId);
+      if (lotError) return lotError;
+    }
 
     const plan: ManejoTreatmentPlan | undefined = input.treatment;
     const [sessionRow] = await tx
@@ -197,7 +208,9 @@ export async function completeAnimal(
   sessionId: string,
   animalId: string,
   data: ManejoPassData
-): Promise<CompleteResult | { conflict: ManejoConflict } | null> {
+): Promise<
+  CompleteResult | { conflict: ManejoConflict } | LotAssignmentError | null
+> {
   return db.transaction(async (tx) => {
     const { session, entry, animal } = await lockEntry(tx, farmId, sessionId, animalId);
     if (!session || !entry || !animal) return null;
@@ -216,6 +229,11 @@ export async function completeAnimal(
       },
       data
     );
+
+    if (effects.lotId !== undefined) {
+      const lotError = await validateLotAssignment(tx, farmId, effects.lotId);
+      if (lotError) return lotError;
+    }
 
     const createdTreatments: Treatment[] = [];
     let treatmentId: string | undefined;
@@ -303,13 +321,20 @@ export async function completeAnimal(
  * Registers one animal arriving in an entry session (compra). The animal joins
  * the herd in the session's destination lot and its chute entry is already
  * done — it passed as it was tagged. Returns null when the session is not an
- * open entry, and "duplicate" when the ear tag is already in use on the farm.
+ * open entry, "duplicate" when the ear tag is already in use on the farm, and
+ * `lot_not_found` for an invalid/legacy cross-farm destination.
  */
 export async function registerEntryAnimal(
   farmId: number,
   sessionId: string,
   input: Omit<NewAnimalInput, "lotId"> & { notes?: string }
-): Promise<EntryResult | "duplicate" | { conflict: ManejoConflict } | null> {
+): Promise<
+  | EntryResult
+  | "duplicate"
+  | { conflict: ManejoConflict }
+  | LotAssignmentError
+  | null
+> {
   return db.transaction(async (tx) => {
     const [session] = await tx
       .select()
@@ -333,6 +358,7 @@ export async function registerEntryAnimal(
       lotId: session.destinationLotId,
       initialWeightDate: session.date,
     });
+    if (animal === "lot_not_found") return animal;
 
     const [animalRow] = await tx
       .select({ id: animals.id })
@@ -397,13 +423,18 @@ export async function reopenAnimal(
   farmId: number,
   sessionId: string,
   animalId: string
-): Promise<ReopenResult | { conflict: ManejoConflict } | null> {
+): Promise<ReopenResult | { conflict: ManejoConflict } | LotAssignmentError | null> {
   return db.transaction(async (tx) => {
     const { session, entry, animal } = await lockEntry(tx, farmId, sessionId, animalId);
     if (!session || !entry || !animal) return null;
     if (session.status !== "open") return conflict("session_not_open");
     if (entry.outcome === "pending") return conflict("entry_not_actionable");
     const earTag = animal.earTag;
+
+    if (entry.previousLotId !== null) {
+      const lotError = await validateLotAssignment(tx, farmId, entry.previousLotId);
+      if (lotError) return lotError;
+    }
 
     // An entry pass CREATED the animal, so undoing it removes the registration
     // altogether (weighings and the chute entry cascade with it).

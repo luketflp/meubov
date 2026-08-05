@@ -2,13 +2,14 @@
 
 /**
  * Farm satellite map: Esri World Imagery tiles with one translucent polygon per
- * lot, colored by stocking-rate classification — the same semantics as the
+ * invernada, colored by the combined stocking-rate classification of the lots
+ * currently placed there — the same semantics as the
  * StatusPill (alta/boa/folgada), so color = state. Tapping a polygon opens the
- * summary panel with the lot's numbers and shortcuts into the manejo flows.
+ * summary panel with the physical area's numbers and its occupying lots.
  *
  * Also the drawing surface: this component owns the draw state machine and
  * delegates to MapToolbar (controls), DrawLayer (the trace in progress) and
- * SaveBoundaryDialog (assigning a closed ring to a lot). Nothing is persisted
+ * SaveBoundaryDialog (assigning a closed ring to an invernada). Nothing is persisted
  * until the farmer confirms.
  *
  * Client-only: Leaflet touches `window`, so the page imports this component
@@ -33,9 +34,13 @@ import {
 import "leaflet/dist/leaflet.css";
 import { Fence } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
-import { lotsWithSummary, type LotWithSummary } from "@/lib/store/selectors";
-import type { StockingRateClass } from "@/lib/types";
 import {
+  invernadasWithSummary,
+  type InvernadaWithSummary,
+} from "@/lib/store/selectors";
+import type { Invernada, StockingRateClass } from "@/lib/types";
+import {
+  isUsableRing,
   normalizeRing,
   ringAreaHectares,
   toLatLngRing,
@@ -51,6 +56,7 @@ import { kgToArroba } from "@/lib/domain/weights";
 import { SectionCard } from "@/components/ui/section-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusPill } from "@/components/ui/status-pill";
+import { Button } from "@/components/ui/button";
 
 /** Esri World Imagery — free satellite tiles with attribution, no API key. */
 const TILE_URL =
@@ -74,29 +80,52 @@ const CLASSIFICATION_LABEL: Record<StockingRateClass, string> = {
   light: "Folgada",
 };
 
-function LotPanel({ summary }: { summary: LotWithSummary }) {
-  const { lot, headCount, totalWeightKg, auPerHa, classification } = summary;
+interface PendingBoundary {
+  ring: Ring;
+  /** Target selected when the trace/coordinate flow began. */
+  initialTargetId?: string;
+  /** A drawn target offered only for deliberate coordinate replacement. */
+  replaceTargetId?: string;
+}
+
+function invernadaLabel(invernada: Pick<Invernada, "code" | "name">): string {
+  return invernada.name
+    ? `Invernada ${invernada.code} · ${invernada.name}`
+    : `Invernada ${invernada.code}`;
+}
+
+function InvernadaPanel({ summary }: { summary: InvernadaWithSummary }) {
+  const { invernada, lots, headCount, totalWeightKg, auPerHa, classification } = summary;
+  const lotNames = lots.map((lot) => lot.name).join(", ");
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="font-heading text-base font-semibold text-ink">{lot.name}</h3>
+        <h3 className="font-heading text-base font-semibold text-ink">
+          {invernadaLabel(invernada)}
+        </h3>
         <StatusPill status={classification} withDot />
       </div>
       <dl className="grid gap-1.5 text-sm sm:grid-cols-2">
         <div className="flex items-center justify-between gap-2 sm:justify-start">
           <dt className="text-ink-soft">Capim</dt>
-          <dd className="text-ink">{lot.grass}</dd>
+          <dd className="text-ink">{invernada.grass}</dd>
         </div>
         <div className="flex items-center justify-between gap-2 sm:justify-start">
           <dt className="text-ink-soft">Área</dt>
           <dd className="font-mono text-ink">
-            {formatNumber(lot.hectares)} ha
-            {lot.boundary ? (
+            {formatNumber(invernada.hectares)} ha
+            {invernada.boundary ? (
               <span className="text-xs text-ink-soft">
                 {" "}
-                · {formatNumber(ringAreaHectares(lot.boundary), 1)} ha no mapa
+                · {formatNumber(ringAreaHectares(invernada.boundary), 1)} ha no mapa
               </span>
             ) : null}
+          </dd>
+        </div>
+        <div className="flex items-start justify-between gap-2 sm:col-span-2 sm:justify-start">
+          <dt className="shrink-0 text-ink-soft">Lotes atuais</dt>
+          <dd className="text-right text-ink sm:text-left">
+            {lotNames === "" ? "Nenhum lote nesta invernada" : lotNames}
           </dd>
         </div>
         <div className="flex items-center justify-between gap-2 sm:justify-start">
@@ -121,38 +150,37 @@ function LotPanel({ summary }: { summary: LotWithSummary }) {
         >
           Ver lotes
         </Link>
-        <Link
-          href="/manejo"
-          className="inline-flex min-h-11 items-center text-sm font-medium text-brand hover:underline md:min-h-0"
-        >
-          Iniciar manejo
-        </Link>
       </div>
     </div>
   );
 }
 
 /**
- * One lot's outline. Split out and memoized so a selection, a toast or any
+ * One invernada's outline. Split out and memoized so a selection, a toast or any
  * unrelated store update stops rebuilding `positions` and `pathOptions` for
  * every polygon on the map — harmless while the map only reads, destructive
  * once an outline is being edited, since Leaflet would apply the rebuilt
  * positions over the trace in progress.
  */
-const LotPolygon = memo(function LotPolygon({
+const InvernadaPolygon = memo(function InvernadaPolygon({
   summary,
   isSelected,
   isDrawing,
   onSelect,
 }: {
-  summary: LotWithSummary & { lot: { boundary: [number, number][] } };
+  summary: InvernadaWithSummary & {
+    invernada: Invernada & { boundary: [number, number][] };
+  };
   isSelected: boolean;
-  /** While tracing, a tap on a lot is a vertex — never a selection. */
+  /** While tracing, a tap on an invernada is a vertex — never a selection. */
   isDrawing: boolean;
   onSelect: (id: string) => void;
 }) {
-  const { lot, classification } = summary;
-  const positions = useMemo(() => toLatLngRing(lot.boundary), [lot.boundary]);
+  const { invernada, lots, auPerHa, classification } = summary;
+  const positions = useMemo(
+    () => toLatLngRing(invernada.boundary),
+    [invernada.boundary]
+  );
   const pathOptions = useMemo(() => {
     const color = CLASSIFICATION_COLOR[classification];
     return {
@@ -169,20 +197,29 @@ const LotPolygon = memo(function LotPolygon({
       pathOptions={pathOptions}
       eventHandlers={{
         click: () => {
-          if (!isDrawing) onSelect(lot.id);
+          if (!isDrawing) onSelect(invernada.id);
         },
       }}
     >
-      <Tooltip direction="center" className="font-medium">
-        {lot.name}
+      <Tooltip direction="center" className="text-center">
+        <span className="block font-medium">{invernadaLabel(invernada)}</span>
+        <span className="block text-xs">
+          {lots.length === 0
+            ? "Sem lote"
+            : lots.map((lot) => lot.name).join(", ")}
+        </span>
+        <span className="block font-mono text-xs">
+          {formatNumber(auPerHa, 2)} UA/ha
+        </span>
       </Tooltip>
     </Polygon>
   );
 });
 
 /**
- * Keeps the viewport on the drawn lots. `MapContainer` reads `bounds` only at
- * mount, so without this the map never follows a lot being drawn or redrawn.
+ * Keeps the viewport on the drawn invernadas. `MapContainer` reads `bounds`
+ * only at mount, so without this the map never follows an area being drawn or
+ * redrawn.
  * Keyed by the serialized bounds: refitting on every render would fight the
  * user's own panning, and during a trace it would yank the map mid-gesture.
  */
@@ -215,22 +252,25 @@ function MapHandle({ mapRef }: { mapRef: React.RefObject<LeafletMap | null> }) {
 }
 
 export function FarmMap() {
+  const invernadas = useHerdStore((s) => s.invernadas);
   const lots = useHerdStore((s) => s.lots);
+  const lotPlacements = useHerdStore((s) => s.lotPlacements);
   const animals = useHerdStore((s) => s.animals);
   const farm = useHerdStore((s) => s.farm);
-  const updateLot = useHerdStore((s) => s.updateLot);
+  const updateInvernada = useHerdStore((s) => s.updateInvernada);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tilesFailed, setTilesFailed] = useState(false);
 
   /*
    * Draw state. `draft` is the trace in progress; `pending` is a closed ring
-   * waiting to be assigned to a lot. `redrawTarget` is set when the farmer is
-   * replacing the outline of a lot that already has one — that ring goes
-   * straight to its lot instead of through the dialog.
+   * waiting to be assigned to an invernada. `redrawTarget` is set when the
+   * farmer is replacing an existing outline — that ring goes straight to its
+   * invernada instead of through the dialog.
    */
   const [draft, setDraft] = useState<Ring | null>(null);
-  const [pending, setPending] = useState<Ring | null>(null);
+  const [pending, setPending] = useState<PendingBoundary | null>(null);
   const [redrawTarget, setRedrawTarget] = useState<string | null>(null);
+  const [redrawSaving, setRedrawSaving] = useState(false);
   const [typingCoordinates, setTypingCoordinates] = useState(false);
   const isDrawing = draft !== null;
 
@@ -268,21 +308,40 @@ export function FarmMap() {
 
   const finishDraw = useCallback(async () => {
     const ring = normalizeRing(draft ?? []);
-    setDraft(null);
-    if (redrawTarget === null) {
-      setPending(ring);
+    if (!isUsableRing(ring)) {
+      // Keep the trace visible. The toolbar explains whether unique points are
+      // missing or the fence crosses itself.
+      setDraft(ring);
       return;
     }
-    // Replacing a known lot's outline needs no dialog — the target is known.
+    setDraft(null);
+    if (redrawTarget === null) {
+      const initialTargetId =
+        selectedId !== null &&
+        invernadas.some(
+          (invernada) =>
+            invernada.id === selectedId && invernada.boundary === undefined
+        )
+          ? selectedId
+          : undefined;
+      setPending({ ring, initialTargetId });
+      return;
+    }
+    // Replacing a known invernada's outline needs no dialog — the target is known.
     const target = redrawTarget;
     setRedrawTarget(null);
+    setRedrawSaving(true);
     try {
-      await updateLot(target, { boundary: ring });
+      await updateInvernada(target, { boundary: ring });
     } catch {
-      // The store already raised the toast; the ring is gone either way, so
-      // the honest recovery is to draw it again.
+      // Keep the completed trace available after a transient failure so the
+      // farmer can retry without walking or drawing the fence again.
+      setRedrawTarget(target);
+      setDraft(ring);
+    } finally {
+      setRedrawSaving(false);
     }
-  }, [draft, redrawTarget, updateLot]);
+  }, [draft, invernadas, redrawTarget, selectedId, updateInvernada]);
 
   /*
    * One memo for all three derivations: deriving them with bare `.filter()`
@@ -290,36 +349,53 @@ export function FarmMap() {
    * memo below and re-pushed `positions` into every polygon.
    */
   const { summaries, withBoundary, withoutBoundary, bounds } = useMemo(() => {
-    const all = lotsWithSummary(lots, animals);
+    const all = invernadasWithSummary(invernadas, lots, lotPlacements, animals);
     const drawn = all.filter(
-      (s): s is LotWithSummary & { lot: { boundary: [number, number][] } } =>
-        s.lot.boundary !== undefined
+      (s): s is InvernadaWithSummary & {
+        invernada: Invernada & { boundary: [number, number][] };
+      } => s.invernada.boundary !== undefined
     );
-    const points = drawn.flatMap((s) => toLatLngRing(s.lot.boundary));
+    const points = drawn.flatMap((s) => toLatLngRing(s.invernada.boundary));
     return {
       summaries: all,
       withBoundary: drawn,
-      withoutBoundary: all.filter((s) => s.lot.boundary === undefined),
+      withoutBoundary: all.filter((s) => s.invernada.boundary === undefined),
       bounds: points.length > 0 ? latLngBounds(points).pad(0.15) : null,
     };
-  }, [lots, animals]);
+  }, [invernadas, lots, lotPlacements, animals]);
 
-  const selected = summaries.find((s) => s.lot.id === selectedId) ?? null;
+  const selected = summaries.find((s) => s.invernada.id === selectedId) ?? null;
 
   const center: LatLngExpression = farm.headquarters
     ? [farm.headquarters.lat, farm.headquarters.lng]
     : FALLBACK_CENTER;
 
-  const undrawnLots = useMemo(
-    () => withoutBoundary.map((s) => s.lot),
+  const undrawnInvernadas = useMemo(
+    () => withoutBoundary.map((s) => s.invernada),
     [withoutBoundary]
   );
+  const boundaryTargets = (() => {
+    if (!pending?.replaceTargetId) return undrawnInvernadas;
+    const replacement = invernadas.find(
+      (invernada) => invernada.id === pending.replaceTargetId
+    );
+    return replacement
+      ? [
+          replacement,
+          ...undrawnInvernadas.filter(
+            (invernada) => invernada.id !== replacement.id
+          ),
+        ]
+      : undrawnInvernadas;
+  })();
 
   async function onClearBoundary() {
     if (!selected) return;
-    if (!window.confirm(`Apagar o contorno de ${selected.lot.name}?`)) return;
+    if (!window.confirm(`Apagar o contorno de ${invernadaLabel(selected.invernada)}?`)) {
+      return;
+    }
     try {
-      await updateLot(selected.lot.id, { boundary: null });
+      await updateInvernada(selected.invernada.id, { boundary: null });
     } catch {
       // Store already surfaced the failure.
     }
@@ -332,9 +408,10 @@ export function FarmMap() {
 
       <MapToolbar
         isDrawing={isDrawing}
+        disabled={redrawSaving}
         draft={draft ?? []}
-        selectedName={selected?.lot.name ?? null}
-        selectedHasBoundary={selected?.lot.boundary !== undefined}
+        selectedName={selected ? invernadaLabel(selected.invernada) : null}
+        selectedHasBoundary={selected?.invernada.boundary !== undefined}
         onStartDraw={() => {
           setRedrawTarget(null);
           setDraft([]);
@@ -342,7 +419,7 @@ export function FarmMap() {
         onTypeCoordinates={() => setTypingCoordinates(true)}
         onRedraw={() => {
           if (!selected) return;
-          setRedrawTarget(selected.lot.id);
+          setRedrawTarget(selected.invernada.id);
           setDraft([]);
         }}
         onClearBoundary={onClearBoundary}
@@ -351,13 +428,57 @@ export function FarmMap() {
         onCancel={cancelDraw}
       />
 
+      {summaries.length > 0 ? (
+        <section
+          aria-labelledby="invernada-map-selector-title"
+          className="flex flex-col gap-2 rounded-lg border border-hairline bg-panel px-3 py-2 sm:flex-row sm:items-center"
+        >
+          <h2
+            id="invernada-map-selector-title"
+            className="shrink-0 text-sm font-medium text-ink"
+          >
+            Selecionar invernada
+          </h2>
+          <ul className="flex flex-wrap gap-2">
+            {summaries.map(({ invernada }) => {
+              const isSelected = invernada.id === selectedId;
+              return (
+                <li key={invernada.id}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={isSelected ? "default" : "outline"}
+                    aria-pressed={isSelected}
+                    aria-controls="selected-invernada-summary"
+                    disabled={redrawSaving || isDrawing}
+                    onClick={() => setSelectedId(invernada.id)}
+                    className="min-h-11 max-w-full whitespace-normal"
+                  >
+                    {invernadaLabel(invernada)}
+                    {invernada.boundary ? null : (
+                      <span className="text-xs opacity-75">· sem contorno</span>
+                    )}
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+
+      {redrawSaving ? (
+        <p role="status" className="text-sm text-ink-soft">
+          Salvando o novo contorno…
+        </p>
+      ) : null}
+
       {tilesFailed ? (
         <p
           role="status"
           className="rounded-lg bg-attention-soft px-3 py-2 text-sm text-attention"
         >
           As imagens de satélite não carregaram. Verifique a conexão — os
-          contornos e os números dos lotes continuam corretos.
+          contornos e os códigos das invernadas continuam corretos.
         </p>
       ) : null}
 
@@ -387,7 +508,7 @@ export function FarmMap() {
           />
           <MapHandle mapRef={mapRef} />
           {/* Refitting mid-trace would yank the map out from under the tap. */}
-          {isDrawing ? null : <FitBounds bounds={bounds} />}
+          {isDrawing || redrawSaving ? null : <FitBounds bounds={bounds} />}
           {/* CircleMarker, not Marker: Leaflet's default icon assets don't
               survive bundling, and a dot is enough to anchor the eye. */}
           {searchedPlace ? (
@@ -400,11 +521,11 @@ export function FarmMap() {
             </CircleMarker>
           ) : null}
           {withBoundary.map((summary) => (
-            <LotPolygon
-              key={summary.lot.id}
+            <InvernadaPolygon
+              key={summary.invernada.id}
               summary={summary}
-              isSelected={summary.lot.id === selectedId}
-              isDrawing={isDrawing}
+              isSelected={summary.invernada.id === selectedId}
+              isDrawing={isDrawing || redrawSaving}
               onSelect={setSelectedId}
             />
           ))}
@@ -426,15 +547,25 @@ export function FarmMap() {
         onOpenChange={setTypingCoordinates}
         onParsed={(ring) => {
           setTypingCoordinates(false);
-          setPending(ring);
+          const selectedTarget = invernadas.find(
+            (invernada) => invernada.id === selectedId
+          );
+          setPending({
+            ring,
+            initialTargetId: selectedTarget?.id,
+            replaceTargetId: selectedTarget?.boundary
+              ? selectedTarget.id
+              : undefined,
+          });
         }}
       />
 
       {/* Mounted per trace, so each one opens on a clean form. */}
       {pending ? (
         <SaveBoundaryDialog
-          ring={pending}
-          undrawnLots={undrawnLots}
+          ring={pending.ring}
+          targetInvernadas={boundaryTargets}
+          initialTargetId={pending.initialTargetId}
           onSaved={() => setPending(null)}
           onCancel={() => setPending(null)}
         />
@@ -453,26 +584,30 @@ export function FarmMap() {
             {CLASSIFICATION_LABEL[c]}
           </span>
         ))}
-        <span className="ml-auto">Cor do lote = taxa de lotação (UA/ha)</span>
+        <span className="ml-auto">
+          Cor da invernada = lotação combinada dos lotes (UA/ha)
+        </span>
       </div>
 
-      <SectionCard title="Lote selecionado">
-        {selected ? (
-          <LotPanel summary={selected} />
-        ) : (
-          <EmptyState
-            icon={Fence}
-            title="Toque em um lote no mapa"
-            description="O resumo de ocupação do lote aparece aqui."
-          />
-        )}
-      </SectionCard>
+      <div id="selected-invernada-summary" aria-live="polite">
+        <SectionCard title="Invernada selecionada">
+          {selected ? (
+            <InvernadaPanel summary={selected} />
+          ) : (
+            <EmptyState
+              icon={Fence}
+              title="Selecione uma invernada"
+              description="Use o mapa ou a lista acima para ver os lotes atuais e o resumo de ocupação."
+            />
+          )}
+        </SectionCard>
+      </div>
 
       {withoutBoundary.length > 0 ? (
         <p className="text-xs text-ink-soft">
           Sem contorno no mapa:{" "}
-          {withoutBoundary.map((s) => s.lot.name).join(", ")}. Use “Desenhar
-          lote” para marcar a cerca.
+          {withoutBoundary.map((s) => invernadaLabel(s.invernada)).join(", ")}. Use
+          “Desenhar invernada” para marcar a cerca.
         </p>
       ) : null}
     </div>

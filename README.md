@@ -34,10 +34,11 @@ Ferramenta de **gestão de rebanho bovino de corte** para o produtor ou gerente 
 - **Rebanho** — lista com busca, filtros (categoria, lote, status) e ordenação por qualquer coluna.
 - **Ficha do animal** — identificação, evolução de peso com registro de pesagem, linha do tempo, histórico sanitário e ficha reprodutiva das fêmeas (registro de cobertura, diagnóstico de gestação e parto — o bezerro entra no rebanho junto).
 - **Calendário Sanitário** — visão mensal de tratamentos agendados e atrasados, com destaque para a campanha de aftosa.
-- **Manejo** — sessões de curral: vacina, vermifugação, medicação, exame, pesagem e também **transferência, venda e entrada (compra)**. Os animais passam um a um no brete, a sessão fica salva e pode ser retomada, e cada passagem pode ser desfeita.
-- **Lotes** — cards por lote com ocupação e taxa de lotação (UA/ha) e cadastro de novos lotes.
+- **Manejo** — sessões de curral: vacina, vermifugação, medicação, exame, pesagem e também **troca de lote, venda e entrada (compra)**. Os animais passam um a um no brete, a sessão fica salva e pode ser retomada, e cada passagem pode ser desfeita.
+- **Lotes** — grupos lógicos de animais, com a invernada atual, movimentação do lote inteiro e histórico das invernadas ocupadas.
+- **Mapa** — invernadas físicas fixas, com código, contorno, lotes ocupantes e taxa de lotação combinada (UA/ha).
 - **Financeiro** — indicadores da pecuária de corte (preço da @, valor do rebanho, margens, relação de troca) com gráficos. Receitas vêm das vendas com valor, custos das despesas lançadas + tratamentos com custo; a cotação da arroba é real (Scot Consultoria + histórico IPEADATA).
-- **Configurações** — dados da fazenda, categorias, raças, lotes e protocolos sanitários (que geram a agenda).
+- **Configurações** — dados da fazenda, categorias, raças, invernadas e protocolos sanitários (que geram a agenda).
 
 ## Stack
 
@@ -84,7 +85,7 @@ copie de `.env.example` se necessário):
 DATABASE_URL="postgresql://meubov:meubov@localhost:5433/meubov"
 ```
 
-O rebanho é **persistido no Postgres** e servido pela API do rebanho (Elysia em `/api/herd`). O gerador determinístico de semente fixa (`lib/data/seed.ts`) continua existindo como dado de demonstração: `pnpm db:seed --email <usuário>` insere a Fazenda Boa Vista completa para um usuário já cadastrado (`--force` apaga as fazendas dele e re-semeia). A data de "hoje" segue ancorada em **2026-07-24** (`TODAY_ISO` em `lib/domain/dates.ts`), mantendo status, GMD e agenda estáveis.
+O rebanho é **persistido no Postgres** e servido pela API do rebanho (Elysia em `/api/herd`). O gerador determinístico de semente fixa (`lib/data/seed.ts`) continua existindo como dado de demonstração: `pnpm db:seed --email <usuário>` insere a Fazenda Boa Vista completa para um usuário já cadastrado (`--force` apaga as fazendas dele e re-semeia). O dado de demonstração é ancorado em **2026-07-24** (`SEED_TODAY_ISO` em `lib/data/seed.ts`); o aplicativo usa a data real da fazenda em `America/Sao_Paulo`.
 
 O modelo é **multi-fazenda**: um usuário pode participar de várias fazendas (`farm_users`); todas as tabelas do rebanho são escopadas por `farm_id`. No primeiro acesso de um usuário sem fazenda, uma fazenda vazia é criada automaticamente.
 
@@ -187,7 +188,7 @@ lib/domain  →  lib/repository  →  lib/store (zustand)  →  telas (app + com
 
 A camada de dados real vive em **[Elysia](https://elysiajs.com)**, montado no route handler `app/api/herd/[[...slugs]]/route.ts` (Next 16 entrega `Request` padrão Web, que o `herdApi.handle()` consome direto).
 
-- **App e rotas:** `lib/api/app.ts` — leitura (`GET /api/herd`) e todas as mutações (animais, pesagens, tratamentos, reprodução, manejo — inclusive compras, vendas e transferências —, raças, lotes, fazenda, protocolos), validadas com TypeBox (`lib/api/models.ts`).
+- **App e rotas:** `lib/api/app.ts` — leitura (`GET /api/herd`) e todas as mutações (animais, pesagens, tratamentos, reprodução, manejo, raças, lotes, invernadas, posicionamentos, fazenda e protocolos), validadas com TypeBox (`lib/api/models.ts`).
 - **Contexto de fazenda:** `lib/api/plugins/farm.ts` resolve sessão (Better Auth) + fazenda ativa; usuário sem fazenda ganha uma automaticamente (`lib/api/services/onboarding.ts`).
 - **Serviços:** `lib/api/services/*` — consultas/transações Drizzle escopadas por `farm_id`; o manejo roda cada passagem em transação com lock (`FOR UPDATE`), impedindo passagem dupla no brete.
 - **Cliente:** `lib/api/client.ts` usa **Eden Treaty** (`treaty<HerdApi>`), com tipos ponta a ponta derivados do próprio app Elysia (import apenas de tipo). O store (`useHerdStore`) chama a API e mescla a resposta no estado; `ApiHerdRepository` faz a carga inicial.
@@ -198,12 +199,19 @@ A camada de dados real vive em **[Elysia](https://elysiajs.com)**, montado no ro
 
 **Movimentações derivadas** — compra, venda e transferência não são mais digitadas: são **sessões de manejo** (`kind` = `entry` / `sale` / `transfer`) em que cada animal passa no brete. O razão de entradas e saídas (`Movement[]`) é uma **projeção** dessas sessões (`lib/domain/movements.ts`), então quantidade e categoria sempre vêm dos animais reais — nunca de um campo de formulário. A venda pode ser precificada por **R$/@** (valor de cada animal = peso na balança em arrobas × preço) ou por um **valor fechado** do lote. Linhas antigas da tela "Registrar movimentação" continuam no razão como histórico legado.
 
+**Lote ≠ invernada** — o lote é o grupo de animais e continua sendo a
+referência de cada cabeça. A invernada é a área física, com código fixo,
+capim, hectares e contorno. `LotPlacement[]` registra, por data, em qual
+invernada cada lote está; mais de um lote pode ocupar a mesma invernada.
+
 ## Testes
 
-Os testes (Vitest) cobrem a camada de domínio e o seed — o que dá para verificar de forma determinística:
+Os testes (Vitest) cobrem regras puras de domínio, integrações de dados, o seed e seletores do store:
 
 - **`lib/domain/__tests__`** — datas sem erro de fuso, formatação pt-BR, GMD, derivação de status (limite de 30 dias, diagnóstico pendente), lotação (limites UA/ha), previsão de parto (+283 dias) e a matemática financeira.
-- **`lib/data/__tests__/seed.test.ts`** — determinismo do gerador, integridade referencial (todo tratamento/parto aponta para animal existente) e as contagens esperadas do rebanho.
+- **`lib/data/__tests__`** — fontes de cotação, determinismo do gerador, integridade referencial e as contagens esperadas do rebanho.
+- **`lib/store/__tests__`** — seletores de lotes, invernadas, ocupação e taxa de lotação.
+- **`lib/api/services/__tests__`** — helpers isolados da camada de serviço; as transações ainda precisam de testes com Postgres.
 
 ```bash
 pnpm test

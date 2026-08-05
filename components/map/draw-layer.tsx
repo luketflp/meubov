@@ -11,11 +11,16 @@
  */
 import { useEffect } from "react";
 import { CircleMarker, Polygon, Polyline, useMap, useMapEvents } from "react-leaflet";
-import { MIN_RING_VERTICES, toLatLngRing, type Ring } from "@/lib/domain/geo";
+import {
+  isUsableRing,
+  normalizeRing,
+  toLatLngRing,
+  type Ring,
+} from "@/lib/domain/geo";
 
 /**
  * Draft tone — the `attention` token. Deliberately not one of the stocking
- * colours, so an unsaved trace can never be mistaken for a stored lot.
+ * colours, so an unsaved trace can never be mistaken for a stored invernada.
  */
 const DRAFT_COLOR = "#8a5a12";
 const VERTEX_RADIUS = 6;
@@ -36,7 +41,8 @@ export function DrawLayer({
   onCancel: () => void;
 }) {
   const map = useMap();
-  const canClose = draft.length >= MIN_RING_VERTICES;
+  const normalized = normalizeRing(draft);
+  const canClose = isUsableRing(normalized);
 
   useMapEvents({
     // Leaflet reports [lat, lng]; the domain stores [lng, lat].
@@ -103,6 +109,7 @@ export function DrawLayer({
             key={`${position[0]},${position[1]},${index}`}
             center={position}
             radius={isFirst ? FIRST_VERTEX_RADIUS : VERTEX_RADIUS}
+            bubblingMouseEvents={false}
             pathOptions={{
               color: DRAFT_COLOR,
               weight: 2,

@@ -1,8 +1,8 @@
 # Roadmap — o que falta
 
 Levantamento feito em **04/08/2026** varrendo `app/`, `components/`, `lib/` e o
-schema (`lib/db/schema.ts`). Cada item cita os arquivos envolvidos. Os testes
-passam (128 testes, 15 arquivos) — nada aqui é bug, é funcionalidade ausente.
+schema (`lib/db/schema.ts`). Cada item cita os arquivos envolvidos. A suíte
+passa — nada aqui é bug, é funcionalidade ausente.
 
 ---
 
@@ -29,15 +29,11 @@ Ficou de fora, de propósito: tela de reprodução no menu (matrizes esperando D
 previsão de partos, taxa de prenhez), edição e exclusão de registros
 (append-only, como as pesagens) e testes da camada de serviço — que é o item 5.
 
-## 2. Mapa — só leitura
+## 2. Sede no mapa
 
-`lots.boundary` é aceito pela API (`lib/api/models.ts:67`,
-`lib/api/services/settings.ts:53`), mas nenhuma tela desenha ou edita o
-polígono: o formulário de lote (`components/settings/LotsPaddocks.tsx`) tem
-apenas nome, capim e hectares. Pior, `FarmDataForm.tsx:13` afirma que a sede é
-"definida via mapa", e o mapa não tem esse controle — `farm.headquarters` é
-inalcançável pela UI e o mapa cai no centro padrão de Uberaba
-(`components/map/farm-map.tsx:139`).
+Os contornos das invernadas já podem ser desenhados, redesenhados, apagados ou
+informados por coordenadas. Ainda falta definir `farm.headquarters` pela UI;
+sem sede nem contorno, o mapa cai no centro padrão de Uberaba.
 
 ## 3. Multi-fazenda — só no backend
 
@@ -52,11 +48,11 @@ Não existe "esqueci a senha" / redefinição, verificação de e-mail, troca de
 senha, edição de perfil nem exclusão de conta (`lib/auth/`, `components/auth/`).
 A coluna `user.image` (`lib/db/schema.ts:450`) existe e não é usada — sem avatar.
 
-## 5. Camada de API sem testes
+## 5. Cobertura da API incompleta
 
-Os 128 testes cobrem `lib/domain` e o seed. `lib/api/services/*` — transações,
-escopo por `farm_id`, o lock `FOR UPDATE` do manejo — não tem **nenhum** teste.
-Sem testes de ponta a ponta também.
+Há teste dos helpers isolados, mas as transações de `lib/api/services/*`, o
+escopo por `farm_id` e os locks do manejo ainda não são exercitados contra um
+Postgres real. Também não há testes de ponta a ponta.
 
 ## 6. Sem telas de erro
 
@@ -85,8 +81,6 @@ bundle de produção.
 
 ## Dívida de documentação
 
-- `README.md:86` diz que "hoje" está ancorado em `TODAY_ISO` = 2026-07-24. O
-  código usa a data real (`todayISO()` → `new Date()`, `lib/domain/dates.ts:20`).
 - A árvore de pastas do README lista `(auth)/ login/ signup/`. Esses diretórios
   não existem mais — o login vive no `AuthDialog` da landing, e `proxy.ts` só
   redireciona as URLs antigas.

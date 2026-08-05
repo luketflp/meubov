@@ -1,9 +1,7 @@
 "use client";
 
 /**
- * "Novo lote" dialog on the Lots screen: registers a lot (paddock)
- * right where the farmer watches occupancy, instead of only in Settings.
- * Same store action (addLot) and validation rules as the Settings form.
+ * Registers a logical cattle group and places it in its first invernada.
  */
 import { useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
@@ -21,22 +19,28 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export function AddLotDialog() {
   const addLot = useHerdStore((s) => s.addLot);
+  const invernadas = useHerdStore((s) => s.invernadas);
 
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [grass, setGrass] = useState("");
-  const [hectares, setHectares] = useState("");
+  const [invernadaId, setInvernadaId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   function onOpenChange(next: boolean) {
     if (next) {
       setName("");
-      setGrass("");
-      setHectares("");
+      setInvernadaId(invernadas[0]?.id ?? "");
       setError(null);
     }
     setOpen(next);
@@ -45,28 +49,24 @@ export function AddLotDialog() {
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const cleanName = name.trim();
-    const cleanGrass = grass.trim();
-    const hectaresNumber = Number(hectares.replace(",", "."));
     if (cleanName === "") {
       setError("Informe o nome do lote.");
       return;
     }
-    if (cleanGrass === "") {
-      setError("Informe o capim do lote.");
-      return;
-    }
-    if (!Number.isFinite(hectaresNumber) || hectaresNumber <= 0) {
-      setError("Hectares deve ser um número maior que zero.");
+    if (invernadaId === "") {
+      setError("Selecione a invernada inicial.");
       return;
     }
     setSaving(true);
     try {
-      await addLot({ name: cleanName, grass: cleanGrass, hectares: hectaresNumber });
+      await addLot({ name: cleanName, invernadaId });
       setOpen(false);
-    } catch {
-      // The store already raised the failure toast; keeping the dialog open is
-      // what saves the typed values from disappearing with it.
-      setError("Não foi possível cadastrar. Tente novamente.");
+    } catch (cause) {
+      setError(
+        cause instanceof Error && cause.message === "duplicate_lot_name"
+          ? "Já existe um lote com esse nome."
+          : "Não foi possível cadastrar. Tente novamente."
+      );
     } finally {
       setSaving(false);
     }
@@ -84,7 +84,7 @@ export function AddLotDialog() {
         <DialogHeader>
           <DialogTitle>Novo lote</DialogTitle>
           <DialogDescription>
-            Cadastre o lote para acompanhar a ocupação e transferir animais.
+            O lote é o grupo de animais. Escolha a invernada onde ele está agora.
           </DialogDescription>
         </DialogHeader>
 
@@ -95,33 +95,29 @@ export function AddLotDialog() {
               id="lot-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ex.: Lote da Sede"
+              placeholder="Ex.: Novilhas 2025"
               className="min-h-11"
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="lot-grass">Capim</Label>
-            <Input
-              id="lot-grass"
-              value={grass}
-              onChange={(e) => setGrass(e.target.value)}
-              placeholder="Ex.: Braquiária, Mombaça…"
-              className="min-h-11"
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="lot-hectares">Hectares</Label>
-            <Input
-              id="lot-hectares"
-              value={hectares}
-              onChange={(e) => setHectares(e.target.value)}
-              placeholder="Ex.: 42"
-              type="number"
-              min={0}
-              step="0.1"
-              inputMode="decimal"
-              className="min-h-11 font-mono"
-            />
+            <Label htmlFor="lot-invernada">Invernada inicial</Label>
+            <Select value={invernadaId || undefined} onValueChange={setInvernadaId}>
+              <SelectTrigger id="lot-invernada" className="min-h-11 w-full">
+                <SelectValue placeholder="Selecione a invernada" />
+              </SelectTrigger>
+              <SelectContent>
+                {invernadas.map((invernada) => (
+                  <SelectItem key={invernada.id} value={invernada.id}>
+                    {invernada.code}{invernada.name ? ` · ${invernada.name}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {invernadas.length === 0 ? (
+              <p className="text-xs text-attention">
+                Cadastre uma invernada nas Configurações antes de criar o lote.
+              </p>
+            ) : null}
           </div>
           {error ? <p className="text-xs text-overdue">{error}</p> : null}
 
@@ -131,7 +127,7 @@ export function AddLotDialog() {
                 Cancelar
               </Button>
             </DialogClose>
-            <Button type="submit" disabled={saving} className="min-h-11">
+            <Button type="submit" disabled={saving || invernadas.length === 0} className="min-h-11">
               {saving ? "Cadastrando…" : "Cadastrar lote"}
             </Button>
           </DialogFooter>

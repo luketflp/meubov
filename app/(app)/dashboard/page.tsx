@@ -57,7 +57,7 @@ function SectionDivider({ title, action }: { title: string; action?: React.React
 
 export default function DashboardPage() {
   const animals = useHerdStore((s) => s.animals);
-  const lots = useHerdStore((s) => s.lots);
+  const invernadas = useHerdStore((s) => s.invernadas);
   const treatments = useHerdStore((s) => s.treatments);
   const movements = useHerdStore((s) => s.movements);
   const expenses = useHerdStore((s) => s.expenses);
@@ -82,8 +82,8 @@ export default function DashboardPage() {
   const categorySummary = useMemo(() => summaryByCategory(countByCategory(active)), [active]);
   const averageAdg = useMemo(() => herdAverageAdg(active, todayISO()), [active]);
   const stockingRate = useMemo(
-    () => herdStockingRateAuPerHa(animals, lots),
-    [animals, lots]
+    () => herdStockingRateAuPerHa(animals, invernadas),
+    [animals, invernadas]
   );
   const herdValue = useMemo(() => {
     if (quote.price === null) return null;

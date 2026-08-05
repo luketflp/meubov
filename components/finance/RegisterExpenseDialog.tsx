@@ -158,7 +158,7 @@ export function RegisterExpenseDialog() {
               id="expense-notes"
               value={fields.notes}
               onChange={(e) => setFields((f) => ({ ...f, notes: e.target.value }))}
-              placeholder="Ex.: ração de terminação, adubação do lote…"
+              placeholder="Ex.: ração de terminação, adubação da invernada…"
             />
           </div>
 

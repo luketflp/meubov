@@ -12,7 +12,9 @@ import type {
   Expense,
   FarmData,
   HerdData,
+  Invernada,
   Lot,
+  LotPlacement,
   ManejoSession,
   Movement,
   Weighing,
@@ -48,39 +50,80 @@ const BREEDS: readonly string[] = [
 
 /**
  * Demo pasture outlines: adjacent rectangles in a rural grid north of Uberaba,
- * sized to roughly match each lot's declared hectares. Open rings of
+ * sized to roughly match each invernada's declared hectares. Open rings of
  * [lng, lat] (GeoJSON axis order).
  */
-const LOTS: readonly Lot[] = [
+const INVERNADAS: readonly Invernada[] = [
   {
-    id: "lot-1", name: "Lote da Sede", grass: "Brachiaria brizantha", hectares: 42,
+    id: "invernada-1", code: "01", name: "Sede", grass: "Brachiaria brizantha", hectares: 42,
     boundary: [
       [-47.91, -19.72], [-47.90332, -19.72], [-47.90332, -19.71459], [-47.91, -19.71459],
     ],
   },
   {
-    id: "lot-2", name: "Lote do Rio", grass: "Mombaça", hectares: 35,
+    id: "invernada-2", code: "02", name: "Rio", grass: "Mombaça", hectares: 35,
     boundary: [
       [-47.90294, -19.72], [-47.89626, -19.72], [-47.89626, -19.71549], [-47.90294, -19.71549],
     ],
   },
   {
-    id: "lot-3", name: "Invernada Alta", grass: "Tifton 85", hectares: 28,
+    id: "invernada-3", code: "03", name: "Alta", grass: "Tifton 85", hectares: 28,
     boundary: [
       [-47.89588, -19.72], [-47.89054, -19.72], [-47.89054, -19.71549], [-47.89588, -19.71549],
     ],
   },
   {
-    id: "lot-4", name: "Piquete Norte", grass: "Humidícola", hectares: 18,
+    id: "invernada-4", code: "04", name: "Piquete Norte", grass: "Humidícola", hectares: 18,
     boundary: [
       [-47.91, -19.71423], [-47.90571, -19.71423], [-47.90571, -19.71062], [-47.91, -19.71062],
     ],
   },
   {
-    id: "lot-5", name: "Reserva do Ipê", grass: "Andropogon", hectares: 55,
+    id: "invernada-5", code: "05", name: "Reserva do Ipê", grass: "Andropogon", hectares: 55,
     boundary: [
       [-47.90533, -19.71423], [-47.89579, -19.71423], [-47.89579, -19.70927], [-47.90533, -19.70927],
     ],
+  },
+];
+
+/** Logical groups: animals remain members while the groups rotate through pastures. */
+const LOTS: readonly Lot[] = [
+  { id: "lot-1", name: "Matrizes com cria" },
+  { id: "lot-2", name: "Recém-chegados" },
+  { id: "lot-3", name: "Garrotes" },
+  { id: "lot-4", name: "Recria" },
+  { id: "lot-5", name: "Matrizes solteiras" },
+];
+
+/** Pasture rotation history; every logical lot has exactly one open placement. */
+const LOT_PLACEMENTS: readonly LotPlacement[] = [
+  {
+    id: "placement-1-old", lotId: "lot-1", invernadaId: "invernada-3",
+    startedOn: "2025-07-24", endedOn: "2026-01-15", notes: "Rotação das águas",
+  },
+  {
+    id: "placement-1-current", lotId: "lot-1", invernadaId: "invernada-1",
+    startedOn: "2026-01-15",
+  },
+  {
+    id: "placement-2-current", lotId: "lot-2", invernadaId: "invernada-2",
+    startedOn: "2026-02-01",
+  },
+  {
+    id: "placement-3-current", lotId: "lot-3", invernadaId: "invernada-2",
+    startedOn: "2026-01-15",
+  },
+  {
+    id: "placement-4-old", lotId: "lot-4", invernadaId: "invernada-5",
+    startedOn: "2025-10-01", endedOn: "2026-05-01",
+  },
+  {
+    id: "placement-4-current", lotId: "lot-4", invernadaId: "invernada-4",
+    startedOn: "2026-05-01", notes: "Descanso da Reserva do Ipê",
+  },
+  {
+    id: "placement-5-current", lotId: "lot-5", invernadaId: "invernada-5",
+    startedOn: "2026-05-01",
   },
 ];
 
@@ -107,7 +150,7 @@ const BULL_2_PURCHASE_DATE = "2026-02-01";
 
 /** Session name of each kind that moves the herd (same as lib/domain/manejo). */
 const MOVEMENT_SESSION_NAME: Record<"transfer" | "sale" | "entry", string> = {
-  transfer: "Transferência",
+  transfer: "Troca de lote",
   sale: "Venda",
   entry: "Entrada",
 };
@@ -565,7 +608,7 @@ export function generateInitialData(): HerdData {
       from: "lot-5",
       destinationLotId: "lot-4",
     }),
-    movementSession("transfer", "2026-07-02", cows.slice(0, 6), {
+    movementSession("transfer", "2026-07-02", cows.slice(7), {
       from: "lot-1",
       destinationLotId: "lot-5",
     }),
@@ -596,6 +639,11 @@ export function generateInitialData(): HerdData {
     ],
     treatments,
     lots: LOTS.map((l) => ({ ...l })),
+    invernadas: INVERNADAS.map((invernada) => ({
+      ...invernada,
+      boundary: invernada.boundary?.map(([lng, lat]) => [lng, lat]),
+    })),
+    lotPlacements: LOT_PLACEMENTS.map((placement) => ({ ...placement })),
     movements,
     breeds: [...BREEDS],
     protocols: PROTOCOLS.map((p) => ({ ...p })),

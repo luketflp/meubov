@@ -5,8 +5,10 @@
 import type {
   Animal,
   Category,
+  Invernada,
   StockingRateClass,
   Lot,
+  LotPlacement,
   AnimalStatus,
   Treatment,
 } from "@/lib/types";
@@ -25,9 +27,19 @@ export interface AnimalWithDerived {
   adg: number | null;
 }
 
-/** Lot with the occupancy summary used on the paddock screen. */
+/** Logical animal group with its current physical placement, when assigned. */
 export interface LotWithSummary {
   lot: Lot;
+  headCount: number;
+  totalWeightKg: number;
+  currentPlacement: LotPlacement | null;
+  currentInvernada: Invernada | null;
+}
+
+/** Physical pasture with all logical lots currently occupying it. */
+export interface InvernadaWithSummary {
+  invernada: Invernada;
+  lots: Lot[];
   headCount: number;
   totalWeightKg: number;
   auPerHa: number;
@@ -111,15 +123,112 @@ export function treatmentsInMonth(treatments: Treatment[], year: number, month: 
     .sort((a, b) => compareDate(a.date, b.date));
 }
 
-/** Occupancy summary per lot, considering only the active animals. */
-export function lotsWithSummary(lots: Lot[], animals: Animal[]): LotWithSummary[] {
+/**
+ * The current placement of a lot. Historical placements have an `endedOn`;
+ * in the unlikely event of malformed input with two open rows, the newest one
+ * wins deterministically.
+ */
+export function currentPlacementForLot(
+  lotId: string,
+  placements: LotPlacement[]
+): LotPlacement | null {
+  let current: LotPlacement | null = null;
+  for (const placement of placements) {
+    if (placement.lotId !== lotId || placement.endedOn != null) continue;
+    if (current === null || compareDate(current.startedOn, placement.startedOn) < 0) {
+      current = placement;
+    }
+  }
+  return current;
+}
+
+/** Logical lots with an open placement, eligible for new animal assignments. */
+export function currentlyPlacedLots(
+  lots: Lot[],
+  placements: LotPlacement[]
+): Lot[] {
+  const placedLotIds = new Set(
+    placements
+      .filter((placement) => placement.endedOn == null)
+      .map((placement) => placement.lotId)
+  );
+  return lots.filter((lot) => placedLotIds.has(lot.id));
+}
+
+/** Summary per logical animal group, considering only active animals. */
+export function lotsWithSummary(
+  lots: Lot[],
+  animals: Animal[],
+  invernadas: Invernada[],
+  placements: LotPlacement[]
+): LotWithSummary[] {
+  const invernadaById = new Map(invernadas.map((invernada) => [invernada.id, invernada]));
+  const activeByLot = new Map<string, Animal[]>();
+  for (const animal of activeAnimals(animals)) {
+    const forLot = activeByLot.get(animal.lotId);
+    if (forLot) forLot.push(animal);
+    else activeByLot.set(animal.lotId, [animal]);
+  }
+
   return lots.map((lot) => {
-    const inLot = activeAnimals(animals).filter((a) => a.lotId === lot.id);
-    const auPerHa = stockingRateAuPerHa(inLot, lot.hectares);
+    const inLot = activeByLot.get(lot.id) ?? [];
+    const currentPlacement = currentPlacementForLot(lot.id, placements);
     return {
       lot,
       headCount: inLot.length,
       totalWeightKg: totalWeightKg(inLot),
+      currentPlacement,
+      currentInvernada:
+        currentPlacement === null
+          ? null
+          : (invernadaById.get(currentPlacement.invernadaId) ?? null),
+    };
+  });
+}
+
+/**
+ * Occupancy per physical invernada. Animals arrive through their logical lot's
+ * current open placement; historical placements never affect current density.
+ */
+export function invernadasWithSummary(
+  invernadas: Invernada[],
+  lots: Lot[],
+  placements: LotPlacement[],
+  animals: Animal[]
+): InvernadaWithSummary[] {
+  const lotById = new Map(lots.map((lot) => [lot.id, lot]));
+  const invernadaIdByLotId = new Map<string, string>();
+  for (const lot of lots) {
+    const placement = currentPlacementForLot(lot.id, placements);
+    if (placement) invernadaIdByLotId.set(lot.id, placement.invernadaId);
+  }
+
+  const lotsByInvernadaId = new Map<string, Lot[]>();
+  for (const [lotId, invernadaId] of invernadaIdByLotId) {
+    const lot = lotById.get(lotId);
+    if (!lot) continue;
+    const occupyingLots = lotsByInvernadaId.get(invernadaId);
+    if (occupyingLots) occupyingLots.push(lot);
+    else lotsByInvernadaId.set(invernadaId, [lot]);
+  }
+
+  const animalsByInvernadaId = new Map<string, Animal[]>();
+  for (const animal of activeAnimals(animals)) {
+    const invernadaId = invernadaIdByLotId.get(animal.lotId);
+    if (!invernadaId) continue;
+    const occupyingAnimals = animalsByInvernadaId.get(invernadaId);
+    if (occupyingAnimals) occupyingAnimals.push(animal);
+    else animalsByInvernadaId.set(invernadaId, [animal]);
+  }
+
+  return invernadas.map((invernada) => {
+    const occupyingAnimals = animalsByInvernadaId.get(invernada.id) ?? [];
+    const auPerHa = stockingRateAuPerHa(occupyingAnimals, invernada.hectares);
+    return {
+      invernada,
+      lots: lotsByInvernadaId.get(invernada.id) ?? [],
+      headCount: occupyingAnimals.length,
+      totalWeightKg: totalWeightKg(occupyingAnimals),
       auPerHa,
       classification: classifyStockingRate(auPerHa),
     };
@@ -128,11 +237,14 @@ export function lotsWithSummary(lots: Lot[], animals: Animal[]): LotWithSummary[
 
 /**
  * Aggregate herd stocking rate in AU/ha: the summed Animal Units of every ACTIVE
- * animal over the total hectares of all lots. Returns 0 when there are no hectares.
+ * animal over the total hectares of all invernadas. Returns 0 when there are no hectares.
  * Pure: derives the whole-herd density used by the panel's "Lotação" KPI.
  */
-export function herdStockingRateAuPerHa(animals: Animal[], lots: Lot[]): number {
-  const totalHectares = lots.reduce((sum, lot) => sum + lot.hectares, 0);
+export function herdStockingRateAuPerHa(animals: Animal[], invernadas: Invernada[]): number {
+  const totalHectares = invernadas.reduce(
+    (sum, invernada) => sum + invernada.hectares,
+    0
+  );
   if (totalHectares <= 0) return 0;
   return totalAu(activeAnimals(animals)) / totalHectares;
 }

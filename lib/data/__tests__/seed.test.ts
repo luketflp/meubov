@@ -57,6 +57,35 @@ describe("generateInitialData", () => {
     }
   });
 
+  it("keeps each moved animal consistent with its latest manejo outcome", () => {
+    const latestLot = new Map<string, string>();
+    const latestActive = new Map<string, boolean>();
+    const sessions = [...data.manejoSessions].sort((a, b) =>
+      a.date < b.date ? -1 : a.date > b.date ? 1 : 0
+    );
+
+    for (const session of sessions) {
+      for (const entry of session.animals.filter((candidate) => candidate.outcome === "done")) {
+        if (
+          (session.kind === "entry" || session.kind === "transfer") &&
+          session.destinationLotId
+        ) {
+          latestLot.set(entry.earTag, session.destinationLotId);
+          latestActive.set(entry.earTag, true);
+        } else if (session.kind === "sale") {
+          latestActive.set(entry.earTag, false);
+        }
+      }
+    }
+
+    for (const animal of data.animals) {
+      const expectedLot = latestLot.get(animal.earTag);
+      const expectedActive = latestActive.get(animal.earTag);
+      if (expectedLot) expect(animal.lotId).toBe(expectedLot);
+      if (expectedActive !== undefined) expect(animal.active).toBe(expectedActive);
+    }
+  });
+
   it("has a deterministic 12-month expense book covering every category", () => {
     const months = new Set(data.expenses.map((e) => e.date.slice(0, 7)));
     expect(months.size).toBe(12);
@@ -89,10 +118,44 @@ describe("generateInitialData", () => {
     expect(byCategory("bull")).toBe(2);
   });
 
-  it("has 5 lots and every animal points to a valid lot", () => {
+  it("separates logical lots from fixed invernadas and their placement history", () => {
     expect(data.lots).toHaveLength(5);
-    const ids = new Set(data.lots.map((l) => l.id));
-    for (const animal of data.animals) expect(ids.has(animal.lotId)).toBe(true);
+    expect(data.invernadas).toHaveLength(5);
+
+    const lotIds = new Set(data.lots.map((lot) => lot.id));
+    const invernadaIds = new Set(data.invernadas.map((invernada) => invernada.id));
+    for (const animal of data.animals) expect(lotIds.has(animal.lotId)).toBe(true);
+    for (const session of data.manejoSessions) {
+      if (session.destinationLotId) expect(lotIds.has(session.destinationLotId)).toBe(true);
+      for (const animal of session.animals) {
+        if (animal.previousLotId) expect(lotIds.has(animal.previousLotId)).toBe(true);
+      }
+    }
+
+    expect(new Set(data.invernadas.map((invernada) => invernada.code)).size).toBe(5);
+    expect(data.lotPlacements.some((placement) => placement.endedOn !== undefined)).toBe(true);
+    for (const placement of data.lotPlacements) {
+      expect(lotIds.has(placement.lotId)).toBe(true);
+      expect(invernadaIds.has(placement.invernadaId)).toBe(true);
+    }
+    for (const lot of data.lots) {
+      const current = data.lotPlacements.filter(
+        (placement) => placement.lotId === lot.id && placement.endedOn === undefined
+      );
+      expect(current).toHaveLength(1);
+    }
+
+    const currentOccupancy = new Map<string, number>();
+    for (const placement of data.lotPlacements.filter(
+      (candidate) => candidate.endedOn === undefined
+    )) {
+      currentOccupancy.set(
+        placement.invernadaId,
+        (currentOccupancy.get(placement.invernadaId) ?? 0) + 1
+      );
+    }
+    expect([...currentOccupancy.values()].some((count) => count > 1)).toBe(true);
+    expect(data.invernadas.some((invernada) => !currentOccupancy.has(invernada.id))).toBe(true);
   });
 
   it("uses unique 4-digit numeric ear tags", () => {

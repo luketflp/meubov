@@ -12,10 +12,10 @@ export function totalAu(animals: Animal[]): number {
   return totalWeightKg(animals) / KG_PER_AU;
 }
 
-/** Lot stocking rate in AU per hectare. Returns 0 if hectares <= 0. */
-export function stockingRateAuPerHa(lotAnimals: Animal[], hectares: number): number {
+/** Invernada stocking rate in AU per hectare. Returns 0 if hectares <= 0. */
+export function stockingRateAuPerHa(animals: Animal[], hectares: number): number {
   if (hectares <= 0) return 0;
-  return totalAu(lotAnimals) / hectares;
+  return totalAu(animals) / hectares;
 }
 
 /**

@@ -19,14 +19,18 @@ import type {
   Sex,
 } from "@/lib/types";
 import { toBreeding, toCalving, toDiagnosis } from "@/lib/api/services/mappers";
-import { insertAnimal } from "@/lib/api/services/animals";
+import { insertAnimal, type LotAssignmentError } from "@/lib/api/services/animals";
 import { isUniqueViolation } from "@/lib/api/dbErrors";
 
 /** Why the dam could not be used; every write starts by resolving her. */
 export type DamError = "animal_not_found" | "not_female";
 
 /** Why a reproduction write did nothing; the route maps each to a status. */
-export type ReproductionError = DamError | "breeding_not_found" | "duplicate_ear_tag";
+export type ReproductionError =
+  | DamError
+  | "breeding_not_found"
+  | "duplicate_ear_tag"
+  | LotAssignmentError;
 
 export interface NewBreedingInput {
   date: string;
@@ -136,13 +140,19 @@ export async function setDiagnosis(
  * Records a calving and registers the calf in the herd atomically: born on the
  * calving date, in the dam's lot and breed unless the caller overrides them.
  * Returns "duplicate_ear_tag" when the calf's ear tag is already in use — the
- * whole transaction rolls back, so no calving is left without its calf.
+ * whole transaction rolls back, so no calving is left without its calf. A lot
+ * override is accepted only when it belongs to this farm.
  */
 export async function addCalving(
   farmId: number,
   animalId: string,
   input: NewCalvingInput
-): Promise<{ calving: Calving; calf: Animal } | DamError | "duplicate_ear_tag"> {
+): Promise<
+  | { calving: Calving; calf: Animal }
+  | DamError
+  | "duplicate_ear_tag"
+  | LotAssignmentError
+> {
   const dam = await findDam(farmId, animalId);
   if (typeof dam === "string") return dam;
 
@@ -158,6 +168,7 @@ export async function addCalving(
         initialWeightKg: input.calfWeightKg,
         initialWeightDate: input.date,
       });
+      if (calf === "lot_not_found") return calf;
       const [row] = await tx
         .insert(calvings)
         .values({ animalId: dam.id, date: input.date, calfEarTag: calf.earTag })

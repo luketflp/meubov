@@ -13,7 +13,11 @@ import { useRouter } from "next/navigation";
 import { Play, Search } from "lucide-react";
 import { useHerdStore, type NewManejoSession } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
-import { activeAnimals } from "@/lib/store/selectors";
+import {
+  activeAnimals,
+  currentPlacementForLot,
+  currentlyPlacedLots,
+} from "@/lib/store/selectors";
 import type { Animal, Category, TreatmentType } from "@/lib/types";
 import { todayISO, formatAge } from "@/lib/domain/dates";
 import { CATEGORY_LABEL } from "@/lib/domain/labels";
@@ -128,6 +132,8 @@ function AnimalRow({
 export function RegisterManejoDialog() {
   const router = useRouter();
   const lots = useHerdStore((s) => s.lots);
+  const invernadas = useHerdStore((s) => s.invernadas);
+  const lotPlacements = useHerdStore((s) => s.lotPlacements);
   const animals = useHerdStore((s) => s.animals);
   const startManejoSession = useHerdStore((s) => s.startManejoSession);
   const { addToast } = useToast();
@@ -141,8 +147,30 @@ export function RegisterManejoDialog() {
 
   const sanitary = isSanitaryAction(fields.action);
   const moves = isMovementAction(fields.action);
+  const destinationLots = useMemo(
+    () => currentlyPlacedLots(lots, lotPlacements),
+    [lots, lotPlacements]
+  );
+  const filterLots = useMemo(() => {
+    const usedLotIds = new Set(activeAnimals(animals).map((animal) => animal.lotId));
+    return lots.filter((lot) => usedLotIds.has(lot.id));
+  }, [animals, lots]);
   // An entrada registers its animals at the chute, so there is nothing to pick.
   const picksAnimals = fields.action !== "entry";
+  const invernadaNameByLot = useMemo(() => {
+    const byId = new Map(invernadas.map((item) => [item.id, item]));
+    return new Map(
+      lots.map((lot) => {
+        const placement = currentPlacementForLot(lot.id, lotPlacements);
+        return [
+          lot.id,
+          placement
+            ? `Inv. ${byId.get(placement.invernadaId)?.code ?? "—"}`
+            : "Lote encerrado",
+        ] as const;
+      })
+    );
+  }, [invernadas, lotPlacements, lots]);
 
   function onOpenChange(next: boolean) {
     if (next) {
@@ -309,9 +337,9 @@ export function RegisterManejoDialog() {
                       <SelectValue placeholder="Selecione o lote" />
                     </SelectTrigger>
                     <SelectContent>
-                      {lots.map((lot) => (
+                      {destinationLots.map((lot) => (
                         <SelectItem key={lot.id} value={lot.id}>
-                          {lot.name}
+                          {lot.name} · {invernadaNameByLot.get(lot.id)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -562,9 +590,9 @@ export function RegisterManejoDialog() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={ALL}>Todos os lotes</SelectItem>
-                  {lots.map((lot) => (
+                  {filterLots.map((lot) => (
                     <SelectItem key={lot.id} value={lot.id}>
-                      {lot.name}
+                      {lot.name} · {invernadaNameByLot.get(lot.id)}
                     </SelectItem>
                   ))}
                 </SelectContent>

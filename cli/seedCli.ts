@@ -94,16 +94,46 @@ async function seed(email: string, force: boolean): Promise<void> {
           .values(data.breeds.map((name) => ({ farmId, name })));
       }
 
-      const lotIdMap = new Map(data.lots.map((l) => [l.id, randomUUID()]));
+      const invernadaIdMap = new Map(
+        data.invernadas.map((invernada) => [invernada.id, randomUUID()])
+      );
+      if (data.invernadas.length > 0) {
+        await tx.insert(schema.invernadas).values(
+          data.invernadas.map((invernada) => ({
+            id: invernadaIdMap.get(invernada.id)!,
+            farmId,
+            code: invernada.code,
+            name: invernada.name,
+            grass: invernada.grass,
+            hectares: invernada.hectares,
+            boundary: invernada.boundary,
+          }))
+        );
+      }
+
+      const lotIdMap = new Map(data.lots.map((lot) => [lot.id, randomUUID()]));
       if (data.lots.length > 0) {
         await tx.insert(schema.lots).values(
-          data.lots.map((l) => ({
-            id: lotIdMap.get(l.id)!,
+          data.lots.map((lot) => ({
+            id: lotIdMap.get(lot.id)!,
             farmId,
-            name: l.name,
-            grass: l.grass,
-            hectares: l.hectares,
-            boundary: l.boundary,
+            name: lot.name,
+            needsReview: lot.needsReview ?? false,
+          }))
+        );
+      }
+
+      if (data.lotPlacements.length > 0) {
+        await tx.insert(schema.lotPlacements).values(
+          data.lotPlacements.map((placement) => ({
+            id: randomUUID(),
+            farmId,
+            lotId: lotIdMap.get(placement.lotId)!,
+            invernadaId: invernadaIdMap.get(placement.invernadaId)!,
+            startedOn: placement.startedOn,
+            endedOn: placement.endedOn,
+            notes: placement.notes,
+            baseline: placement.baseline ?? false,
           }))
         );
       }
@@ -279,6 +309,7 @@ async function seed(email: string, force: boolean): Promise<void> {
         `Seeded farm "${data.farm.name}" (id ${farmId}) for ${email}: ` +
           `${data.animals.length} animals, ${weighingRows.length} weighings, ` +
           `${data.treatments.length} treatments, ${data.lots.length} lots, ` +
+          `${data.invernadas.length} invernadas, ${data.lotPlacements.length} placements, ` +
           `${data.manejoSessions.length} manejo sessions, ` +
           `${data.movements.length} legacy movements, ${data.protocols.length} protocols, ` +
           `${data.expenses.length} expenses.`

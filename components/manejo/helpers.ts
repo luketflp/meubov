@@ -25,7 +25,7 @@ export type ManejoAction = TreatmentType | "weighing" | "transfer" | "sale" | "e
 export const MANEJO_ACTION_LABEL: Record<ManejoAction, string> = {
   ...TREATMENT_TYPE_LABEL,
   weighing: "Pesagem",
-  transfer: "Transferência",
+  transfer: "Troca de lote",
   sale: "Venda",
   entry: "Entrada (compra)",
 };

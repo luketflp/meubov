@@ -8,13 +8,17 @@
  * Breed and lot start on the dam's and can be overridden; the optional birth
  * weight becomes the calf's first weighing, dated the calving.
  */
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { Baby } from "lucide-react";
 import { useHerdStore, type NewCalving } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
 import type { Animal, Sex } from "@/lib/types";
 import { todayISO } from "@/lib/domain/dates";
 import { SEX_LABEL } from "@/lib/domain/labels";
+import {
+  currentPlacementForLot,
+  currentlyPlacedLots,
+} from "@/lib/store/selectors";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -67,12 +71,30 @@ export function RegisterCalvingDialog({ dam }: RegisterCalvingDialogProps) {
   const animals = useHerdStore((s) => s.animals);
   const breeds = useHerdStore((s) => s.breeds);
   const lots = useHerdStore((s) => s.lots);
+  const invernadas = useHerdStore((s) => s.invernadas);
+  const lotPlacements = useHerdStore((s) => s.lotPlacements);
   const recordCalving = useHerdStore((s) => s.recordCalving);
   const { addToast } = useToast();
 
   const [open, setOpen] = useState(false);
   const [fields, setFields] = useState<CalvingFields>(() => createInitialFields(dam));
   const [error, setError] = useState<string | null>(null);
+  const availableLots = useMemo(
+    () => currentlyPlacedLots(lots, lotPlacements),
+    [lots, lotPlacements]
+  );
+  const invernadaNameByLot = useMemo(() => {
+    const byId = new Map(invernadas.map((item) => [item.id, item]));
+    return new Map(
+      availableLots.map((lot) => {
+        const placement = currentPlacementForLot(lot.id, lotPlacements);
+        return [
+          lot.id,
+          placement ? byId.get(placement.invernadaId)?.code ?? "—" : "Sem invernada",
+        ] as const;
+      })
+    );
+  }, [availableLots, invernadas, lotPlacements]);
 
   function onOpenChange(next: boolean) {
     if (next) {
@@ -222,9 +244,9 @@ export function RegisterCalvingDialog({ dam }: RegisterCalvingDialogProps) {
                   <SelectValue placeholder="Selecione o lote" />
                 </SelectTrigger>
                 <SelectContent>
-                  {lots.map((lot) => (
+                  {availableLots.map((lot) => (
                     <SelectItem key={lot.id} value={lot.id}>
-                      {lot.name}
+                      {lot.name} · Inv. {invernadaNameByLot.get(lot.id)}
                     </SelectItem>
                   ))}
                 </SelectContent>

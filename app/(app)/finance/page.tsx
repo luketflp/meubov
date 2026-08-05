@@ -35,7 +35,7 @@ import {
 
 export default function FinancePage() {
   const animals = useHerdStore((state) => state.animals);
-  const lots = useHerdStore((state) => state.lots);
+  const invernadas = useHerdStore((state) => state.invernadas);
   const movements = useHerdStore((state) => state.movements);
   const treatments = useHerdStore((state) => state.treatments);
   const expenses = useHerdStore((state) => state.expenses);
@@ -72,7 +72,10 @@ export default function FinancePage() {
     quote.price === null || costPerArroba === null
       ? null
       : quote.price - costPerArroba;
-  const totalHectares = lots.reduce((sum, lot) => sum + lot.hectares, 0);
+  const totalHectares = invernadas.reduce(
+    (sum, invernada) => sum + invernada.hectares,
+    0
+  );
   const exchangeRatio = steerToCalfExchange(
     quote.price,
     steerArrobas,

@@ -14,7 +14,9 @@ import type {
   Expense,
   FarmData,
   HealthProtocol,
+  Invernada,
   Lot,
+  LotPlacement,
   ManejoSession,
   ManejoSessionAnimal,
   ManejoTreatmentPlan,
@@ -32,7 +34,9 @@ import type {
   ExpenseRow,
   FarmRow,
   HealthProtocolRow,
+  InvernadaRow,
   LotRow,
+  LotPlacementRow,
   ManejoSessionAnimalRow,
   ManejoSessionRow,
   MovementRow,
@@ -117,9 +121,30 @@ export function toLot(row: LotRow): Lot {
   return {
     id: row.id,
     name: row.name,
+    needsReview: row.needsReview || undefined,
+  };
+}
+
+export function toInvernada(row: InvernadaRow): Invernada {
+  return {
+    id: row.id,
+    code: row.code,
+    name: orNothing(row.name),
     grass: row.grass,
     hectares: row.hectares,
     boundary: orNothing(row.boundary),
+  };
+}
+
+export function toLotPlacement(row: LotPlacementRow): LotPlacement {
+  return {
+    id: row.id,
+    lotId: row.lotId,
+    invernadaId: row.invernadaId,
+    startedOn: row.startedOn,
+    endedOn: orNothing(row.endedOn),
+    notes: orNothing(row.notes),
+    baseline: row.baseline || undefined,
   };
 }
 

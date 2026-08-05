@@ -6,6 +6,7 @@ import {
   closeRing,
   fromLatLngRing,
   isSelfIntersecting,
+  isUsableRing,
   isValidRing,
   normalizeRing,
   ringAreaHectares,
@@ -145,7 +146,7 @@ describe("ringAreaHectares", () => {
 
   it("returns 0 for an invalid ring instead of throwing or inventing a number", () => {
     // An empty ring used to become [undefined] on closing, which turf happily
-    // measured as 0 — an invisible lot labelled "0,0 ha".
+    // measured as 0 — an invisible invernada labelled "0,0 ha".
     expect(ringAreaHectares([])).toBe(0);
     expect(ringAreaHectares([[-47.91, -19.72]])).toBe(0);
   });
@@ -181,7 +182,7 @@ describe("isSelfIntersecting", () => {
     expect(isSelfIntersecting(TRIANGLE)).toBe(false);
   });
 
-  it("accepts a concave outline — an L-shaped lote is legitimate", () => {
+  it("accepts a concave outline — an L-shaped invernada is legitimate", () => {
     const lShape: Ring = [
       [-47.91, -19.72],
       [-47.9, -19.72],
@@ -191,5 +192,37 @@ describe("isSelfIntersecting", () => {
       [-47.91, -19.71],
     ];
     expect(isSelfIntersecting(lShape)).toBe(false);
+  });
+});
+
+describe("isUsableRing", () => {
+  it("accepts a real pasture outline", () => {
+    expect(isUsableRing(SEED_RECTANGLE)).toBe(true);
+  });
+
+  it("rejects three distinct but collinear points", () => {
+    expect(
+      isUsableRing([
+        [-47.91, -19.72],
+        [-47.9, -19.72],
+        [-47.89, -19.72],
+      ])
+    ).toBe(false);
+  });
+
+  it("rejects a self-crossing outline", () => {
+    expect(isUsableRing(BOWTIE)).toBe(false);
+  });
+
+  it("rejects a fence that returns through a non-consecutive vertex", () => {
+    expect(
+      isUsableRing([
+        [-48, -20],
+        [-47.99, -20],
+        [-47.99, -19.99],
+        [-47.99, -20],
+        [-48, -19.99],
+      ])
+    ).toBe(false);
   });
 });

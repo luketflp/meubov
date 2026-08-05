@@ -13,21 +13,25 @@ import { todayISO } from "@/lib/domain/dates";
 import { loadHerdData } from "@/lib/api/services/herd";
 import {
   AnimalPatchBody,
+  ArchiveLotBody,
   BreedBody,
   CompleteTreatmentsBody,
   DeactivateAnimalBody,
   EntryAnimalBody,
   FarmDataBody,
   ImportAnimalsBody,
+  InvernadaPatchBody,
   LotPatchBody,
   ManejoPassBody,
   ManejoSkipBody,
+  MoveLotBody,
   NewAnimalBody,
   NewBreedingBody,
   NewCalvingBody,
   NewCustomCategoryBody,
   NewDiagnosisBody,
   NewExpenseBody,
+  NewInvernadaBody,
   NewLotBody,
   NewManejoSessionBody,
   NewProtocolBody,
@@ -87,9 +91,11 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
   .post(
     "/lots",
     async ({ farmId, body, status }) => {
-      const lot = await settings.addLot(farmId, body);
-      if (lot === "invalid_boundary") return status(422, { error: lot });
-      return lot;
+      const result = await settings.addLot(farmId, body);
+      if (result === "invernada_not_found") return status(404, { error: result });
+      if (result === "duplicate_name") return status(409, { error: result });
+      if (result === "invalid_name") return status(422, { error: result });
+      return result;
     },
     { farm: true, body: NewLotBody }
   )
@@ -97,8 +103,9 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
     "/lots/:id",
     async ({ farmId, params, body, status }) => {
       const result = await settings.updateLot(farmId, params.id, body);
+      if (result === "duplicate_name") return status(409, { error: result });
       if (result === "empty_patch") return status(422, { error: result });
-      if (result === "invalid_boundary") return status(422, { error: result });
+      if (result === "invalid_name") return status(422, { error: result });
       if (result === null) return status(404, { error: "not_found" });
       return result;
     },
@@ -110,6 +117,85 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
       const removed = await settings.removeLot(farmId, params.id);
       if (!removed) return status(409, { error: "lot_occupied" });
       return { id: params.id };
+    },
+    { farm: true }
+  )
+  .post(
+    "/lots/:id/archive",
+    async ({ farmId, params, body, status }) => {
+      const result = await settings.archiveLot(farmId, params.id, body.endedOn);
+      if (result === "lot_not_found") return status(404, { error: result });
+      if (result === "lot_occupied" || result === "placement_not_found") {
+        return status(409, { error: result });
+      }
+      if (result === "future_date" || result === "nonmonotonic_date") {
+        return status(422, { error: result });
+      }
+      return result;
+    },
+    { farm: true, body: ArchiveLotBody }
+  )
+  .post(
+    "/lots/:id/placements",
+    async ({ farmId, params, body, status }) => {
+      const result = await settings.moveLot(farmId, params.id, body);
+      if (result === "lot_not_found" || result === "invernada_not_found") {
+        return status(404, { error: result });
+      }
+      if (result === "future_date" || result === "nonmonotonic_date") {
+        return status(422, { error: result });
+      }
+      if (result === "placement_not_found" || result === "same_destination") {
+        return status(409, { error: result });
+      }
+      return result;
+    },
+    { farm: true, body: MoveLotBody }
+  )
+  .post(
+    "/invernadas",
+    async ({ farmId, body, status }) => {
+      const result = await settings.addInvernada(farmId, body);
+      if (result === "duplicate_code") return status(409, { error: result });
+      if (
+        result === "invalid_boundary" ||
+        result === "invalid_code" ||
+        result === "invalid_grass" ||
+        result === "invalid_name"
+      ) {
+        return status(422, { error: result });
+      }
+      return result;
+    },
+    { farm: true, body: NewInvernadaBody }
+  )
+  .patch(
+    "/invernadas/:id",
+    async ({ farmId, params, body, status }) => {
+      const result = await settings.updateInvernada(farmId, params.id, body);
+      if (result === "not_found") return status(404, { error: result });
+      if (result === "duplicate_code") return status(409, { error: result });
+      if (result === "immutable_code") return status(409, { error: result });
+      if (
+        result === "empty_patch" ||
+        result === "invalid_boundary" ||
+        result === "invalid_code" ||
+        result === "invalid_grass" ||
+        result === "invalid_name"
+      ) {
+        return status(422, { error: result });
+      }
+      return result;
+    },
+    { farm: true, body: InvernadaPatchBody }
+  )
+  .delete(
+    "/invernadas/:id",
+    async ({ farmId, params, status }) => {
+      const result = await settings.removeInvernada(farmId, params.id);
+      if (result === "not_found") return status(404, { error: result });
+      if (result === "in_use") return status(409, { error: result });
+      return result;
     },
     { farm: true }
   )
@@ -138,6 +224,7 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
     "/animals",
     async ({ farmId, body, status }) => {
       const animal = await animalsService.addAnimal(farmId, body);
+      if (animal === "lot_not_found") return status(404, { error: animal });
       if (animal === null) return status(409, { error: "duplicate_ear_tag" });
       return animal;
     },
@@ -145,7 +232,13 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
   )
   .post(
     "/animals/import",
-    ({ farmId, body }) => animalsService.importAnimals(farmId, body.animals),
+    async ({ farmId, body, status }) => {
+      const result = await animalsService.importAnimals(farmId, body.animals);
+      if ("error" in result) {
+        return status(422, result);
+      }
+      return result;
+    },
     { farm: true, body: ImportAnimalsBody }
   )
   .patch(
@@ -154,6 +247,7 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
       const result = await animalsService.updateAnimal(farmId, params.id, body);
       if (result === "animal_not_found") return status(404, { error: result });
       if (result === "category_not_found") return status(404, { error: result });
+      if (result === "lot_not_found") return status(404, { error: result });
       if (result === "duplicate_ear_tag") return status(409, { error: result });
       if (result === "invalid_ear_tag") return status(422, { error: result });
       return result;
@@ -221,6 +315,7 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
     async ({ farmId, params, body, status }) => {
       const result = await reproductionService.addCalving(farmId, params.id, body);
       if (result === "animal_not_found") return status(404, { error: result });
+      if (result === "lot_not_found") return status(404, { error: result });
       if (result === "not_female") return status(422, { error: result });
       if (result === "duplicate_ear_tag") return status(409, { error: result });
       return result;
@@ -280,6 +375,7 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
         return status(422, { error: "destination_required" });
       }
       const session = await manejoService.startSession(farmId, body);
+      if (session === "lot_not_found") return status(404, { error: session });
       if (session === null) return status(404, { error: "animal_not_found" });
       return session;
     },
@@ -289,6 +385,7 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
     "/manejo/:id/animals",
     async ({ farmId, params, body, status }) => {
       const result = await manejoService.registerEntryAnimal(farmId, params.id, body);
+      if (result === "lot_not_found") return status(404, { error: result });
       if (result === null) return status(404, { error: "not_found" });
       if (result === "duplicate") return status(409, { error: "duplicate_ear_tag" });
       if ("conflict" in result) return status(409, { error: result.conflict });
@@ -305,6 +402,7 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
         params.animalId,
         body
       );
+      if (result === "lot_not_found") return status(404, { error: result });
       if (result === null) return status(404, { error: "not_found" });
       if ("conflict" in result) return status(409, { error: result.conflict });
       return result;
@@ -330,6 +428,7 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
     "/manejo/:id/animals/:animalId/reopen",
     async ({ farmId, params, status }) => {
       const result = await manejoService.reopenAnimal(farmId, params.id, params.animalId);
+      if (result === "lot_not_found") return status(404, { error: result });
       if (result === null) return status(404, { error: "not_found" });
       if ("conflict" in result) return status(409, { error: result.conflict });
       return result;

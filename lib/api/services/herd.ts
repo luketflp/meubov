@@ -16,6 +16,8 @@ import {
   expenses,
   farm,
   healthProtocols,
+  invernadas,
+  lotPlacements,
   lots,
   manejoSessionAnimals,
   manejoSessions,
@@ -34,7 +36,9 @@ import {
   toDiagnosis,
   toExpense,
   toFarmData,
+  toInvernada,
   toLot,
+  toLotPlacement,
   toManejoSession,
   toManejoSessionAnimal,
   toMovement,
@@ -48,6 +52,8 @@ export async function loadHerdData(farmId: number): Promise<HerdData> {
     farmRows,
     animalRows,
     lotRows,
+    invernadaRows,
+    lotPlacementRows,
     breedRows,
     movementRows,
     protocolRows,
@@ -64,6 +70,20 @@ export async function loadHerdData(farmId: number): Promise<HerdData> {
     db.select().from(farm).where(eq(farm.id, farmId)),
     db.select().from(animals).where(eq(animals.farmId, farmId)).orderBy(asc(animals.earTag)),
     db.select().from(lots).where(eq(lots.farmId, farmId)).orderBy(asc(lots.id)),
+    db
+      .select()
+      .from(invernadas)
+      .where(eq(invernadas.farmId, farmId))
+      .orderBy(asc(invernadas.code), asc(invernadas.id)),
+    db
+      .select()
+      .from(lotPlacements)
+      .where(eq(lotPlacements.farmId, farmId))
+      .orderBy(
+        asc(lotPlacements.startedOn),
+        asc(lotPlacements.lotId),
+        asc(lotPlacements.id)
+      ),
     db.select().from(breeds).where(eq(breeds.farmId, farmId)).orderBy(asc(breeds.name)),
     db.select().from(movements).where(eq(movements.farmId, farmId)).orderBy(asc(movements.date)),
     db
@@ -168,6 +188,8 @@ export async function loadHerdData(farmId: number): Promise<HerdData> {
     animals: herdAnimals,
     treatments: treatmentRows.map(({ row, earTag }) => toTreatment(row, earTag)),
     lots: herdLots,
+    invernadas: invernadaRows.map(toInvernada),
+    lotPlacements: lotPlacementRows.map(toLotPlacement),
     // The ledger is the legacy rows plus what the manejo sessions moved: head
     // count and category always come from the animals that actually passed.
     movements: herdMovements(
