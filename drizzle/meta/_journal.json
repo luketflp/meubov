@@ -43,6 +43,20 @@
       "when": 1785800970281,
       "tag": "0005_custom_categories_and_animal_edit",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785885266504,
+      "tag": "0006_green_mac_gargan",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785933798845,
+      "tag": "0007_strange_puck",
+      "breakpoints": true
     }
   ]
 }
