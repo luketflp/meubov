@@ -14,10 +14,22 @@
  * Client-only: Leaflet touches `window`, so the page imports this component
  * with `next/dynamic` and `ssr: false`.
  */
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { MapContainer, Polygon, TileLayer, Tooltip, useMap } from "react-leaflet";
-import { latLngBounds, type LatLngBounds, type LatLngExpression } from "leaflet";
+import {
+  CircleMarker,
+  MapContainer,
+  Polygon,
+  TileLayer,
+  Tooltip,
+  useMap,
+} from "react-leaflet";
+import {
+  latLngBounds,
+  type LatLngBounds,
+  type LatLngExpression,
+  type Map as LeafletMap,
+} from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Fence } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
@@ -32,6 +44,7 @@ import {
 import { CoordinatesDialog } from "@/components/map/coordinates-dialog";
 import { DrawLayer } from "@/components/map/draw-layer";
 import { MapToolbar } from "@/components/map/map-toolbar";
+import { PlaceSearch, type PlaceHit } from "@/components/map/place-search";
 import { SaveBoundaryDialog } from "@/components/map/save-boundary-dialog";
 import { formatArroba, formatKg, formatNumber } from "@/lib/domain/format";
 import { kgToArroba } from "@/lib/domain/weights";
@@ -185,6 +198,22 @@ function FitBounds({ bounds }: { bounds: LatLngBounds | null }) {
   return null;
 }
 
+/**
+ * Hands the Leaflet map instance up to FarmMap. The address search lives
+ * outside `MapContainer` (a Leaflet child would be trapped under the tile
+ * panes), so flying to a search hit needs the instance lifted out.
+ */
+function MapHandle({ mapRef }: { mapRef: React.RefObject<LeafletMap | null> }) {
+  const map = useMap();
+  useEffect(() => {
+    mapRef.current = map;
+    return () => {
+      mapRef.current = null;
+    };
+  }, [map, mapRef]);
+  return null;
+}
+
 export function FarmMap() {
   const lots = useHerdStore((s) => s.lots);
   const animals = useHerdStore((s) => s.animals);
@@ -204,6 +233,25 @@ export function FarmMap() {
   const [redrawTarget, setRedrawTarget] = useState<string | null>(null);
   const [typingCoordinates, setTypingCoordinates] = useState(false);
   const isDrawing = draft !== null;
+
+  /* Address search: the chosen place gets a marker so the farmer sees where
+     the map landed, and the viewport flies there. */
+  const mapRef = useRef<LeafletMap | null>(null);
+  const [searchedPlace, setSearchedPlace] = useState<PlaceHit | null>(null);
+
+  const goToPlace = useCallback((hit: PlaceHit) => {
+    setSearchedPlace(hit);
+    const map = mapRef.current;
+    if (!map) return;
+    if (hit.bounds) {
+      // A city's bbox can span half a state; capping the zoom-out keeps the
+      // jump readable, and maxZoom keeps a single address from diving to
+      // rooftop level where the user loses all bearings.
+      map.flyToBounds(latLngBounds(hit.bounds), { maxZoom: 16 });
+    } else {
+      map.flyTo([hit.lat, hit.lng], 15);
+    }
+  }, []);
 
   const addVertex = useCallback((point: [number, number]) => {
     setDraft((current) => [...(current ?? []), point]);
@@ -279,6 +327,9 @@ export function FarmMap() {
 
   return (
     <div className="space-y-4">
+      {/* Finding the farm by address beats panning satellite tiles by hand. */}
+      <PlaceSearch onSelect={goToPlace} />
+
       <MapToolbar
         isDrawing={isDrawing}
         draft={draft ?? []}
@@ -334,8 +385,20 @@ export function FarmMap() {
               tileload: () => setTilesFailed(false),
             }}
           />
+          <MapHandle mapRef={mapRef} />
           {/* Refitting mid-trace would yank the map out from under the tap. */}
           {isDrawing ? null : <FitBounds bounds={bounds} />}
+          {/* CircleMarker, not Marker: Leaflet's default icon assets don't
+              survive bundling, and a dot is enough to anchor the eye. */}
+          {searchedPlace ? (
+            <CircleMarker
+              center={[searchedPlace.lat, searchedPlace.lng]}
+              radius={8}
+              pathOptions={{ color: "#ffffff", weight: 2, fillColor: "#2f6b41", fillOpacity: 0.9 }}
+            >
+              <Tooltip direction="top">{searchedPlace.name}</Tooltip>
+            </CircleMarker>
+          ) : null}
           {withBoundary.map((summary) => (
             <LotPolygon
               key={summary.lot.id}
