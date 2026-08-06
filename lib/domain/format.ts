@@ -35,3 +35,10 @@ export function formatKg(n: number): string {
 export function formatArroba(n: number): string {
   return `${formatNumber(n, 1)} @`;
 }
+
+/**
+ * Formats a percentage with up to 2 decimal places, e.g.: "48,5%".
+ */
+export function formatPercent(n: number): string {
+  return `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 }).format(n)}%`;
+}

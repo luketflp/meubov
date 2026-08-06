@@ -46,6 +46,8 @@ export interface PassContext {
   destinationLotId?: string;
   /** R$/@ of a sale priced by weight. */
   pricePerArroba?: number;
+  /** Rendimento de carcaça (%) pricing the arrobas of a venda. */
+  carcassYieldPct?: number;
 }
 
 /** Default session name when there is no sanitary plan (weighing-only). */
@@ -108,7 +110,7 @@ export function buildPassEffects(
   if (session.kind === "sale") {
     effects.sold = true;
     if (weightKg !== undefined && session.pricePerArroba !== undefined) {
-      effects.amountBrl = saleAmount(weightKg, session.pricePerArroba);
+      effects.amountBrl = saleAmount(weightKg, session.pricePerArroba, session.carcassYieldPct);
     }
   }
 

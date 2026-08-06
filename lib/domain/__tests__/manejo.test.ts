@@ -111,6 +111,21 @@ describe("buildPassEffects", () => {
     });
   });
 
+  it("prices the carcass at the session's rendimento when the venda set one", () => {
+    const effects = buildPassEffects(
+      {
+        date: "2026-08-02",
+        kind: "sale",
+        weighing: true,
+        pricePerArroba: 300,
+        carcassYieldPct: 48.5,
+      },
+      { weightKg: 488 }
+    );
+    // 488 × 48,5% ÷ 15 × R$ 300.
+    expect(effects.amountBrl).toBeCloseTo(((488 * 0.485) / 15) * 300, 6);
+  });
+
   it("sells without a per-animal value when the batch has a closed price", () => {
     const effects = buildPassEffects(
       { date: "2026-08-02", kind: "sale", weighing: false },

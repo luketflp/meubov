@@ -184,6 +184,12 @@ export interface ManejoSession {
   counterparty?: string;
   /** Sale priced per arroba: R$/@ applied to each animal's chute weight. */
   pricePerArroba?: number;
+  /**
+   * Rendimento de carcaça (%) of a venda per arroba: the R$/@ pays the carcass
+   * arrobas (peso vivo × rendimento ÷ 15), not the live kg/30. Chosen on the
+   * modal before the chute opens; absent on old sessions (50% assumed).
+   */
+  carcassYieldPct?: number;
   /** Closed price in BRL: a sale sold as one lot, or an entry's purchase total. */
   totalAmountBrl?: number;
   notes?: string;

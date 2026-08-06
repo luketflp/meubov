@@ -9,16 +9,22 @@
  */
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, ClipboardX, Search, Undo2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ClipboardX, Percent, Search, Undo2 } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
 import type { ManejoSession, ManejoSessionAnimal } from "@/lib/types";
 import { formatDate, todayISO } from "@/lib/domain/dates";
 import { CATEGORY_LABEL } from "@/lib/domain/labels";
-import { currentWeight, kgToArroba } from "@/lib/domain/weights";
-import { formatArroba, formatCurrency, formatKg } from "@/lib/domain/format";
+import {
+  carcassArrobas,
+  currentWeight,
+  DEFAULT_CARCASS_YIELD_PCT,
+} from "@/lib/domain/weights";
+import { formatArroba, formatCurrency, formatKg, formatPercent } from "@/lib/domain/format";
 import { saleAmount } from "@/lib/domain/movements";
 import { EntryChuteForm } from "@/components/manejo/entry-chute-form";
+import { SaleSummaryCard } from "@/components/manejo/sale-summary";
+import { SaleYieldDialog } from "@/components/manejo/sale-yield-dialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -43,7 +49,11 @@ function movementSubtitle(session: ManejoSession, lotName: string | undefined): 
   if (session.kind === "sale") {
     const price =
       session.pricePerArroba !== undefined
-        ? `${formatCurrency(session.pricePerArroba)}/@`
+        ? `${formatCurrency(session.pricePerArroba)}/@${
+            session.carcassYieldPct !== undefined
+              ? ` · rend. ${formatPercent(session.carcassYieldPct)}`
+              : ""
+          }`
         : session.totalAmountBrl !== undefined
           ? `${formatCurrency(session.totalAmountBrl)} pelo lote`
           : "sem preço";
@@ -71,6 +81,8 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
   const [error, setError] = useState<string | null>(null);
   /** True while a pass is in flight — a chute action must not double-fire. */
   const [busy, setBusy] = useState(false);
+  /** Rendimento modal: null = auto (opens while the venda has no yield). */
+  const [yieldDialogOpen, setYieldDialogOpen] = useState<boolean | null>(null);
 
   const byTag = useMemo(() => new Map(animals.map((a) => [a.earTag, a])), [animals]);
 
@@ -102,6 +114,10 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
   const isEntry = session.kind === "entry";
   const isSale = session.kind === "sale";
   const destinationName = lots.find((l) => l.id === session.destinationLotId)?.name;
+  // A venda per arroba pays the carcass: its chute stays held until the modal
+  // collects the rendimento the R$/@ applies to.
+  const perArroba = isSale && session.pricePerArroba !== undefined;
+  const needsYield = open && perArroba && session.carcassYieldPct === undefined;
   // Live value of the animal on the scale, in a venda priced per arroba.
   const typedWeight = Number(weight);
   const passWeight =
@@ -110,9 +126,8 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
       : typedWeight;
   const passValue =
     isSale && session.pricePerArroba !== undefined && passWeight !== null
-      ? saleAmount(passWeight, session.pricePerArroba)
+      ? saleAmount(passWeight, session.pricePerArroba, session.carcassYieldPct)
       : null;
-  const soldTotal = done.reduce((sum, entry) => sum + (entry.amountBrl ?? 0), 0);
 
   const term = search.trim().toLowerCase();
   const visiblePending =
@@ -206,9 +221,33 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         ) : null}
       </SectionCard>
 
+      {perArroba && session.pricePerArroba !== undefined ? (
+        <SaleYieldDialog
+          key={session.carcassYieldPct ?? "unset"}
+          sessionId={session.id}
+          pricePerArroba={session.pricePerArroba}
+          carcassYieldPct={session.carcassYieldPct}
+          open={yieldDialogOpen ?? needsYield}
+          onOpenChange={setYieldDialogOpen}
+        />
+      ) : null}
+
       {open && isEntry ? <EntryChuteForm session={session} todayIso={todayISO()} /> : null}
 
-      {open && !isEntry && current ? (
+      {needsYield ? (
+        <SectionCard title="No brete agora">
+          <EmptyState
+            icon={Percent}
+            title="Defina o rendimento de carcaça"
+            description="O valor de cada animal sai do rendimento combinado com o comprador — informe-o para liberar o brete."
+          />
+          <Button className="mt-3 min-h-11" onClick={() => setYieldDialogOpen(true)}>
+            Informar rendimento
+          </Button>
+        </SectionCard>
+      ) : null}
+
+      {open && !isEntry && !needsYield && current ? (
         <SectionCard title="No brete agora">
           <form onSubmit={onComplete} className="space-y-4">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -272,7 +311,14 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
                   "Digite o peso para calcular o valor deste animal."
                 ) : (
                   <>
-                    {formatArroba(kgToArroba(passWeight))} ×{" "}
+                    {formatArroba(
+                      carcassArrobas(
+                        passWeight,
+                        session.carcassYieldPct ?? DEFAULT_CARCASS_YIELD_PCT
+                      )
+                    )}{" "}
+                    de carcaça (rend.{" "}
+                    {formatPercent(session.carcassYieldPct ?? DEFAULT_CARCASS_YIELD_PCT)}) ×{" "}
                     {formatCurrency(session.pricePerArroba)}/@ ={" "}
                     <span className="font-mono font-medium text-ink">
                       {formatCurrency(passValue ?? 0)}
@@ -316,15 +362,13 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         </SectionCard>
       ) : null}
 
-      {isSale && soldTotal > 0 ? (
-        <SectionCard title="Valor da venda">
-          <p className="text-sm text-ink-soft">
-            {done.length} {done.length === 1 ? "animal vendido" : "animais vendidos"} ·{" "}
-            <span className="font-mono text-lg font-semibold text-ink">
-              {formatCurrency(soldTotal)}
-            </span>
-          </p>
-        </SectionCard>
+      {isSale ? (
+        <SaleSummaryCard
+          session={session}
+          onEditYield={
+            open && perArroba ? () => setYieldDialogOpen(true) : undefined
+          }
+        />
       ) : null}
 
       <div
