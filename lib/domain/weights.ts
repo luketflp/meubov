@@ -7,9 +7,29 @@ import { formatArroba, formatKg } from "@/lib/domain/format";
 /** Kilograms per arroba (Brazilian beef cattle standard). */
 export const KG_PER_ARROBA = 30;
 
+/**
+ * Kilograms of CARCASS per arroba. The live divisor above (30) is this one with
+ * the historical ~50% carcass yield baked in; when the frigorífico pays by the
+ * carcass, the real yield replaces that assumption (see carcassArrobas).
+ */
+export const KG_PER_ARROBA_CARCASS = 15;
+
+/** Carcass yield assumed when a sale never set one (kg/30 ≡ 50% over kg/15). */
+export const DEFAULT_CARCASS_YIELD_PCT = 50;
+
 /** Converts kilograms into arrobas. */
 export function kgToArroba(kg: number): number {
   return kg / KG_PER_ARROBA;
+}
+
+/** Carcass weight (peso líquido) of a live weight at the given yield (%). */
+export function carcassKg(liveKg: number, yieldPct: number): number {
+  return (liveKg * yieldPct) / 100;
+}
+
+/** Carcass arrobas (@ morta) of a live weight at the given yield (%). */
+export function carcassArrobas(liveKg: number, yieldPct: number): number {
+  return carcassKg(liveKg, yieldPct) / KG_PER_ARROBA_CARCASS;
 }
 
 /**

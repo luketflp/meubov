@@ -247,6 +247,7 @@ export function toManejoSession(
     destinationLotId: orNothing(row.destinationLotId),
     counterparty: orNothing(row.counterparty),
     pricePerArroba: orNothing(row.pricePerArroba),
+    carcassYieldPct: orNothing(row.carcassYieldPct),
     totalAmountBrl: orNothing(row.totalAmountBrl),
     notes: orNothing(row.notes),
   };

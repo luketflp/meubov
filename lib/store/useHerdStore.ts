@@ -59,6 +59,8 @@ export interface NewManejoSession {
   counterparty?: string;
   /** R$/@ of a sale priced by weight. */
   pricePerArroba?: number;
+  /** Rendimento de carcaça (%) of a sale priced per arroba. */
+  carcassYieldPct?: number;
   /** Closed price of the batch, or the purchase total of an entry. */
   totalAmountBrl?: number;
   notes?: string;
@@ -176,6 +178,11 @@ export interface HerdStore extends HerdData {
   skipManejoAnimal: (sessionId: string, earTag: string, notes?: string) => Promise<void>;
   /** Undo: reverts one animal to pending, removing the effects it created. */
   reopenManejoAnimal: (sessionId: string, earTag: string) => Promise<void>;
+  /**
+   * Sets the rendimento de carcaça of an open venda per arroba (the modal
+   * before the chute); passes already recorded are repriced by the server.
+   */
+  setSaleCarcassYield: (sessionId: string, carcassYieldPct: number) => Promise<void>;
   /** Closes the session (remaining animals stay recorded as they are). */
   closeManejoSession: (sessionId: string) => Promise<void>;
   /**
@@ -550,6 +557,32 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
         manejoSessions: withSessionAnimal(s.manejoSessions, sessionId, earTag, result.entry),
       };
     });
+  },
+
+  setSaleCarcassYield: async (sessionId, carcassYieldPct) => {
+    const { data, error } = await api
+      .manejo({ id: sessionId })["carcass-yield"]
+      .post({ carcassYieldPct });
+    if (error) apiFail("definir o rendimento de carcaça", error.status);
+    const result = data as {
+      carcassYieldPct: number;
+      amounts: { earTag: string; amountBrl: number }[];
+    };
+    const amountByEarTag = new Map(result.amounts.map((a) => [a.earTag, a.amountBrl]));
+    set((s) => ({
+      manejoSessions: s.manejoSessions.map((m) =>
+        m.id === sessionId
+          ? {
+              ...m,
+              carcassYieldPct: result.carcassYieldPct,
+              animals: m.animals.map((a) => {
+                const amountBrl = amountByEarTag.get(a.earTag);
+                return amountBrl === undefined ? a : { ...a, amountBrl };
+              }),
+            }
+          : m
+      ),
+    }));
   },
 
   closeManejoSession: async (sessionId) => {

@@ -35,6 +35,7 @@ import {
   NewLotBody,
   NewManejoSessionBody,
   NewProtocolBody,
+  SaleYieldBody,
   WeighingBody,
 } from "@/lib/api/models";
 import * as settings from "@/lib/api/services/settings";
@@ -443,6 +444,20 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
       return result;
     },
     { farm: true }
+  )
+  .post(
+    "/manejo/:id/carcass-yield",
+    async ({ farmId, params, body, status }) => {
+      const result = await manejoService.setCarcassYield(
+        farmId,
+        params.id,
+        body.carcassYieldPct
+      );
+      if (result === null) return status(404, { error: "not_found" });
+      if ("conflict" in result) return status(409, { error: result.conflict });
+      return result;
+    },
+    { farm: true, body: SaleYieldBody }
   )
   .post(
     "/manejo/:id/close",

@@ -331,9 +331,19 @@ export const NewManejoSessionBody = t.Object({
   counterparty: t.Optional(t.String()),
   /** R$/@ of a sale priced by weight. */
   pricePerArroba: t.Optional(t.Number({ exclusiveMinimum: 0 })),
+  /** Rendimento de carcaça (%) of a sale priced per arroba. */
+  carcassYieldPct: t.Optional(t.Number({ exclusiveMinimum: 0, maximum: 100 })),
   /** Closed price of the batch, or the purchase total of an entry. */
   totalAmountBrl: t.Optional(t.Number({ exclusiveMinimum: 0 })),
   notes: t.Optional(t.String()),
+});
+
+/**
+ * Body of POST /manejo/:id/carcass-yield — the rendimento chosen on the modal
+ * shown before a venda per arroba opens its chute.
+ */
+export const SaleYieldBody = t.Object({
+  carcassYieldPct: t.Number({ exclusiveMinimum: 0, maximum: 100 }),
 });
 
 /**

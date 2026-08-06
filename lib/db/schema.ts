@@ -456,6 +456,8 @@ export const manejoSessions = pgTable(
     counterparty: text("counterparty"),
     /** Sale priced per arroba: R$/@ applied to each animal's chute weight. */
     pricePerArroba: numeric("price_per_arroba", { mode: "number" }),
+    /** Rendimento de carcaça (%) pricing the arrobas of a venda per arroba. */
+    carcassYieldPct: numeric("carcass_yield_pct", { mode: "number" }),
     /** Closed price in BRL: a sale sold as one lot, or an entry's purchase total. */
     totalAmountBrl: numeric("total_amount_brl", { mode: "number" }),
     planType: treatmentTypeEnum("plan_type"),

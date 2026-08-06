@@ -1,0 +1,1 @@
+ALTER TABLE "manejo_sessions" ADD COLUMN "carcass_yield_pct" numeric;

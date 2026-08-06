@@ -5,6 +5,7 @@ import {
   isMovementKind,
   predominantCategory,
   saleAmount,
+  saleSummary,
   sessionToMovement,
 } from "@/lib/domain/movements";
 import { KG_PER_ARROBA } from "@/lib/domain/weights";
@@ -53,6 +54,78 @@ describe("isMovementKind", () => {
 describe("saleAmount", () => {
   it("prices the animal by its weight in arrobas", () => {
     expect(saleAmount(KG_PER_ARROBA * 17, 310)).toBeCloseTo(17 * 310, 6);
+  });
+
+  it("prices the carcass arrobas at the session's rendimento", () => {
+    // 3901 kg × 48,5% ÷ 15 = 126,1323… @ × R$ 300 = R$ 37.839,70 (the romaneio).
+    expect(saleAmount(3901, 300, 48.5)).toBeCloseTo(37839.7, 2);
+  });
+
+  it("matches the old live kg/30 math at the default 50% yield", () => {
+    expect(saleAmount(510, 310, 50)).toBeCloseTo(saleAmount(510, 310), 6);
+  });
+});
+
+describe("saleSummary", () => {
+  const sold = (earTag: string, weightKg: number, amountBrl: number) =>
+    entry({ earTag, weightKg, amountBrl });
+
+  it("reproduces the frigorífico spreadsheet of the venda per arroba", () => {
+    // 8 cabeças, 3901 kg, rend. 48,5%, R$ 300/@.
+    const weights = [488, 487, 488, 487, 488, 487, 488, 488]; // 3901 kg
+    const session = makeSession({
+      pricePerArroba: 300,
+      carcassYieldPct: 48.5,
+      animals: weights.map((kg, i) =>
+        sold(`BR-10${i}`, kg, saleAmount(kg, 300, 48.5))
+      ),
+    });
+    const summary = saleSummary(session);
+    expect(summary).not.toBeNull();
+    expect(summary?.heads).toBe(8);
+    expect(summary?.totalWeightKg).toBe(3901);
+    expect(summary?.avgWeightKg).toBeCloseTo(487.63, 2);
+    expect(summary?.avgLiveArrobas).toBeCloseTo(16.25, 2);
+    expect(summary?.totalCarcassKg).toBeCloseTo(1891.985, 3);
+    expect(summary?.totalCarcassArrobas).toBeCloseTo(126.1323, 3);
+    expect(summary?.grossBrl).toBeCloseTo(37839.7, 2);
+    expect(summary?.funruralBrl).toBeCloseTo(567.6, 1);
+    expect(summary?.netBrl).toBeCloseTo(37272.1, 1);
+    expect(summary?.grossPerHeadBrl).toBeCloseTo(4729.96, 2);
+    expect(summary?.netPerHeadBrl).toBeCloseTo(4659.01, 2);
+  });
+
+  it("assumes the 50% yield on per-arroba sessions that never set one", () => {
+    const session = makeSession({
+      pricePerArroba: 310,
+      animals: [sold("BR-001", 510, saleAmount(510, 310))],
+    });
+    const summary = saleSummary(session);
+    expect(summary?.carcassYieldPct).toBe(50);
+    expect(summary?.totalCarcassKg).toBe(255);
+  });
+
+  it("keeps the closed-price sale without carcass figures", () => {
+    const session = makeSession({
+      totalAmountBrl: 9800,
+      animals: [entry({ earTag: "BR-001" }), entry({ earTag: "BR-002" })],
+    });
+    const summary = saleSummary(session);
+    expect(summary?.heads).toBe(2);
+    expect(summary?.weighedHeads).toBe(0);
+    expect(summary?.totalWeightKg).toBeNull();
+    expect(summary?.carcassYieldPct).toBeNull();
+    expect(summary?.totalCarcassArrobas).toBeNull();
+    expect(summary?.grossBrl).toBe(9800);
+    expect(summary?.funruralBrl).toBeCloseTo(147, 6);
+    expect(summary?.grossPerHeadBrl).toBe(4900);
+  });
+
+  it("returns null while nobody passed, and for kinds that are not a sale", () => {
+    expect(saleSummary(makeSession({ animals: [entry({ outcome: "pending" })] }))).toBeNull();
+    expect(
+      saleSummary(makeSession({ kind: "transfer", animals: [entry()] }))
+    ).toBeNull();
   });
 });
 

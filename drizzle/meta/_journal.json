@@ -64,6 +64,13 @@
       "when": 1785945600000,
       "tag": "0008_lote_invernada_split",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785979263019,
+      "tag": "0009_sale_carcass_yield",
+      "breakpoints": true
     }
   ]
 }

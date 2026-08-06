@@ -17,7 +17,13 @@ import type {
   Movement,
   MovementType,
 } from "@/lib/types";
-import { kgToArroba } from "@/lib/domain/weights";
+import {
+  carcassArrobas,
+  carcassKg,
+  DEFAULT_CARCASS_YIELD_PCT,
+  KG_PER_ARROBA_CARCASS,
+  kgToArroba,
+} from "@/lib/domain/weights";
 
 /** Origin/destination outside the farm, when no counterparty was named. */
 export const EXTERNAL = "Externo";
@@ -34,9 +40,113 @@ export function isMovementKind(kind: ManejoKind): boolean {
   return MOVEMENT_TYPE_BY_KIND[kind] !== undefined;
 }
 
-/** Value of one animal in a sale priced per arroba (R$/@ × its chute weight). */
-export function saleAmount(weightKg: number, pricePerArroba: number): number {
-  return kgToArroba(weightKg) * pricePerArroba;
+/**
+ * Value of one animal in a sale priced per arroba: R$/@ × the carcass arrobas
+ * of its chute weight at the session's rendimento de carcaça. Without a yield
+ * the default 50% applies — exactly the old live kg/30 arroba.
+ */
+export function saleAmount(
+  weightKg: number,
+  pricePerArroba: number,
+  carcassYieldPct: number = DEFAULT_CARCASS_YIELD_PCT
+): number {
+  return carcassArrobas(weightKg, carcassYieldPct) * pricePerArroba;
+}
+
+/** FUNRURAL withheld on the gross value of a venda (pessoa física). */
+export const FUNRURAL_RATE = 0.015;
+
+/**
+ * Final numbers of a venda: the batch totals and the per-head averages shown
+ * when the chute line ends (the frigorífico's romaneio arithmetic).
+ *
+ * Weight figures exist only when passes captured weights; money figures exist
+ * when the sale was priced (per arroba or as one closed lot). Everything is
+ * computed over the animals that actually passed (outcome done).
+ */
+export interface SaleSummary {
+  /** Animals that passed the chute (sold). */
+  heads: number;
+  /** How many of them had a weight captured. */
+  weighedHeads: number;
+  totalWeightKg: number | null;
+  /** Média cb/kg: live weight per weighed head. */
+  avgWeightKg: number | null;
+  /** Média @ viva per weighed head (live kg / 30). */
+  avgLiveArrobas: number | null;
+  /** Yield the money math used, when the sale prices the carcass. */
+  carcassYieldPct: number | null;
+  /** Peso líquido: total carcass weight at that yield. */
+  totalCarcassKg: number | null;
+  /** Total @ morta (carcass kg / 15). */
+  totalCarcassArrobas: number | null;
+  /** Média @ morta per weighed head. */
+  avgCarcassArrobas: number | null;
+  grossBrl: number | null;
+  funruralBrl: number | null;
+  netBrl: number | null;
+  /** R$/CB over the gross value. */
+  grossPerHeadBrl: number | null;
+  /** R$/CB after FUNRURAL. */
+  netPerHeadBrl: number | null;
+}
+
+/** Summary of a sale session, or null when no animal has passed yet. */
+export function saleSummary(session: ManejoSession): SaleSummary | null {
+  if (session.kind !== "sale") return null;
+  const done = session.animals.filter((a) => a.outcome === "done");
+  if (done.length === 0) return null;
+
+  const weighed = done.filter((a) => a.weightKg !== undefined);
+  const totalWeightKg =
+    weighed.length === 0
+      ? null
+      : weighed.reduce((sum, a) => sum + (a.weightKg ?? 0), 0);
+
+  // Carcass figures only make sense when the sale priced the carcass: a yield
+  // chosen for the session, applied over the weights read at the chute.
+  const yieldPct =
+    session.pricePerArroba !== undefined
+      ? (session.carcassYieldPct ?? DEFAULT_CARCASS_YIELD_PCT)
+      : null;
+  const totalCarcassKg =
+    yieldPct === null || totalWeightKg === null ? null : carcassKg(totalWeightKg, yieldPct);
+
+  let grossBrl: number | null = session.totalAmountBrl ?? null;
+  if (grossBrl === null) {
+    let sum = 0;
+    let priced = false;
+    for (const a of done) {
+      if (a.amountBrl !== undefined) {
+        sum += a.amountBrl;
+        priced = true;
+      }
+    }
+    if (priced) grossBrl = sum;
+  }
+  const funruralBrl = grossBrl === null ? null : grossBrl * FUNRURAL_RATE;
+  const netBrl = grossBrl === null || funruralBrl === null ? null : grossBrl - funruralBrl;
+
+  const perWeighed = (total: number | null): number | null =>
+    total === null ? null : total / weighed.length;
+  return {
+    heads: done.length,
+    weighedHeads: weighed.length,
+    totalWeightKg,
+    avgWeightKg: perWeighed(totalWeightKg),
+    avgLiveArrobas: totalWeightKg === null ? null : kgToArroba(totalWeightKg) / weighed.length,
+    carcassYieldPct: yieldPct,
+    totalCarcassKg,
+    totalCarcassArrobas:
+      totalCarcassKg === null ? null : totalCarcassKg / KG_PER_ARROBA_CARCASS,
+    avgCarcassArrobas:
+      totalCarcassKg === null ? null : totalCarcassKg / KG_PER_ARROBA_CARCASS / weighed.length,
+    grossBrl,
+    funruralBrl,
+    netBrl,
+    grossPerHeadBrl: grossBrl === null ? null : grossBrl / done.length,
+    netPerHeadBrl: netBrl === null ? null : netBrl / done.length,
+  };
 }
 
 /** Most frequent category among the animals (first one wins a tie). */
