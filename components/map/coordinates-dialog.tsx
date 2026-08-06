@@ -18,6 +18,7 @@ import { parseCoordinateList } from "@/lib/domain/coordinates";
 import {
   MIN_RING_VERTICES,
   isSelfIntersecting,
+  isUsableRing,
   isValidRing,
   ringAreaHectares,
   type Ring,
@@ -49,10 +50,10 @@ export function CoordinatesDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Receives a validated ring, ready to be assigned to a lot. */
+  /** Receives a validated ring, ready to be assigned to an invernada. */
   onParsed: (ring: Ring) => void;
 }) {
-  const lots = useHerdStore((s) => s.lots);
+  const invernadas = useHerdStore((s) => s.invernadas);
   const [text, setText] = useState("");
 
   const parsed = useMemo(() => parseCoordinateList(text), [text]);
@@ -61,10 +62,11 @@ export function CoordinatesDialog({
     [parsed.ring]
   );
   const enoughPoints = parsed.ring.length >= MIN_RING_VERTICES;
-  const canUse = enoughPoints && !selfIntersects && parsed.errors.length === 0;
 
   /** Shown so a paste that is wildly off is obvious before it is saved. */
   const measured = enoughPoints ? ringAreaHectares(parsed.ring) : 0;
+  const usableOutline = isUsableRing(parsed.ring);
+  const canUse = usableOutline && parsed.errors.length === 0;
 
   return (
     <Dialog
@@ -130,6 +132,13 @@ export function CoordinatesDialog({
                 </p>
               ) : null}
 
+              {enoughPoints && !selfIntersects && !usableOutline ? (
+                <p className="text-overdue">
+                  O contorno repete pontos ou não forma uma área. Confira se a
+                  lista segue toda a cerca, sem voltar pelo mesmo ponto.
+                </p>
+              ) : null}
+
               {parsed.errors.length > 0 ? (
                 <ul className="grid gap-1 text-overdue">
                   {parsed.errors.slice(0, 5).map((error) => (
@@ -145,8 +154,8 @@ export function CoordinatesDialog({
             </div>
           ) : (
             <p className="text-sm text-ink-soft">
-              {lots.length === 0
-                ? "Cadastre um lote primeiro para poder vincular a cerca a ele."
+              {invernadas.length === 0
+                ? "Você poderá cadastrar a invernada ao salvar este contorno."
                 : "Cole a lista de pontos do GPS, do topógrafo ou do memorial."}
             </p>
           )}

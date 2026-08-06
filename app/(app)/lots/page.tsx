@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Lots screen: occupancy of every lot of the farm (head count, weight, AU and
- * stocking rate) and the registration of new lots. What used to share this
+ * Lots screen: logical cattle groups, current invernada and placement history.
+ * What used to share this
  * screen — compras, vendas e transferências — is now recorded in Manejo, where
  * the animals actually pass one by one.
  */
@@ -15,7 +15,7 @@ export default function LotsPage() {
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 md:px-8">
       <PageHeader
         title="Lotes"
-        subtitle="Ocupação de cada lote e taxa de lotação do rebanho"
+        subtitle="Grupos de animais e a invernada onde cada um está"
         actions={<AddLotDialog />}
       />
       <LotsPaddocks />

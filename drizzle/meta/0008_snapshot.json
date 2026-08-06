@@ -1,0 +1,2188 @@
+{
+  "id": "78910c71-0ef2-4696-ad36-d09d95a8438a",
+  "prevId": "9b056ac7-26f4-4965-a3e8-3f7ee030d831",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.account": {
+      "name": "account",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider_id": {
+          "name": "provider_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "access_token": {
+          "name": "access_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "refresh_token": {
+          "name": "refresh_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "id_token": {
+          "name": "id_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "access_token_expires_at": {
+          "name": "access_token_expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "refresh_token_expires_at": {
+          "name": "refresh_token_expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "password": {
+          "name": "password",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "account_user_id_user_id_fk": {
+          "name": "account_user_id_user_id_fk",
+          "tableFrom": "account",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.animals": {
+      "name": "animals",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "farm_id": {
+          "name": "farm_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ear_tag": {
+          "name": "ear_tag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "category",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "breed": {
+          "name": "breed",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sex": {
+          "name": "sex",
+          "type": "sex",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "birth_date": {
+          "name": "birth_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lot_id": {
+          "name": "lot_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "custom_category_id": {
+          "name": "custom_category_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "inactive_reason": {
+          "name": "inactive_reason",
+          "type": "inactive_reason",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "inactive_date": {
+          "name": "inactive_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "inactive_notes": {
+          "name": "inactive_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "animals_farm_id_ear_tag_unique": {
+          "name": "animals_farm_id_ear_tag_unique",
+          "columns": [
+            {
+              "expression": "farm_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ear_tag",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "animals_farm_id_idx": {
+          "name": "animals_farm_id_idx",
+          "columns": [
+            {
+              "expression": "farm_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "animals_farm_id_farm_id_fk": {
+          "name": "animals_farm_id_farm_id_fk",
+          "tableFrom": "animals",
+          "tableTo": "farm",
+          "columnsFrom": [
+            "farm_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "animals_lot_id_lots_id_fk": {
+          "name": "animals_lot_id_lots_id_fk",
+          "tableFrom": "animals",
+          "tableTo": "lots",
+          "columnsFrom": [
+            "lot_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "animals_custom_category_id_custom_categories_id_fk": {
+          "name": "animals_custom_category_id_custom_categories_id_fk",
+          "tableFrom": "animals",
+          "tableTo": "custom_categories",
+          "columnsFrom": [
+            "custom_category_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.breedings": {
+      "name": "breedings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "animal_id": {
+          "name": "animal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "breeding_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bull_ear_tag": {
+          "name": "bull_ear_tag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "breedings_animal_id_animals_id_fk": {
+          "name": "breedings_animal_id_animals_id_fk",
+          "tableFrom": "breedings",
+          "tableTo": "animals",
+          "columnsFrom": [
+            "animal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.breeds": {
+      "name": "breeds",
+      "schema": "",
+      "columns": {
+        "farm_id": {
+          "name": "farm_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "breeds_farm_id_farm_id_fk": {
+          "name": "breeds_farm_id_farm_id_fk",
+          "tableFrom": "breeds",
+          "tableTo": "farm",
+          "columnsFrom": [
+            "farm_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "breeds_farm_id_name_pk": {
+          "name": "breeds_farm_id_name_pk",
+          "columns": [
+            "farm_id",
+            "name"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.calvings": {
+      "name": "calvings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "animal_id": {
+          "name": "animal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "calf_ear_tag": {
+          "name": "calf_ear_tag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "calvings_animal_id_animals_id_fk": {
+          "name": "calvings_animal_id_animals_id_fk",
+          "tableFrom": "calvings",
+          "tableTo": "animals",
+          "columnsFrom": [
+            "animal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.custom_categories": {
+      "name": "custom_categories",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "farm_id": {
+          "name": "farm_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "base_category": {
+          "name": "base_category",
+          "type": "category",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "custom_categories_farm_id_name_unique": {
+          "name": "custom_categories_farm_id_name_unique",
+          "columns": [
+            {
+              "expression": "farm_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "custom_categories_farm_id_farm_id_fk": {
+          "name": "custom_categories_farm_id_farm_id_fk",
+          "tableFrom": "custom_categories",
+          "tableTo": "farm",
+          "columnsFrom": [
+            "farm_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.expenses": {
+      "name": "expenses",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "farm_id": {
+          "name": "farm_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "expense_category",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_brl": {
+          "name": "amount_brl",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "expenses_farm_id_date_idx": {
+          "name": "expenses_farm_id_date_idx",
+          "columns": [
+            {
+              "expression": "farm_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "expenses_farm_id_farm_id_fk": {
+          "name": "expenses_farm_id_farm_id_fk",
+          "tableFrom": "expenses",
+          "tableTo": "farm",
+          "columnsFrom": [
+            "farm_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.farm": {
+      "name": "farm",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "municipality": {
+          "name": "municipality",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state_registration": {
+          "name": "state_registration",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "manager": {
+          "name": "manager",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "headquarters_lat": {
+          "name": "headquarters_lat",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "headquarters_lng": {
+          "name": "headquarters_lng",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.farm_users": {
+      "name": "farm_users",
+      "schema": "",
+      "columns": {
+        "farm_id": {
+          "name": "farm_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "farm_role",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'member'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "farm_users_user_id_idx": {
+          "name": "farm_users_user_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "farm_users_farm_id_farm_id_fk": {
+          "name": "farm_users_farm_id_farm_id_fk",
+          "tableFrom": "farm_users",
+          "tableTo": "farm",
+          "columnsFrom": [
+            "farm_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "farm_users_user_id_user_id_fk": {
+          "name": "farm_users_user_id_user_id_fk",
+          "tableFrom": "farm_users",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "farm_users_farm_id_user_id_pk": {
+          "name": "farm_users_farm_id_user_id_pk",
+          "columns": [
+            "farm_id",
+            "user_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.health_protocols": {
+      "name": "health_protocols",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "farm_id": {
+          "name": "farm_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "treatment_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "interval_months": {
+          "name": "interval_months",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "withdrawal_days": {
+          "name": "withdrawal_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mandatory": {
+          "name": "mandatory",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "health_protocols_farm_id_farm_id_fk": {
+          "name": "health_protocols_farm_id_farm_id_fk",
+          "tableFrom": "health_protocols",
+          "tableTo": "farm",
+          "columnsFrom": [
+            "farm_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.invernadas": {
+      "name": "invernadas",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "farm_id": {
+          "name": "farm_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "grass": {
+          "name": "grass",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hectares": {
+          "name": "hectares",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "boundary": {
+          "name": "boundary",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "invernadas_farm_id_code_unique": {
+          "name": "invernadas_farm_id_code_unique",
+          "columns": [
+            {
+              "expression": "farm_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "invernadas_farm_id_idx": {
+          "name": "invernadas_farm_id_idx",
+          "columns": [
+            {
+              "expression": "farm_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "invernadas_farm_id_farm_id_fk": {
+          "name": "invernadas_farm_id_farm_id_fk",
+          "tableFrom": "invernadas",
+          "tableTo": "farm",
+          "columnsFrom": [
+            "farm_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.lot_placements": {
+      "name": "lot_placements",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "farm_id": {
+          "name": "farm_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lot_id": {
+          "name": "lot_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "invernada_id": {
+          "name": "invernada_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "started_on": {
+          "name": "started_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ended_on": {
+          "name": "ended_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "baseline": {
+          "name": "baseline",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        }
+      },
+      "indexes": {
+        "lot_placements_one_open_per_lot_unique": {
+          "name": "lot_placements_one_open_per_lot_unique",
+          "columns": [
+            {
+              "expression": "lot_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"lot_placements\".\"ended_on\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lot_placements_farm_id_idx": {
+          "name": "lot_placements_farm_id_idx",
+          "columns": [
+            {
+              "expression": "farm_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lot_placements_lot_id_started_on_idx": {
+          "name": "lot_placements_lot_id_started_on_idx",
+          "columns": [
+            {
+              "expression": "lot_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "started_on",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lot_placements_invernada_id_idx": {
+          "name": "lot_placements_invernada_id_idx",
+          "columns": [
+            {
+              "expression": "invernada_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "lot_placements_farm_id_farm_id_fk": {
+          "name": "lot_placements_farm_id_farm_id_fk",
+          "tableFrom": "lot_placements",
+          "tableTo": "farm",
+          "columnsFrom": [
+            "farm_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "lot_placements_lot_id_lots_id_fk": {
+          "name": "lot_placements_lot_id_lots_id_fk",
+          "tableFrom": "lot_placements",
+          "tableTo": "lots",
+          "columnsFrom": [
+            "lot_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "lot_placements_invernada_id_invernadas_id_fk": {
+          "name": "lot_placements_invernada_id_invernadas_id_fk",
+          "tableFrom": "lot_placements",
+          "tableTo": "invernadas",
+          "columnsFrom": [
+            "invernada_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "lot_placements_valid_period_check": {
+          "name": "lot_placements_valid_period_check",
+          "value": "\"lot_placements\".\"ended_on\" is null or \"lot_placements\".\"ended_on\" > \"lot_placements\".\"started_on\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.lots": {
+      "name": "lots",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "farm_id": {
+          "name": "farm_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "needs_review": {
+          "name": "needs_review",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "grass": {
+          "name": "grass",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hectares": {
+          "name": "hectares",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "boundary": {
+          "name": "boundary",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "lots_farm_id_farm_id_fk": {
+          "name": "lots_farm_id_farm_id_fk",
+          "tableFrom": "lots",
+          "tableTo": "farm",
+          "columnsFrom": [
+            "farm_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.manejo_session_animals": {
+      "name": "manejo_session_animals",
+      "schema": "",
+      "columns": {
+        "session_id": {
+          "name": "session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "animal_id": {
+          "name": "animal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "manejo_outcome",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "weight_kg": {
+          "name": "weight_kg",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "amount_brl": {
+          "name": "amount_brl",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "previous_lot_id": {
+          "name": "previous_lot_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_animal": {
+          "name": "created_animal",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "treatment_id": {
+          "name": "treatment_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "booster_id": {
+          "name": "booster_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "weighing_id": {
+          "name": "weighing_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "manejo_session_animals_session_id_manejo_sessions_id_fk": {
+          "name": "manejo_session_animals_session_id_manejo_sessions_id_fk",
+          "tableFrom": "manejo_session_animals",
+          "tableTo": "manejo_sessions",
+          "columnsFrom": [
+            "session_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "manejo_session_animals_animal_id_animals_id_fk": {
+          "name": "manejo_session_animals_animal_id_animals_id_fk",
+          "tableFrom": "manejo_session_animals",
+          "tableTo": "animals",
+          "columnsFrom": [
+            "animal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "manejo_session_animals_previous_lot_id_lots_id_fk": {
+          "name": "manejo_session_animals_previous_lot_id_lots_id_fk",
+          "tableFrom": "manejo_session_animals",
+          "tableTo": "lots",
+          "columnsFrom": [
+            "previous_lot_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "manejo_session_animals_treatment_id_treatments_id_fk": {
+          "name": "manejo_session_animals_treatment_id_treatments_id_fk",
+          "tableFrom": "manejo_session_animals",
+          "tableTo": "treatments",
+          "columnsFrom": [
+            "treatment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "manejo_session_animals_booster_id_treatments_id_fk": {
+          "name": "manejo_session_animals_booster_id_treatments_id_fk",
+          "tableFrom": "manejo_session_animals",
+          "tableTo": "treatments",
+          "columnsFrom": [
+            "booster_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "manejo_session_animals_weighing_id_weighings_id_fk": {
+          "name": "manejo_session_animals_weighing_id_weighings_id_fk",
+          "tableFrom": "manejo_session_animals",
+          "tableTo": "weighings",
+          "columnsFrom": [
+            "weighing_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "manejo_session_animals_session_id_animal_id_pk": {
+          "name": "manejo_session_animals_session_id_animal_id_pk",
+          "columns": [
+            "session_id",
+            "animal_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.manejo_sessions": {
+      "name": "manejo_sessions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "farm_id": {
+          "name": "farm_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "manejo_session_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'open'"
+        },
+        "kind": {
+          "name": "kind",
+          "type": "manejo_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'health'"
+        },
+        "weighing": {
+          "name": "weighing",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "destination_lot_id": {
+          "name": "destination_lot_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "counterparty": {
+          "name": "counterparty",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price_per_arroba": {
+          "name": "price_per_arroba",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_amount_brl": {
+          "name": "total_amount_brl",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plan_type": {
+          "name": "plan_type",
+          "type": "treatment_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plan_name": {
+          "name": "plan_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plan_withdrawal_days": {
+          "name": "plan_withdrawal_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plan_dose": {
+          "name": "plan_dose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plan_responsible": {
+          "name": "plan_responsible",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plan_cost_brl": {
+          "name": "plan_cost_brl",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plan_next_date": {
+          "name": "plan_next_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plan_notes": {
+          "name": "plan_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "manejo_sessions_farm_id_idx": {
+          "name": "manejo_sessions_farm_id_idx",
+          "columns": [
+            {
+              "expression": "farm_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "manejo_sessions_farm_id_farm_id_fk": {
+          "name": "manejo_sessions_farm_id_farm_id_fk",
+          "tableFrom": "manejo_sessions",
+          "tableTo": "farm",
+          "columnsFrom": [
+            "farm_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "manejo_sessions_destination_lot_id_lots_id_fk": {
+          "name": "manejo_sessions_destination_lot_id_lots_id_fk",
+          "tableFrom": "manejo_sessions",
+          "tableTo": "lots",
+          "columnsFrom": [
+            "destination_lot_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.movements": {
+      "name": "movements",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "farm_id": {
+          "name": "farm_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "movement_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "category": {
+          "name": "category",
+          "type": "category",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "origin": {
+          "name": "origin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "destination": {
+          "name": "destination",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_brl": {
+          "name": "amount_brl",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "movements_farm_id_farm_id_fk": {
+          "name": "movements_farm_id_farm_id_fk",
+          "tableFrom": "movements",
+          "tableTo": "farm",
+          "columnsFrom": [
+            "farm_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.pregnancy_diagnoses": {
+      "name": "pregnancy_diagnoses",
+      "schema": "",
+      "columns": {
+        "breeding_id": {
+          "name": "breeding_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "result": {
+          "name": "result",
+          "type": "diagnosis_result",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "pregnancy_diagnoses_breeding_id_breedings_id_fk": {
+          "name": "pregnancy_diagnoses_breeding_id_breedings_id_fk",
+          "tableFrom": "pregnancy_diagnoses",
+          "tableTo": "breedings",
+          "columnsFrom": [
+            "breeding_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.session": {
+      "name": "session",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "ip_address": {
+          "name": "ip_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_agent": {
+          "name": "user_agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "session_user_id_user_id_fk": {
+          "name": "session_user_id_user_id_fk",
+          "tableFrom": "session",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "session_token_unique": {
+          "name": "session_token_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.treatments": {
+      "name": "treatments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "animal_id": {
+          "name": "animal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "treatment_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "treatment_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "withdrawal_days": {
+          "name": "withdrawal_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dose": {
+          "name": "dose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "responsible": {
+          "name": "responsible",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cost_brl": {
+          "name": "cost_brl",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "treatments_animal_id_date_idx": {
+          "name": "treatments_animal_id_date_idx",
+          "columns": [
+            {
+              "expression": "animal_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "treatments_animal_id_animals_id_fk": {
+          "name": "treatments_animal_id_animals_id_fk",
+          "tableFrom": "treatments",
+          "tableTo": "animals",
+          "columnsFrom": [
+            "animal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.user": {
+      "name": "user",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email_verified": {
+          "name": "email_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "image": {
+          "name": "image",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "user_email_unique": {
+          "name": "user_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.verification": {
+      "name": "verification",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "identifier": {
+          "name": "identifier",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.weighings": {
+      "name": "weighings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "animal_id": {
+          "name": "animal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "weight_kg": {
+          "name": "weight_kg",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "weighings_animal_id_date_idx": {
+          "name": "weighings_animal_id_date_idx",
+          "columns": [
+            {
+              "expression": "animal_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "weighings_animal_id_animals_id_fk": {
+          "name": "weighings_animal_id_animals_id_fk",
+          "tableFrom": "weighings",
+          "tableTo": "animals",
+          "columnsFrom": [
+            "animal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.breeding_type": {
+      "name": "breeding_type",
+      "schema": "public",
+      "values": [
+        "timedAI",
+        "naturalMating"
+      ]
+    },
+    "public.category": {
+      "name": "category",
+      "schema": "public",
+      "values": [
+        "calf",
+        "heifer",
+        "steer",
+        "cow",
+        "bull"
+      ]
+    },
+    "public.diagnosis_result": {
+      "name": "diagnosis_result",
+      "schema": "public",
+      "values": [
+        "pregnant",
+        "open",
+        "pending"
+      ]
+    },
+    "public.expense_category": {
+      "name": "expense_category",
+      "schema": "public",
+      "values": [
+        "nutrition",
+        "pasture",
+        "labor",
+        "health",
+        "breeding",
+        "admin",
+        "other"
+      ]
+    },
+    "public.farm_role": {
+      "name": "farm_role",
+      "schema": "public",
+      "values": [
+        "owner",
+        "member"
+      ]
+    },
+    "public.inactive_reason": {
+      "name": "inactive_reason",
+      "schema": "public",
+      "values": [
+        "sale",
+        "death",
+        "loss",
+        "other"
+      ]
+    },
+    "public.manejo_kind": {
+      "name": "manejo_kind",
+      "schema": "public",
+      "values": [
+        "health",
+        "weighing",
+        "transfer",
+        "sale",
+        "entry"
+      ]
+    },
+    "public.manejo_outcome": {
+      "name": "manejo_outcome",
+      "schema": "public",
+      "values": [
+        "pending",
+        "done",
+        "skipped"
+      ]
+    },
+    "public.manejo_session_status": {
+      "name": "manejo_session_status",
+      "schema": "public",
+      "values": [
+        "open",
+        "closed"
+      ]
+    },
+    "public.movement_type": {
+      "name": "movement_type",
+      "schema": "public",
+      "values": [
+        "purchase",
+        "sale",
+        "transfer"
+      ]
+    },
+    "public.sex": {
+      "name": "sex",
+      "schema": "public",
+      "values": [
+        "male",
+        "female"
+      ]
+    },
+    "public.treatment_status": {
+      "name": "treatment_status",
+      "schema": "public",
+      "values": [
+        "scheduled",
+        "overdue",
+        "done"
+      ]
+    },
+    "public.treatment_type": {
+      "name": "treatment_type",
+      "schema": "public",
+      "values": [
+        "vaccine",
+        "deworming",
+        "medication",
+        "exam"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

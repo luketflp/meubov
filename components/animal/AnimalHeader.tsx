@@ -38,9 +38,10 @@ function Field({ label, value, mono = false }: FieldProps) {
 interface AnimalHeaderProps {
   derived: AnimalWithDerived;
   lotName: string | null;
+  invernadaName: string | null;
 }
 
-export function AnimalHeader({ derived, lotName }: AnimalHeaderProps) {
+export function AnimalHeader({ derived, lotName, invernadaName }: AnimalHeaderProps) {
   const { animal, status, reason, currentWeightKg, adg } = derived;
   const customCategories = useHerdStore((s) => s.customCategories);
 
@@ -66,7 +67,7 @@ export function AnimalHeader({ derived, lotName }: AnimalHeaderProps) {
         <p className="mt-1.5 text-xs text-ink-soft">{animal.inactiveNotes}</p>
       ) : null}
 
-      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
         <Field label="Categoria" value={animalCategoryName(animal, customCategories)} />
         <Field label="Raça" value={animal.breed} />
         <Field label="Sexo" value={SEX_LABEL[animal.sex]} />
@@ -76,6 +77,7 @@ export function AnimalHeader({ derived, lotName }: AnimalHeaderProps) {
           mono
         />
         <Field label="Lote" value={lotName ?? "—"} />
+        <Field label="Invernada atual" value={invernadaName ?? "—"} />
         <Field
           label="Peso atual"
           value={currentWeightKg !== null ? formatWeightWithArroba(currentWeightKg) : "—"}

@@ -8,10 +8,11 @@ import { formatFullWeight } from "@/components/herd/filters";
 interface AnimalCardProps {
   item: AnimalWithDerived;
   lotName: string;
+  invernadaName: string;
 }
 
 /** Animal card of the mobile list: the whole card navigates to the record. */
-export function AnimalCard({ item, lotName }: AnimalCardProps) {
+export function AnimalCard({ item, lotName, invernadaName }: AnimalCardProps) {
   const { animal, status, currentWeightKg } = item;
   const customCategories = useHerdStore((s) => s.customCategories);
 
@@ -31,6 +32,7 @@ export function AnimalCard({ item, lotName }: AnimalCardProps) {
         <p className="text-sm text-ink-soft">
           {animalCategoryName(animal, customCategories)} · {animal.breed} · {lotName}
         </p>
+        <p className="text-xs text-ink-soft">Invernada {invernadaName}</p>
         <p className="font-mono text-sm text-ink">{formatFullWeight(currentWeightKg)}</p>
       </Link>
     </li>

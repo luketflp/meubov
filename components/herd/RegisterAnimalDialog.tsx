@@ -6,13 +6,17 @@
  * weight). Sex is locked when the category implies it (novilha/vaca female,
  * boi/touro male). Validation is a local pure function (validateAnimal).
  */
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
 import { useHerdStore, type NewAnimal } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
 import type { Category, Sex } from "@/lib/types";
 import { todayISO } from "@/lib/domain/dates";
 import { CATEGORY_LABEL, SEX_LABEL } from "@/lib/domain/labels";
+import {
+  currentPlacementForLot,
+  currentlyPlacedLots,
+} from "@/lib/store/selectors";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -124,6 +128,8 @@ export function RegisterAnimalDialog() {
   const animals = useHerdStore((s) => s.animals);
   const breeds = useHerdStore((s) => s.breeds);
   const lots = useHerdStore((s) => s.lots);
+  const invernadas = useHerdStore((s) => s.invernadas);
+  const lotPlacements = useHerdStore((s) => s.lotPlacements);
   const customCategories = useHerdStore((s) => s.customCategories);
   const addAnimal = useHerdStore((s) => s.addAnimal);
   const { addToast } = useToast();
@@ -133,6 +139,20 @@ export function RegisterAnimalDialog() {
   const [errors, setErrors] = useState<AnimalErrors>({});
 
   const sexLocked = impliedSex(fields.category) !== null;
+  const availableLots = useMemo(
+    () => currentlyPlacedLots(lots, lotPlacements),
+    [lots, lotPlacements]
+  );
+  const invernadaNameByLot = useMemo(() => {
+    const byId = new Map(invernadas.map((item) => [item.id, item]));
+    return new Map(
+      availableLots.map((lot) => {
+        const placement = currentPlacementForLot(lot.id, lotPlacements);
+        const invernada = placement ? byId.get(placement.invernadaId) : undefined;
+        return [lot.id, invernada ? invernada.code : "Sem invernada"] as const;
+      })
+    );
+  }, [availableLots, invernadas, lotPlacements]);
 
   function onOpenChange(next: boolean) {
     if (next) {
@@ -339,9 +359,9 @@ export function RegisterAnimalDialog() {
                   <SelectValue placeholder="Selecione o lote" />
                 </SelectTrigger>
                 <SelectContent>
-                  {lots.map((lot) => (
+                  {availableLots.map((lot) => (
                     <SelectItem key={lot.id} value={lot.id}>
-                      {lot.name}
+                      {lot.name} · Inv. {invernadaNameByLot.get(lot.id)}
                     </SelectItem>
                   ))}
                 </SelectContent>

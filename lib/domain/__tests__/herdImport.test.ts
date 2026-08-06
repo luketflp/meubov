@@ -4,16 +4,27 @@ import {
   buildImportRows,
   buildTemplateCsv,
   importablePayloads,
+  importFieldForHeader,
   MAX_IMPORT_ROWS,
   normalizeHeader,
   parseCategory,
   parseImportDate,
   parseSex,
   parseWeight,
+  validateImportRowLocations,
   type BuildImportRowsContext,
 } from "@/lib/domain/herdImport";
 
-const HEADERS = ["brinco", "categoria", "raça", "sexo", "nascimento", "lote", "peso"];
+const HEADERS = [
+  "brinco",
+  "categoria",
+  "raça",
+  "sexo",
+  "nascimento",
+  "lote",
+  "invernada",
+  "peso",
+];
 
 const CUSTOM: CustomCategory[] = [
   { id: "c1", name: "Matrizes", baseCategory: "cow" },
@@ -36,6 +47,11 @@ describe("normalizeHeader", () => {
     expect(normalizeHeader("  Raça ")).toBe("raca");
     expect(normalizeHeader("Peso (Kg)")).toBe("peso kg");
     expect(normalizeHeader("Data de Nascimento")).toBe("data de nascimento");
+  });
+
+  it("exposes canonical header resolution for spreadsheet adapters", () => {
+    expect(importFieldForHeader("Piquete")).toBe("invernada");
+    expect(importFieldForHeader("campo desconhecido")).toBeUndefined();
   });
 });
 
@@ -123,18 +139,79 @@ describe("buildImportRows — headers", () => {
 
   it("maps synonym/accented headers to fields", () => {
     const matrix = [
-      ["Brinco", "Categoria", "Raça", "Sexo", "Data de Nascimento", "Lote", "Peso (kg)"],
-      ["A1", "Novilha", "Nelore", "", "15/03/2023", "Lote 1", "320"],
+      [
+        "Brinco",
+        "Categoria",
+        "Raça",
+        "Sexo",
+        "Data de Nascimento",
+        "Lote",
+        "Piquete",
+        "Peso (kg)",
+      ],
+      ["A1", "Novilha", "Nelore", "", "15/03/2023", "Lote 1", "03", "320"],
     ];
     const result = buildImportRows(matrix, ctx());
     expect(result.counts.ok).toBe(1);
     expect(result.rows[0].payload?.lot).toBe("Lote 1");
+    expect(result.rows[0].payload?.invernada).toBe("03");
+  });
+
+  it.each(["Invernada", "Pasto", "Piquete"])(
+    "maps the %s header to the fixed invernada code",
+    (invernadaHeader) => {
+      const result = buildImportRows(
+        [
+          ["Brinco", "Categoria", "Raça", "Nascimento", "Lote", invernadaHeader],
+          ["A1", "Novilha", "Nelore", "15/03/2023", "Matrizes", "3A"],
+        ],
+        ctx()
+      );
+
+      expect(result.rows[0].payload).toMatchObject({
+        lot: "Matrizes",
+        invernada: "3A",
+      });
+    }
+  );
+
+  it("requires lote and invernada as separate columns", () => {
+    const result = buildImportRows(
+      [["Brinco", "Categoria", "Raça", "Nascimento", "Lote"]],
+      ctx()
+    );
+
+    expect(result.headerError).toContain("Invernada");
+  });
+
+  it("explains how to update a legacy Pasto/Lote spreadsheet", () => {
+    const result = buildImportRows(
+      [
+        ["Brinco", "Categoria", "Raça", "Nascimento", "Pasto/Lote"],
+        ["A1", "Novilha", "Nelore", "15/03/2023", "Matrizes"],
+      ],
+      ctx()
+    );
+
+    expect(result.headerError).toContain("Separe");
+    expect(result.headerError).toContain("Lote");
+    expect(result.headerError).toContain("Invernada");
   });
 
   it("does not let a leftmost internal ID column hijack the ear tag", () => {
     const matrix = [
-      ["ID", "Brinco", "Categoria", "Raça", "Sexo", "Nascimento", "Lote", "Peso"],
-      ["1", "BR-1042", "Novilha", "Nelore", "", "15/03/2023", "Lote 1", ""],
+      [
+        "ID",
+        "Brinco",
+        "Categoria",
+        "Raça",
+        "Sexo",
+        "Nascimento",
+        "Lote",
+        "Invernada",
+        "Peso",
+      ],
+      ["1", "BR-1042", "Novilha", "Nelore", "", "15/03/2023", "Lote 1", "01", ""],
     ];
     const result = buildImportRows(matrix, ctx());
     expect(result.rows[0].payload?.earTag).toBe("BR-1042");
@@ -156,6 +233,7 @@ describe("buildImportRows — headers", () => {
       "",
       "15/03/2023",
       "Lote 1",
+      "01",
       "",
     ]);
     expect(buildImportRows(sheet(...rows), ctx()).headerError).toContain("limite");
@@ -165,7 +243,7 @@ describe("buildImportRows — headers", () => {
 describe("buildImportRows — rows", () => {
   it("accepts a valid row and infers sex from the category", () => {
     const result = buildImportRows(
-      sheet(["A1", "Novilha", "Nelore", "", "15/03/2023", "Lote 1", "320"]),
+      sheet(["A1", "Novilha", "Nelore", "", "15/03/2023", "Lote 1", "01", "320"]),
       ctx()
     );
     expect(result.counts.ok).toBe(1);
@@ -175,13 +253,28 @@ describe("buildImportRows — rows", () => {
       sex: "female",
       birthDate: "2023-03-15",
       lot: "Lote 1",
+      invernada: "01",
       weightKg: 320,
     });
   });
 
+  it("requires a nonblank invernada value without interpreting its code", () => {
+    const blank = buildImportRows(
+      sheet(["A1", "Novilha", "Nelore", "", "15/03/2023", "Matrizes", "   ", ""]),
+      ctx()
+    );
+    const arbitraryCode = buildImportRows(
+      sheet(["A2", "Novilha", "Nelore", "", "15/03/2023", "Matrizes", "3A", ""]),
+      ctx()
+    );
+
+    expect(blank.rows[0].errors.invernada).toBe("Informe a invernada.");
+    expect(arbitraryCode.rows[0].payload?.invernada).toBe("3A");
+  });
+
   it("requires sex when the category does not imply it (calf)", () => {
     const result = buildImportRows(
-      sheet(["A1", "Bezerro", "Nelore", "", "15/03/2023", "Lote 1", ""]),
+      sheet(["A1", "Bezerro", "Nelore", "", "15/03/2023", "Lote 1", "01", ""]),
       ctx()
     );
     expect(result.rows[0].status).toBe("error");
@@ -190,7 +283,7 @@ describe("buildImportRows — rows", () => {
 
   it("accepts an explicit sex for a calf", () => {
     const result = buildImportRows(
-      sheet(["A1", "Bezerro", "Nelore", "Macho", "10/06/2024", "Lote 1", ""]),
+      sheet(["A1", "Bezerro", "Nelore", "Macho", "10/06/2024", "Lote 1", "01", ""]),
       ctx()
     );
     expect(result.rows[0].status).toBe("ok");
@@ -199,7 +292,7 @@ describe("buildImportRows — rows", () => {
 
   it("lets the category's implied sex override a conflicting sex cell", () => {
     const result = buildImportRows(
-      sheet(["A1", "Novilha", "Nelore", "Macho", "15/03/2023", "Lote 1", ""]),
+      sheet(["A1", "Novilha", "Nelore", "Macho", "15/03/2023", "Lote 1", "01", ""]),
       ctx()
     );
     expect(result.rows[0].status).toBe("ok");
@@ -208,7 +301,7 @@ describe("buildImportRows — rows", () => {
 
   it("accepts a JS Date birth cell (the SheetJS cellDates path)", () => {
     const result = buildImportRows(
-      sheet(["A1", "Novilha", "Nelore", "", new Date(2023, 2, 15), "Lote 1", ""]),
+      sheet(["A1", "Novilha", "Nelore", "", new Date(2023, 2, 15), "Lote 1", "01", ""]),
       ctx()
     );
     expect(result.rows[0].status).toBe("ok");
@@ -218,13 +311,13 @@ describe("buildImportRows — rows", () => {
 
   it("flags unknown category and future birth date", () => {
     const unknown = buildImportRows(
-      sheet(["A1", "Girafa", "Nelore", "", "15/03/2023", "Lote 1", ""]),
+      sheet(["A1", "Girafa", "Nelore", "", "15/03/2023", "Lote 1", "01", ""]),
       ctx()
     );
     expect(unknown.rows[0].errors.category).toBeDefined();
 
     const future = buildImportRows(
-      sheet(["A2", "Novilha", "Nelore", "", "01/01/2030", "Lote 1", ""]),
+      sheet(["A2", "Novilha", "Nelore", "", "01/01/2030", "Lote 1", "01", ""]),
       ctx()
     );
     expect(future.rows[0].errors.birthDate).toContain("futuro");
@@ -232,7 +325,7 @@ describe("buildImportRows — rows", () => {
 
   it("resolves a custom category to its base plus id", () => {
     const result = buildImportRows(
-      sheet(["A1", "Matrizes", "Nelore", "", "15/03/2020", "Lote 1", ""]),
+      sheet(["A1", "Matrizes", "Nelore", "", "15/03/2020", "Lote 1", "01", ""]),
       ctx({ customCategories: CUSTOM })
     );
     expect(result.rows[0].payload).toMatchObject({
@@ -244,7 +337,7 @@ describe("buildImportRows — rows", () => {
 
   it("skips ear tags that already exist on the farm", () => {
     const result = buildImportRows(
-      sheet(["A1", "Novilha", "Nelore", "", "15/03/2023", "Lote 1", ""]),
+      sheet(["A1", "Novilha", "Nelore", "", "15/03/2023", "Lote 1", "01", ""]),
       ctx({ existingEarTags: ["A1"] })
     );
     expect(result.rows[0].status).toBe("duplicate");
@@ -254,8 +347,8 @@ describe("buildImportRows — rows", () => {
   it("keeps the first of a repeated ear tag and marks the rest duplicate", () => {
     const result = buildImportRows(
       sheet(
-        ["B2", "Novilha", "Nelore", "", "15/03/2023", "Lote 1", ""],
-        ["B2", "Novilha", "Nelore", "", "15/03/2023", "Lote 1", ""]
+        ["B2", "Novilha", "Nelore", "", "15/03/2023", "Lote 1", "01", ""],
+        ["B2", "Novilha", "Nelore", "", "15/03/2023", "Lote 1", "01", ""]
       ),
       ctx()
     );
@@ -267,9 +360,9 @@ describe("buildImportRows — rows", () => {
   it("returns only ok rows as importable payloads", () => {
     const result = buildImportRows(
       sheet(
-        ["A1", "Novilha", "Nelore", "", "15/03/2023", "Lote 1", ""], // duplicate (in herd)
-        ["A2", "Girafa", "Nelore", "", "15/03/2023", "Lote 1", ""], // error (bad category)
-        ["A3", "Novilha", "Nelore", "", "15/03/2023", "Lote 1", ""] // ok
+        ["A1", "Novilha", "Nelore", "", "15/03/2023", "Lote 1", "01", ""], // duplicate (in herd)
+        ["A2", "Girafa", "Nelore", "", "15/03/2023", "Lote 1", "01", ""], // error (bad category)
+        ["A3", "Novilha", "Nelore", "", "15/03/2023", "Lote 1", "01", ""] // ok
       ),
       ctx({ existingEarTags: ["A1"] })
     );
@@ -279,8 +372,8 @@ describe("buildImportRows — rows", () => {
   it("skips fully blank rows", () => {
     const result = buildImportRows(
       sheet(
-        ["", "", "", "", "", "", ""],
-        ["A1", "Novilha", "Nelore", "", "15/03/2023", "Lote 1", ""]
+        ["", "", "", "", "", "", "", ""],
+        ["A1", "Novilha", "Nelore", "", "15/03/2023", "Lote 1", "01", ""]
       ),
       ctx()
     );
@@ -289,10 +382,97 @@ describe("buildImportRows — rows", () => {
   });
 });
 
+describe("validateImportRowLocations", () => {
+  it("marks rows whose fixed invernada code is not registered", () => {
+    const parsed = buildImportRows(
+      sheet(["A1", "Novilha", "Nelore", "", "15/03/2023", "Matrizes", "99", ""]),
+      ctx()
+    );
+    const checked = validateImportRowLocations(parsed, [], [
+      { id: "inv-1", code: "01" },
+    ]);
+
+    expect(checked.counts).toMatchObject({ ok: 0, error: 1 });
+    expect(checked.rows[0].status).toBe("error");
+    expect(checked.rows[0].errors.invernada).toContain("não cadastrado");
+    expect(importablePayloads(checked)).toEqual([]);
+  });
+
+  it("marks every row of a lot whose declared location conflicts", () => {
+    const parsed = buildImportRows(
+      sheet(
+        ["A1", "Novilha", "Nelore", "", "15/03/2023", "Matrizes", "01", ""],
+        ["A2", "Novilha", "Nelore", "", "15/03/2023", "Matrizes", "02", ""]
+      ),
+      ctx()
+    );
+    const checked = validateImportRowLocations(parsed, [], [
+      { id: "inv-1", code: "01" },
+      { id: "inv-2", code: "02" },
+    ]);
+
+    expect(checked.counts).toMatchObject({ ok: 0, error: 2 });
+    expect(checked.rows.every((row) => row.status === "error")).toBe(true);
+  });
+
+  it("marks an independent existing-lot conflict even when another code is unknown", () => {
+    const parsed = buildImportRows(
+      sheet(
+        ["A1", "Novilha", "Nelore", "", "15/03/2023", "Novo", "99", ""],
+        ["A2", "Novilha", "Nelore", "", "15/03/2023", "Matrizes", "02", ""],
+        ["A3", "Novilha", "Nelore", "", "15/03/2023", "Garrotes", "01", ""]
+      ),
+      ctx()
+    );
+    const checked = validateImportRowLocations(
+      parsed,
+      [{ name: "Matrizes", currentInvernadaId: "inv-1" }],
+      [
+        { id: "inv-1", code: "01" },
+        { id: "inv-2", code: "02" },
+      ]
+    );
+
+    expect(checked.counts).toEqual({ ok: 1, duplicate: 0, error: 2, total: 3 });
+    expect(checked.rows.map((row) => row.status)).toEqual(["error", "error", "ok"]);
+    expect(checked.rows[0].errors.invernada).toContain("não cadastrado");
+    expect(checked.rows[1].errors.invernada).toContain("outra invernada");
+    expect(importablePayloads(checked).map((row) => row.earTag)).toEqual(["A3"]);
+
+    // Location validation is a pure preview transform; callers may retain the
+    // syntactic parse for a retry or comparison.
+    expect(parsed.counts).toEqual({ ok: 3, duplicate: 0, error: 0, total: 3 });
+    expect(parsed.rows.every((row) => row.status === "ok")).toBe(true);
+    expect(parsed.rows.every((row) => row.errors.invernada === undefined)).toBe(true);
+  });
+
+  it("marks a valid-code batch split even when an unrelated code is unknown", () => {
+    const parsed = buildImportRows(
+      sheet(
+        ["A1", "Novilha", "Nelore", "", "15/03/2023", "Novo", "99", ""],
+        ["A2", "Novilha", "Nelore", "", "15/03/2023", "Recria", "01", ""],
+        ["A3", "Novilha", "Nelore", "", "15/03/2023", "Recria", "02", ""]
+      ),
+      ctx()
+    );
+    const checked = validateImportRowLocations(parsed, [], [
+      { id: "inv-1", code: "01" },
+      { id: "inv-2", code: "02" },
+    ]);
+
+    expect(checked.counts).toEqual({ ok: 0, duplicate: 0, error: 3, total: 3 });
+    expect(checked.rows.every((row) => row.status === "error")).toBe(true);
+    expect(checked.rows[1].errors.invernada).toContain("outra invernada");
+    expect(checked.rows[2].errors.invernada).toContain("outra invernada");
+    expect(importablePayloads(checked)).toEqual([]);
+  });
+});
+
 describe("buildTemplateCsv", () => {
   it("starts with a BOM and lists the pt-BR headers", () => {
     const csv = buildTemplateCsv();
     expect(csv.charCodeAt(0)).toBe(0xfeff);
-    expect(csv).toContain("brinco,categoria,raça,sexo,nascimento,lote,peso");
+    expect(csv).toContain("brinco,categoria,raça,sexo,nascimento,lote,invernada,peso");
+    expect(csv).toContain("Lote 1,01,320");
   });
 });

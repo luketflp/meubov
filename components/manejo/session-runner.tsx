@@ -37,7 +37,7 @@ interface ManejoSessionRunnerProps {
 /** Subtitle line of a session that moves the herd: where to, for how much. */
 function movementSubtitle(session: ManejoSession, lotName: string | undefined): string {
   if (session.kind === "transfer") {
-    return lotName ? `Destino: ${lotName}` : "Transferência entre lotes";
+    return lotName ? `Destino: ${lotName}` : "Troca de lote";
   }
   const who = session.counterparty ? ` · ${session.counterparty}` : "";
   if (session.kind === "sale") {

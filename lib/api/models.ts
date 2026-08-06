@@ -6,9 +6,40 @@
  * strings, matching the Postgres `date` columns.
  */
 import { t } from "elysia";
+import { FormatRegistry } from "elysia/type-system";
 
-/** ISO calendar date "YYYY-MM-DD". */
-export const DateString = t.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
+const ISO_CALENDAR_DATE_FORMAT = "meubov-iso-calendar-date";
+const ISO_CALENDAR_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+const DAYS_BY_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
+
+/** True only for a real proleptic-Gregorian date accepted by Postgres. */
+function isISOCalendarDate(value: string): boolean {
+  const match = ISO_CALENDAR_DATE_PATTERN.exec(value);
+  if (!match) return false;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year === 0 || month < 1 || month > 12 || day < 1) return false;
+
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = month === 2 && leapYear ? 29 : DAYS_BY_MONTH[month - 1];
+  return day <= daysInMonth;
+}
+
+// Elysia/TypeBox formats are global; the guard keeps dev hot reload idempotent.
+if (!FormatRegistry.Has(ISO_CALENDAR_DATE_FORMAT)) {
+  FormatRegistry.Set(ISO_CALENDAR_DATE_FORMAT, isISOCalendarDate);
+}
+
+/** Strict ISO calendar date "YYYY-MM-DD" (including leap-year validation). */
+export const DateString = t.String({
+  pattern: "^\\d{4}-\\d{2}-\\d{2}$",
+  format: ISO_CALENDAR_DATE_FORMAT,
+});
+
+/** A string containing at least one non-whitespace character. */
+export const NonBlankString = t.String({ minLength: 1, pattern: "\\S" });
 
 export const CategoryModel = t.Union([
   t.Literal("calf"),
@@ -54,17 +85,18 @@ export const NewAnimalBody = t.Object({
 
 /**
  * One row of POST /animals/import. Mirrors NewAnimalBody but carries the lot
- * as a NAME (`lot`) instead of a lot id: the server resolves it to a lot,
- * creating the lot (and any missing breed) on the fly.
+ * as a NAME (`lot`) instead of a lot id. `invernada` is the fixed code where
+ * that logical group currently lives; the server never invents physical areas.
  */
 export const ImportAnimalRow = t.Object({
-  earTag: t.String({ minLength: 1 }),
+  earTag: NonBlankString,
   category: CategoryModel,
   customCategoryId: t.Optional(t.String()),
-  breed: t.String({ minLength: 1 }),
+  breed: NonBlankString,
   sex: SexModel,
   birthDate: DateString,
-  lot: t.String({ minLength: 1 }),
+  lot: NonBlankString,
+  invernada: NonBlankString,
   weightKg: t.Optional(t.Number({ exclusiveMinimum: 0 })),
 });
 
@@ -133,7 +165,7 @@ export const CompleteTreatmentsBody = t.Object({
 export const BreedBody = t.Object({ name: t.String({ minLength: 1 }) });
 
 /**
- * Ceiling on the vertices of one pasture outline. A hand-drawn lot is a
+ * Ceiling on the vertices of one pasture outline. A hand-drawn invernada is a
  * couple of dozen points; anything near this came from an import and must be
  * simplified before it bloats the jsonb column and the request payload.
  */
@@ -141,7 +173,8 @@ export const MAX_BOUNDARY_VERTICES = 2000;
 
 /**
  * Pasture outline: open ring of [lng, lat] pairs (GeoJSON axis order, first
- * point not repeated), matching `Lot.boundary` and the `lots.boundary` column.
+ * point not repeated), matching `Invernada.boundary` and the
+ * `invernadas.boundary` column.
  * Three vertices is the minimum that encloses an area. What JSON Schema cannot
  * express — self-intersection, zero area, swapped axes — is not checked here.
  */
@@ -153,22 +186,48 @@ export const BoundaryModel = t.Array(
   { minItems: 3, maxItems: MAX_BOUNDARY_VERTICES }
 );
 
-/** Body of POST /lots (Lot without the server-generated id). */
+/** Body of POST /lots. The initial placement starts today. */
 export const NewLotBody = t.Object({
-  name: t.String({ minLength: 1 }),
-  grass: t.String({ minLength: 1 }),
+  name: NonBlankString,
+  invernadaId: NonBlankString,
+});
+
+/** Body of PATCH /lots/:id (logical-group registration only). */
+export const LotPatchBody = t.Object({
+  name: t.Optional(NonBlankString),
+  needsReview: t.Optional(t.Boolean()),
+});
+
+/** Body of POST /lots/:id/placements (moves the whole lot atomically). */
+export const MoveLotBody = t.Object({
+  invernadaId: t.String({ minLength: 1 }),
+  startedOn: DateString,
+  notes: t.Optional(t.String()),
+});
+
+/** Body of POST /lots/:id/archive (closes the current placement). */
+export const ArchiveLotBody = t.Object({
+  endedOn: DateString,
+});
+
+/** Body shared by POST /invernadas and its domain contract minus id. */
+export const NewInvernadaBody = t.Object({
+  code: NonBlankString,
+  name: t.Optional(NonBlankString),
+  grass: NonBlankString,
   hectares: t.Number({ exclusiveMinimum: 0 }),
   boundary: t.Optional(BoundaryModel),
 });
 
 /**
- * Body of PATCH /lots/:id (all fields optional). `boundary` is three-valued on
- * purpose: absent leaves the outline untouched, `null` erases it, a ring
- * replaces it.
+ * Body of PATCH /invernadas/:id. `name` and `boundary` are three-valued:
+ * absent leaves the value untouched and null clears it.
  */
-export const LotPatchBody = t.Object({
-  name: t.Optional(t.String({ minLength: 1 })),
-  grass: t.Optional(t.String({ minLength: 1 })),
+export const InvernadaPatchBody = t.Object({
+  /** Accepted only while the stored code has the migration-only LEGACY- prefix. */
+  code: t.Optional(NonBlankString),
+  name: t.Optional(t.Union([NonBlankString, t.Null()])),
+  grass: t.Optional(NonBlankString),
   hectares: t.Optional(t.Number({ exclusiveMinimum: 0 })),
   boundary: t.Optional(t.Union([BoundaryModel, t.Null()])),
 });

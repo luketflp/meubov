@@ -25,7 +25,7 @@ interface DashboardKpisRowProps {
   arrobaQuoteSub: string | null;
   /** REAL — herd average daily gain (kg/day) derived from weighings, or null. */
   averageAdg: number | null;
-  /** REAL — aggregate herd stocking rate (AU/ha) derived from herd + lots. */
+  /** REAL — aggregate herd stocking rate (AU/ha) derived from herd + invernadas. */
   stockingRate: number;
   /** Herd market value (R$), or null when the quote is unavailable. */
   herdValue: number | null;
@@ -106,7 +106,7 @@ export function DashboardKpisRow({
             <span className="text-sm text-ink-soft"> UA/ha</span>
           </>
         }
-        sub="rebanho ativo · lotes"
+        sub="rebanho ativo · invernadas"
         icon={Sprout}
       />
       <KpiCard

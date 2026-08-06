@@ -53,7 +53,7 @@ export const WEIGHING_SESSION_NAME = "Pesagem";
 
 /** pt-BR name of the sessions that move the herd instead of treating it. */
 const KIND_SESSION_NAME: Partial<Record<ManejoKind, string>> = {
-  transfer: "Transferência",
+  transfer: "Troca de lote",
   sale: "Venda",
   entry: "Entrada",
 };

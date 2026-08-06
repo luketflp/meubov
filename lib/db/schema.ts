@@ -20,6 +20,7 @@
  */
 import {
   boolean,
+  check,
   date,
   index,
   integer,
@@ -33,6 +34,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /* -------------------------------------------------------------------------- */
 /* Enums (stored unions only)                                                 */
@@ -144,7 +146,7 @@ export const farm = pgTable("farm", {
   municipality: text("municipality").notNull(),
   stateRegistration: text("state_registration").notNull(),
   manager: text("manager").notNull(),
-  /** Farm HQ (sede) coordinates — map center before any lot is drawn. */
+  /** Farm HQ (sede) coordinates — map center before any invernada is drawn. */
   headquartersLat: numeric("headquarters_lat", { mode: "number" }),
   headquartersLng: numeric("headquarters_lng", { mode: "number" }),
 });
@@ -168,21 +170,82 @@ export const farmUsers = pgTable(
   ]
 );
 
-/** Lot (paddock) of the farm. */
+/**
+ * Logical group of cattle. A lot moves between physical invernadas over time;
+ * animal.lotId continues to express membership in this group.
+ *
+ * grass/hectares/boundary are legacy columns kept nullable for a later,
+ * separately deployable cleanup migration. New code never reads or writes them.
+ */
 export const lots = pgTable("lots", {
   id: text("id").primaryKey(),
   farmId: integer("farm_id")
     .notNull()
     .references(() => farm.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  grass: text("grass").notNull(),
-  hectares: numeric("hectares", { mode: "number" }).notNull(),
-  /**
-   * Pasture outline on the map: open ring of [lng, lat] pairs (GeoJSON axis
-   * order, first point not repeated). Absent while the lot was never drawn.
-   */
+  needsReview: boolean("needs_review").notNull().default(false),
+  grass: text("grass"),
+  hectares: numeric("hectares", { mode: "number" }),
   boundary: jsonb("boundary").$type<[number, number][]>(),
 });
+
+/** Fixed physical pasture/paddock of a farm. */
+export const invernadas = pgTable(
+  "invernadas",
+  {
+    id: text("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farm.id, { onDelete: "cascade" }),
+    /** Farm-local fixed number/code (for example "03" or "3A"). */
+    code: text("code").notNull(),
+    name: text("name"),
+    grass: text("grass").notNull(),
+    hectares: numeric("hectares", { mode: "number" }).notNull(),
+    /** Open ring of [lng, lat] pairs; the first point is not repeated. */
+    boundary: jsonb("boundary").$type<[number, number][]>(),
+  },
+  (t) => [
+    uniqueIndex("invernadas_farm_id_code_unique").on(t.farmId, t.code),
+    index("invernadas_farm_id_idx").on(t.farmId),
+  ]
+);
+
+/** Dated occupancy of an invernada by one logical lot. */
+export const lotPlacements = pgTable(
+  "lot_placements",
+  {
+    id: text("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farm.id, { onDelete: "cascade" }),
+    lotId: text("lot_id")
+      .notNull()
+      .references(() => lots.id),
+    invernadaId: text("invernada_id")
+      .notNull()
+      .references(() => invernadas.id),
+    /** Inclusive start of this placement. */
+    startedOn: date("started_on").notNull(),
+    /** Exclusive end; null means this is the lot's current placement. */
+    endedOn: date("ended_on"),
+    notes: text("notes"),
+    /** True only for the placement synthesized during the data migration. */
+    baseline: boolean("baseline").notNull().default(false),
+  },
+  (t) => [
+    uniqueIndex("lot_placements_one_open_per_lot_unique")
+      .on(t.lotId)
+      .where(sql`${t.endedOn} is null`),
+    index("lot_placements_farm_id_idx").on(t.farmId),
+    index("lot_placements_lot_id_started_on_idx").on(t.lotId, t.startedOn),
+    index("lot_placements_invernada_id_idx").on(t.invernadaId),
+    check(
+      "lot_placements_valid_period_check",
+      sql`${t.endedOn} is null or ${t.endedOn} > ${t.startedOn}`
+    ),
+  ]
+);
 
 /** Registered breeds of a farm. */
 export const breeds = pgTable(
@@ -452,6 +515,8 @@ export const manejoSessionAnimals = pgTable(
 export type FarmRow = typeof farm.$inferSelect;
 export type FarmUserRow = typeof farmUsers.$inferSelect;
 export type LotRow = typeof lots.$inferSelect;
+export type InvernadaRow = typeof invernadas.$inferSelect;
+export type LotPlacementRow = typeof lotPlacements.$inferSelect;
 export type BreedRow = typeof breeds.$inferSelect;
 export type AnimalRow = typeof animals.$inferSelect;
 export type WeighingRow = typeof weighings.$inferSelect;

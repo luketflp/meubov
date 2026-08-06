@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { FarmDataForm } from "@/components/settings/FarmDataForm";
 import { HerdCategories } from "@/components/settings/HerdCategories";
 import { RegisteredBreeds } from "@/components/settings/RegisteredBreeds";
-import { LotsPaddocks } from "@/components/settings/LotsPaddocks";
+import { InvernadasSettings } from "@/components/settings/LotsPaddocks";
 import { HealthProtocols } from "@/components/settings/HealthProtocols";
 
 export default function SettingsPage() {
@@ -13,12 +13,12 @@ export default function SettingsPage() {
       <div className="mx-auto flex max-w-3xl flex-col gap-6">
         <PageHeader
           title="Configurações"
-          subtitle="Dados da fazenda, categorias, raças, lotes e protocolos sanitários"
+          subtitle="Dados da fazenda, categorias, raças, invernadas e protocolos sanitários"
         />
         <FarmDataForm />
         <HerdCategories />
         <RegisteredBreeds />
-        <LotsPaddocks />
+        <InvernadasSettings />
         <HealthProtocols />
         <p className="text-xs text-ink-soft">
           Os protocolos geram a agenda do Calendário Sanitário.

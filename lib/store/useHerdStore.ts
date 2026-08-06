@@ -13,7 +13,9 @@ import type {
   FarmData,
   InactiveReason,
   HerdData,
+  Invernada,
   Lot,
+  LotPlacement,
   ManejoKind,
   ManejoSession,
   ManejoSessionAnimal,
@@ -113,6 +115,34 @@ export interface ImportSummary {
   createdLots: string[];
 }
 
+/** Logical cattle group plus the physical invernada where it starts. */
+export interface NewLot {
+  name: string;
+  invernadaId: string;
+}
+
+/** Dated movement of one whole cattle group between invernadas. */
+export interface MoveLotInput {
+  invernadaId: string;
+  startedOn: string;
+  notes?: string;
+}
+
+/** Ends an empty logical lot while preserving its placement history. */
+export interface ArchiveLotInput {
+  endedOn: string;
+}
+
+/** Editable fields of a fixed physical invernada. */
+export interface InvernadaPatch {
+  /** One-time correction of a migration-only LEGACY-* code. */
+  code?: string;
+  name?: string | null;
+  grass?: string;
+  hectares?: number;
+  boundary?: [number, number][] | null;
+}
+
 /** A farm the user can switch to (from GET /farms). */
 export interface FarmOption {
   id: number;
@@ -158,12 +188,22 @@ export interface HerdStore extends HerdData {
   addBreed: (name: string) => Promise<void>;
   /** Removes the breed via the API; false when an active animal uses it. */
   removeBreed: (name: string) => Promise<boolean>;
-  /** Creates the lot via the API and returns it with its server-generated id. */
-  addLot: (l: Omit<Lot, "id">) => Promise<Lot>;
+  /** Creates a logical lot and its initial invernada placement atomically. */
+  addLot: (l: NewLot) => Promise<Lot>;
   /** Removes the lot via the API; false when an active animal occupies it. */
   removeLot: (id: string) => Promise<boolean>;
-  /** Edits a lot's fields; `boundary: null` erases the drawing. */
+  /** Edits the logical lot's registration fields. */
   updateLot: (id: string, patch: LotPatch) => Promise<void>;
+  /** Moves the whole logical lot to another invernada in one transaction. */
+  moveLot: (id: string, input: MoveLotInput) => Promise<void>;
+  /** Ends an empty logical lot and closes its current placement. */
+  archiveLot: (id: string, input: ArchiveLotInput) => Promise<void>;
+  /** Creates a fixed physical invernada. */
+  addInvernada: (input: Omit<Invernada, "id">) => Promise<Invernada>;
+  /** Edits an invernada's physical registration or boundary. */
+  updateInvernada: (id: string, patch: InvernadaPatch) => Promise<void>;
+  /** Removes an unused invernada; false when current/history references it. */
+  removeInvernada: (id: string) => Promise<boolean>;
   saveFarm: (d: FarmData) => Promise<void>;
   addProtocol: (p: Omit<HealthProtocol, "id">, generateSchedule: boolean) => Promise<void>;
   removeProtocol: (id: string) => Promise<void>;
@@ -201,14 +241,13 @@ export interface AnimalPatch {
 }
 
 /**
- * Editable fields of a lot (only sent ones change). `boundary` is three-valued:
- * absent leaves the outline alone, `null` erases it, a ring replaces it.
+ * Editable fields of a logical lot. Its invernada is deliberately absent:
+ * placement changes must go through `moveLot` so history cannot be bypassed.
  */
 export interface LotPatch {
   name?: string;
-  grass?: string;
-  hectares?: number;
-  boundary?: [number, number][] | null;
+  /** Clears the migration-review flag after the farmer confirms the group. */
+  needsReview?: boolean;
 }
 
 /**
@@ -275,6 +314,8 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   animals: [],
   treatments: [],
   lots: [],
+  invernadas: [],
+  lotPlacements: [],
   movements: [],
   breeds: [],
   protocols: [],
@@ -320,7 +361,26 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   importHerd: async (rows) => {
     const { data, error } = await api.animals.import.post({ animals: rows });
-    if (error) apiFail("importar o rebanho", error.status);
+    if (error) {
+      const detail = error.value as {
+        error?: string;
+        codes?: string[];
+        lots?: string[];
+      };
+      if (detail.error === "invernada_not_found") {
+        toast.error(
+          `Invernada não cadastrada: ${detail.codes?.join(", ") || "código desconhecido"}.`
+        );
+        throw new Error("importar o rebanho failed: invernada_not_found");
+      }
+      if (detail.error === "lot_invernada_conflict") {
+        toast.error(
+          `Confira a invernada ${detail.lots?.length === 1 ? "do lote" : "dos lotes"}: ${detail.lots?.join(", ") || "cadastro divergente"}.`
+        );
+        throw new Error("importar o rebanho failed: lot_invernada_conflict");
+      }
+      apiFail("importar o rebanho", error.status);
+    }
     const result = data as {
       imported: Animal[];
       skipped: { earTag: string; reason: string }[];
@@ -334,7 +394,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       createdLots: result.createdLots.map((lot) => lot.name),
     };
     // The import already committed on the server. Re-fetch the whole herd so
-    // animals plus any new raças/lots stay consistent, but never let a refresh
+    // animals plus any new raças/lots/placements stay consistent, but never let a refresh
     // failure mask a successful import — return the server-reported summary
     // regardless; the store refreshes on the next successful load.
     try {
@@ -552,20 +612,25 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   addLot: async (l) => {
     const { data, error } = await api.lots.post(l);
-    if (error) apiFail("criar o lote", error.status);
-    const lot = data as Lot;
-    set((s) => ({ lots: [...s.lots, lot] }));
-    return lot;
+    if (error) {
+      if (error.status === CONFLICT) throw new Error("duplicate_lot_name");
+      apiFail("criar o lote", error.status);
+    }
+    const result = data as { lot: Lot; placement: LotPlacement };
+    set((s) => ({
+      lots: [...s.lots, result.lot],
+      lotPlacements: [...s.lotPlacements, result.placement],
+    }));
+    return result.lot;
   },
 
   updateLot: async (id, patch) => {
     const { data, error } = await api.lots({ id }).patch(patch);
-    if (error) apiFail("salvar o lote", error.status);
-    /*
-     * Replace the whole lot instead of spreading the patch over it: `boundary`
-     * is optional, so a merge could never erase an outline — clearing it would
-     * succeed on the server and change nothing here.
-     */
+    if (error) {
+      if (error.status === CONFLICT) throw new Error("duplicate_lot_name");
+      apiFail("salvar o lote", error.status);
+    }
+    // The API returns the complete logical group after applying the patch.
     const lot = data as Lot;
     set((s) => ({ lots: s.lots.map((l) => (l.id === id ? lot : l)) }));
   },
@@ -576,7 +641,84 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       if (error.status === 409) return false;
       apiFail("remover o lote", error.status);
     }
-    set((s) => ({ lots: s.lots.filter((l) => l.id !== id) }));
+    set((s) => ({
+      lots: s.lots.filter((l) => l.id !== id),
+      lotPlacements: s.lotPlacements.filter((placement) => placement.lotId !== id),
+    }));
+    return true;
+  },
+
+  moveLot: async (id, input) => {
+    const { data, error } = await api.lots({ id }).placements.post(input);
+    if (error) apiFail("mover o lote", error.status);
+    const result = data as {
+      placement: LotPlacement;
+      previousPlacement: LotPlacement;
+    };
+    set((s) => {
+      const retained = s.lotPlacements
+        .filter(
+          (placement) =>
+            placement.id !== result.previousPlacement.id &&
+            placement.id !== result.placement.id
+        )
+        .map((placement) =>
+          placement.lotId === result.placement.lotId && !placement.endedOn
+            ? { ...placement, endedOn: result.previousPlacement.startedOn }
+            : placement
+        );
+      return {
+        lotPlacements: [
+          ...retained,
+          result.previousPlacement,
+          result.placement,
+        ],
+      };
+    });
+  },
+
+  archiveLot: async (id, input) => {
+    const { data, error } = await api.lots({ id }).archive.post(input);
+    if (error) apiFail("encerrar o lote", error.status);
+    const result = data as { previousPlacement: LotPlacement };
+    set((s) => {
+      const retained = s.lotPlacements
+        .filter((placement) => placement.id !== result.previousPlacement.id)
+        .map((placement) =>
+          placement.lotId === result.previousPlacement.lotId && !placement.endedOn
+            ? { ...placement, endedOn: result.previousPlacement.startedOn }
+            : placement
+        );
+      return {
+        lotPlacements: [...retained, result.previousPlacement],
+      };
+    });
+  },
+
+  addInvernada: async (input) => {
+    const { data, error } = await api.invernadas.post(input);
+    if (error) apiFail("cadastrar a invernada", error.status);
+    const invernada = data as Invernada;
+    set((s) => ({ invernadas: [...s.invernadas, invernada] }));
+    return invernada;
+  },
+
+  updateInvernada: async (id, patch) => {
+    const { data, error } = await api.invernadas({ id }).patch(patch);
+    if (error) apiFail("salvar a invernada", error.status);
+    const invernada = data as Invernada;
+    set((s) => ({
+      invernadas: s.invernadas.map((item) => (item.id === id ? invernada : item)),
+    }));
+  },
+
+  removeInvernada: async (id) => {
+    const { error } = await api.invernadas({ id }).delete();
+    if (error) {
+      if (error.status === 409) return false;
+      apiFail("remover a invernada", error.status);
+    }
+    set((s) => ({ invernadas: s.invernadas.filter((item) => item.id !== id) }));
     return true;
   },
 

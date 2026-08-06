@@ -29,6 +29,8 @@ export default function HerdPage() {
   const animals = useHerdStore((state) => state.animals);
   const treatments = useHerdStore((state) => state.treatments);
   const lots = useHerdStore((state) => state.lots);
+  const invernadas = useHerdStore((state) => state.invernadas);
+  const lotPlacements = useHerdStore((state) => state.lotPlacements);
 
   const [filters, setFilters] = useState<HerdFilters>(INITIAL_FILTERS);
   const [sort, setSort] = useState<HerdSort>(DEFAULT_SORT);
@@ -42,6 +44,23 @@ export default function HerdPage() {
     () => new Map(lots.map((lot) => [lot.id, lot.name])),
     [lots]
   );
+
+  const invernadaNames = useMemo(() => {
+    const byId = new Map(invernadas.map((invernada) => [invernada.id, invernada]));
+    return new Map(
+      lotPlacements
+        .filter((placement) => placement.endedOn === undefined)
+        .map((placement) => {
+          const invernada = byId.get(placement.invernadaId);
+          return [
+            placement.lotId,
+            invernada
+              ? `${invernada.code}${invernada.name ? ` · ${invernada.name}` : ""}`
+              : "—",
+          ] as const;
+        })
+    );
+  }, [invernadas, lotPlacements]);
 
   const filtered = useMemo(() => filterHerd(derived, filters), [derived, filters]);
 
@@ -85,6 +104,7 @@ export default function HerdPage() {
             <HerdTable
               items={sorted}
               lotNames={lotNames}
+              invernadaNames={invernadaNames}
               sort={sort}
               onSort={sortBy}
             />
@@ -96,6 +116,7 @@ export default function HerdPage() {
                 key={item.animal.id}
                 item={item}
                 lotName={lotNames.get(item.animal.lotId) ?? "—"}
+                invernadaName={invernadaNames.get(item.animal.lotId) ?? "—"}
               />
             ))}
           </ul>

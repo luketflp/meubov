@@ -27,7 +27,7 @@ export type DiagnosisResult = "pregnant" | "open" | "pending";
 /** Animal movement type. */
 export type MovementType = "purchase" | "sale" | "transfer";
 
-/** Stocking rate class of the lot (AU/ha). */
+/** Stocking rate class of a physical invernada (AU/ha). */
 export type StockingRateClass = "high" | "good" | "light";
 
 /** Weighing record of an animal. */
@@ -189,17 +189,39 @@ export interface ManejoSession {
   notes?: string;
 }
 
-/** Lot (paddock) of the farm. */
+/** Logical group of cattle, independent of the pasture it currently occupies. */
 export interface Lot {
   id: string;
   name: string;
+  /** Set on groups synthesized from the former lot/paddock model at cutover. */
+  needsReview?: boolean;
+}
+
+/** Fixed physical pasture/paddock of the farm. */
+export interface Invernada {
+  id: string;
+  /** Farm-local fixed number/code, such as "03" or "3A". */
+  code: string;
+  name?: string;
   grass: string;
   hectares: number;
   /**
    * Pasture outline on the map: open ring of [lng, lat] pairs (GeoJSON axis
-   * order, first point not repeated). Absent while the lot was never drawn.
+   * order, first point not repeated). Absent while the invernada was never drawn.
    */
   boundary?: [number, number][];
+}
+
+/** Dated assignment of a logical lot to a physical invernada. */
+export interface LotPlacement {
+  id: string;
+  lotId: string;
+  invernadaId: string;
+  startedOn: string;
+  endedOn?: string;
+  notes?: string;
+  /** Marks the current-state record synthesized at migration cutover. */
+  baseline?: boolean;
 }
 
 /**
@@ -264,7 +286,7 @@ export interface FarmData {
   municipality: string;
   stateRegistration: string;
   manager: string;
-  /** Farm HQ (sede) coordinates — map center before any lot is drawn. */
+  /** Farm HQ (sede) coordinates — map center before any invernada is drawn. */
   headquarters?: { lat: number; lng: number };
 }
 
@@ -273,6 +295,8 @@ export interface HerdData {
   animals: Animal[];
   treatments: Treatment[];
   lots: Lot[];
+  invernadas: Invernada[];
+  lotPlacements: LotPlacement[];
   movements: Movement[];
   breeds: string[];
   protocols: HealthProtocol[];

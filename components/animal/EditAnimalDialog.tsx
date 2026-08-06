@@ -5,7 +5,7 @@
  * the animal's sex), breed, birth date and lot — plus the danger zone that
  * deactivates the animal with a reason (a sale goes through a manejo de venda).
  */
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
@@ -13,6 +13,10 @@ import { useToast } from "@/components/providers/Toasts";
 import type { Animal, Category, InactiveReason } from "@/lib/types";
 import { todayISO } from "@/lib/domain/dates";
 import { CATEGORY_LABEL, INACTIVE_REASON_LABEL } from "@/lib/domain/labels";
+import {
+  currentPlacementForLot,
+  currentlyPlacedLots,
+} from "@/lib/store/selectors";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -56,6 +60,8 @@ export function EditAnimalDialog({ animal }: { animal: Animal }) {
   const animals = useHerdStore((s) => s.animals);
   const breeds = useHerdStore((s) => s.breeds);
   const lots = useHerdStore((s) => s.lots);
+  const invernadas = useHerdStore((s) => s.invernadas);
+  const lotPlacements = useHerdStore((s) => s.lotPlacements);
   const customCategories = useHerdStore((s) => s.customCategories);
   const updateAnimal = useHerdStore((s) => s.updateAnimal);
   const deactivateAnimal = useHerdStore((s) => s.deactivateAnimal);
@@ -77,6 +83,27 @@ export function EditAnimalDialog({ animal }: { animal: Animal }) {
   const compatibleCustom = customCategories.filter((c) =>
     compatibleBases.includes(c.baseCategory)
   );
+  const availableLots = useMemo(() => {
+    const placed = currentlyPlacedLots(lots, lotPlacements);
+    const current = lots.find((lot) => lot.id === animal.lotId);
+    return current && !placed.some((lot) => lot.id === current.id)
+      ? [...placed, current]
+      : placed;
+  }, [animal.lotId, lotPlacements, lots]);
+  const invernadaNameByLot = useMemo(() => {
+    const byId = new Map(invernadas.map((item) => [item.id, item]));
+    return new Map(
+      availableLots.map((lot) => {
+        const placement = currentPlacementForLot(lot.id, lotPlacements);
+        return [
+          lot.id,
+          placement
+            ? `Inv. ${byId.get(placement.invernadaId)?.code ?? "—"}`
+            : "Lote encerrado",
+        ] as const;
+      })
+    );
+  }, [availableLots, invernadas, lotPlacements]);
 
   function onOpenChange(next: boolean) {
     if (next) {
@@ -249,9 +276,9 @@ export function EditAnimalDialog({ animal }: { animal: Animal }) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {lots.map((lot) => (
+                {availableLots.map((lot) => (
                   <SelectItem key={lot.id} value={lot.id}>
-                    {lot.name}
+                    {lot.name} · {invernadaNameByLot.get(lot.id)}
                   </SelectItem>
                 ))}
               </SelectContent>

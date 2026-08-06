@@ -5,7 +5,7 @@
  * pt-BR validation status, then bulk-import the valid ones. Parsing and
  * validation live in `lib/domain/herdImport` (pure); SheetJS is loaded on demand
  * so its weight stays out of the main bundle. The server re-validates and is the
- * authority on duplicates and auto-created raças/lots.
+ * authority on duplicates, auto-created raças/lots, and invernada codes.
  */
 import { useRef, useState } from "react";
 import { Download, FileUp, Upload } from "lucide-react";
@@ -16,11 +16,14 @@ import {
   buildImportRows,
   buildTemplateCsv,
   importablePayloads,
+  importFieldForHeader,
+  validateImportRowLocations,
   FIELD_LABEL,
   type ImportField,
   type ImportParseResult,
   type ImportRow,
 } from "@/lib/domain/herdImport";
+import { currentPlacementForLot } from "@/lib/store/selectors";
 import type { ImportSummary } from "@/lib/store/useHerdStore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +57,7 @@ const PREVIEW_COLUMNS: ImportField[] = [
   "sex",
   "birthDate",
   "lot",
+  "invernada",
   "weightKg",
 ];
 
@@ -71,11 +75,19 @@ function RowStatusCell({ row }: { row: ImportRow }) {
       </Badge>
     );
   }
-  const firstError = Object.values(row.errors)[0];
+  const errors = Object.entries(row.errors) as [ImportField, string][];
   return (
     <div className="flex flex-col gap-0.5">
       <Badge variant="destructive">Erro</Badge>
-      {firstError ? <span className="text-xs text-overdue">{firstError}</span> : null}
+      {errors.length > 0 ? (
+        <ul className="space-y-0.5 text-xs text-overdue">
+          {errors.map(([field, message]) => (
+            <li key={field}>
+              {FIELD_LABEL[field]}: {message}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
@@ -83,6 +95,9 @@ function RowStatusCell({ row }: { row: ImportRow }) {
 export function ImportHerdDialog() {
   const animals = useHerdStore((s) => s.animals);
   const customCategories = useHerdStore((s) => s.customCategories);
+  const lots = useHerdStore((s) => s.lots);
+  const invernadas = useHerdStore((s) => s.invernadas);
+  const lotPlacements = useHerdStore((s) => s.lotPlacements);
   const importHerd = useHerdStore((s) => s.importHerd);
   const { addToast } = useToast();
 
@@ -138,7 +153,7 @@ export function ImportHerdDialog() {
       const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
       const sheetName = workbook.SheetNames[0];
       const sheet = sheetName ? workbook.Sheets[sheetName] : undefined;
-      const matrix = sheet
+      const rawMatrix = sheet
         ? (XLSX.utils.sheet_to_json(sheet, {
             header: 1,
             raw: true,
@@ -146,12 +161,44 @@ export function ImportHerdDialog() {
             blankrows: false,
           }) as unknown[][])
         : [];
+      const formattedMatrix = sheet
+        ? (XLSX.utils.sheet_to_json(sheet, {
+            header: 1,
+            raw: false,
+            defval: "",
+            blankrows: false,
+          }) as unknown[][])
+        : [];
+
+      // SheetJS intentionally turns numeric-looking cells into numbers in raw
+      // mode. Dates and weights need those raw values, but a fixed code such as
+      // "01" must keep its displayed zeroes. Use the formatted value for that
+      // one column only.
+      const invernadaColumn = rawMatrix[0]?.findIndex(
+        (cell) => importFieldForHeader(String(cell ?? "")) === "invernada"
+      );
+      const matrix = rawMatrix.map((row, rowIndex) => {
+        if (invernadaColumn === undefined || invernadaColumn < 0) return row;
+        const next = [...row];
+        next[invernadaColumn] =
+          formattedMatrix[rowIndex]?.[invernadaColumn] ?? row[invernadaColumn];
+        return next;
+      });
       const parsed = buildImportRows(matrix, {
         customCategories,
         existingEarTags: animals.map((a) => a.earTag),
         todayIso: todayISO(),
       });
-      setResult(parsed);
+      const checked = validateImportRowLocations(
+        parsed,
+        lots.map((lot) => ({
+          name: lot.name,
+          currentInvernadaId:
+            currentPlacementForLot(lot.id, lotPlacements)?.invernadaId,
+        })),
+        invernadas
+      );
+      setResult(checked);
       setStep("preview");
     } catch {
       setReadError("Não foi possível ler o arquivo. Envie um .csv ou .xlsx válido.");
@@ -197,8 +244,8 @@ export function ImportHerdDialog() {
           <DialogTitle>Importar rebanho</DialogTitle>
           <DialogDescription>
             Envie uma planilha (.csv ou .xlsx) com uma linha por animal. Raças e
-            lotes novos são criados automaticamente; brincos já cadastrados são
-            ignorados.
+            lotes novos são criados automaticamente; informe o código de uma
+            invernada já cadastrada. Brincos já cadastrados são ignorados.
           </DialogDescription>
         </DialogHeader>
 
@@ -208,7 +255,8 @@ export function ImportHerdDialog() {
               <p className="font-medium">Colunas esperadas</p>
               <p className="text-ink-soft">
                 brinco, categoria, raça, sexo (opcional quando a categoria já
-                define), nascimento (DD/MM/AAAA), lote, peso (kg, opcional).
+                define), nascimento (DD/MM/AAAA), lote (grupo de animais),
+                invernada (código), peso (kg, opcional).
               </p>
               <button
                 type="button"
@@ -321,8 +369,7 @@ export function ImportHerdDialog() {
             ) : null}
             {summary.createdLots.length > 0 ? (
               <p className="text-ink-soft">
-                Lotes criados: {summary.createdLots.join(", ")}. Ajuste área e capim
-                em Configurações.
+                Lotes criados: {summary.createdLots.join(", ")}.
               </p>
             ) : null}
           </div>

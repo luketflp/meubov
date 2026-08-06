@@ -1,14 +1,8 @@
 "use client";
 
 /**
- * "Editar lote" dialog on the Lots screen: corrects the name, capim and
- * hectares of a lot already registered. Only the changed fields travel, so the
- * pasture outline drawn on the map (`Lot.boundary`) is never touched — there is
- * no way to redraw one yet, so nothing here may erase it.
- *
- * Hectares is more than a record: it is the denominator of the stocking rate,
- * so a lot created on the fly by the herd import — which lands with a
- * placeholder area — reports a wrong UA/ha until it is corrected here.
+ * Corrects the name of a logical cattle group. Physical pasture data belongs
+ * to the invernada and is edited separately.
  */
 import { useState, type FormEvent } from "react";
 import { Pencil } from "lucide-react";
@@ -33,8 +27,6 @@ export function EditLotDialog({ lot }: { lot: Lot }) {
 
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(lot.name);
-  const [grass, setGrass] = useState(lot.grass);
-  const [hectares, setHectares] = useState(String(lot.hectares));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -42,8 +34,6 @@ export function EditLotDialog({ lot }: { lot: Lot }) {
     // Reopening shows what is stored now, never the last abandoned attempt.
     if (next) {
       setName(lot.name);
-      setGrass(lot.grass);
-      setHectares(String(lot.hectares));
       setError(null);
     }
     setOpen(next);
@@ -52,25 +42,13 @@ export function EditLotDialog({ lot }: { lot: Lot }) {
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const cleanName = name.trim();
-    const cleanGrass = grass.trim();
-    const hectaresNumber = Number(hectares.replace(",", "."));
     if (cleanName === "") {
       setError("Informe o nome do lote.");
       return;
     }
-    if (cleanGrass === "") {
-      setError("Informe o capim do lote.");
-      return;
-    }
-    if (!Number.isFinite(hectaresNumber) || hectaresNumber <= 0) {
-      setError("Hectares deve ser um número maior que zero.");
-      return;
-    }
-
     const patch: LotPatch = {};
     if (cleanName !== lot.name) patch.name = cleanName;
-    if (cleanGrass !== lot.grass) patch.grass = cleanGrass;
-    if (hectaresNumber !== lot.hectares) patch.hectares = hectaresNumber;
+    if (lot.needsReview) patch.needsReview = false;
     // Nothing changed: the server answers 422 to an empty patch, so just close.
     if (Object.keys(patch).length === 0) {
       setOpen(false);
@@ -81,10 +59,12 @@ export function EditLotDialog({ lot }: { lot: Lot }) {
     try {
       await updateLot(lot.id, patch);
       setOpen(false);
-    } catch {
-      // The store already raised the failure toast; keeping the dialog open is
-      // what saves the typed values from disappearing with it.
-      setError("Não foi possível salvar. Tente novamente.");
+    } catch (cause) {
+      setError(
+        cause instanceof Error && cause.message === "duplicate_lot_name"
+          ? "Já existe um lote com esse nome."
+          : "Não foi possível salvar. Tente novamente."
+      );
     } finally {
       setSaving(false);
     }
@@ -107,8 +87,9 @@ export function EditLotDialog({ lot }: { lot: Lot }) {
         <DialogHeader>
           <DialogTitle>Editar lote</DialogTitle>
           <DialogDescription>
-            Corrija o nome, o capim e a área. A área alimenta a taxa de lotação
-            (UA/ha) do lote.
+            {lot.needsReview
+              ? "Confirme ou corrija o nome deste grupo migrado."
+              : "Corrija o nome usado para identificar este grupo de animais."}
           </DialogDescription>
         </DialogHeader>
 
@@ -119,32 +100,8 @@ export function EditLotDialog({ lot }: { lot: Lot }) {
               id="edit-lot-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ex.: Lote da Sede"
+              placeholder="Ex.: Novilhas 2025"
               className="min-h-11"
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="edit-lot-grass">Capim</Label>
-            <Input
-              id="edit-lot-grass"
-              value={grass}
-              onChange={(e) => setGrass(e.target.value)}
-              placeholder="Ex.: Braquiária, Mombaça…"
-              className="min-h-11"
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="edit-lot-hectares">Hectares</Label>
-            <Input
-              id="edit-lot-hectares"
-              value={hectares}
-              onChange={(e) => setHectares(e.target.value)}
-              placeholder="Ex.: 42"
-              type="number"
-              min={0}
-              step="0.1"
-              inputMode="decimal"
-              className="min-h-11 font-mono"
             />
           </div>
           {error ? <p className="text-xs text-overdue">{error}</p> : null}

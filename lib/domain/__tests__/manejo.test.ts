@@ -30,7 +30,7 @@ describe("sessionName", () => {
   });
 
   it("names the sessions that move the herd after their kind", () => {
-    expect(sessionName(undefined, "transfer")).toBe("Transferência");
+    expect(sessionName(undefined, "transfer")).toBe("Troca de lote");
     expect(sessionName(undefined, "sale")).toBe("Venda");
     expect(sessionName(undefined, "entry")).toBe("Entrada");
   });

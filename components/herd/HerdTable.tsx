@@ -26,6 +26,7 @@ import { animalCategoryName } from "@/lib/domain/labels";
 interface HerdTableProps {
   items: AnimalWithDerived[];
   lotNames: ReadonlyMap<string, string>;
+  invernadaNames: ReadonlyMap<string, string>;
   sort: HerdSort;
   onSort: (column: SortColumn) => void;
 }
@@ -47,7 +48,7 @@ function SortIcon({ active, direction }: { active: boolean; direction: "asc" | "
   return <ArrowDown aria-hidden className="size-3.5 text-brand" />;
 }
 
-export function HerdTable({ items, lotNames, sort, onSort }: HerdTableProps) {
+export function HerdTable({ items, lotNames, invernadaNames, sort, onSort }: HerdTableProps) {
   const customCategories = useHerdStore((s) => s.customCategories);
   const router = useRouter();
 
@@ -109,7 +110,12 @@ export function HerdTable({ items, lotNames, sort, onSort }: HerdTableProps) {
                 <span className="text-ink-soft">{formatAge(animal.birthDate)}</span>
               </TableCell>
               <TableCell className="px-3 font-mono">{formatFullWeight(currentWeightKg)}</TableCell>
-              <TableCell className="px-3">{lotNames.get(animal.lotId) ?? "—"}</TableCell>
+              <TableCell className="px-3">
+                <span className="block">{lotNames.get(animal.lotId) ?? "—"}</span>
+                <span className="block text-xs text-ink-soft">
+                  Inv. {invernadaNames.get(animal.lotId) ?? "—"}
+                </span>
+              </TableCell>
               <TableCell className="px-3">
                 <StatusPill status={status} withDot />
               </TableCell>
