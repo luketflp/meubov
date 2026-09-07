@@ -17,6 +17,10 @@ import {
   currentPlacementForLot,
   currentlyPlacedLots,
 } from "@/lib/store/selectors";
+import {
+  animalPrerequisites,
+  blocksRegistration,
+} from "@/components/herd/prerequisites";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -153,6 +157,13 @@ export function RegisterAnimalDialog() {
       })
     );
   }, [availableLots, invernadas, lotPlacements]);
+  // A new farm has no breed and no placed lot, so both dropdowns would open
+  // empty; say what is missing instead of demanding a choice that cannot exist.
+  const prerequisites = useMemo(
+    () => animalPrerequisites(breeds, lots, availableLots),
+    [breeds, lots, availableLots]
+  );
+  const blocked = blocksRegistration(prerequisites);
 
   function onOpenChange(next: boolean) {
     if (next) {
@@ -187,6 +198,7 @@ export function RegisterAnimalDialog() {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (blocked) return;
     const earTags = animals.map((a) => a.earTag);
     const newErrors = validateAnimal(fields, earTags, todayISO());
     setErrors(newErrors);
@@ -326,6 +338,7 @@ export function RegisterAnimalDialog() {
               <Select
                 value={fields.breed === "" ? undefined : fields.breed}
                 onValueChange={(breed) => setFields((f) => ({ ...f, breed }))}
+                disabled={prerequisites.breed !== null}
               >
                 <SelectTrigger
                   id="animal-breed"
@@ -342,7 +355,11 @@ export function RegisterAnimalDialog() {
                   ))}
                 </SelectContent>
               </Select>
-              <ErrorMessage message={errors.breed} />
+              {prerequisites.breed ? (
+                <p className="text-xs text-attention">{prerequisites.breed}</p>
+              ) : (
+                <ErrorMessage message={errors.breed} />
+              )}
             </div>
 
             <div className="grid gap-1.5">
@@ -350,6 +367,7 @@ export function RegisterAnimalDialog() {
               <Select
                 value={fields.lotId === "" ? undefined : fields.lotId}
                 onValueChange={(lotId) => setFields((f) => ({ ...f, lotId }))}
+                disabled={prerequisites.lot !== null}
               >
                 <SelectTrigger
                   id="animal-lot"
@@ -366,7 +384,11 @@ export function RegisterAnimalDialog() {
                   ))}
                 </SelectContent>
               </Select>
-              <ErrorMessage message={errors.lotId} />
+              {prerequisites.lot ? (
+                <p className="text-xs text-attention">{prerequisites.lot}</p>
+              ) : (
+                <ErrorMessage message={errors.lotId} />
+              )}
             </div>
 
             <div className="grid gap-1.5">
@@ -393,7 +415,7 @@ export function RegisterAnimalDialog() {
                 Cancelar
               </Button>
             </DialogClose>
-            <Button type="submit" className="min-h-11">
+            <Button type="submit" disabled={blocked} className="min-h-11">
               Cadastrar
             </Button>
           </DialogFooter>
