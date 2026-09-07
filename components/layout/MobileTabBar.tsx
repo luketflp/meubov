@@ -25,6 +25,7 @@ const PRIMARY_TAB_COUNT = 4;
 /** Shorter labels for the cramped bottom bar (keyed by href). */
 const SHORT_LABELS: Record<string, string> = {
   "/calendar": "Agenda",
+  "/nascimentos": "Partos",
 };
 
 /** Applies the mobile short label when one exists, otherwise keeps the default. */

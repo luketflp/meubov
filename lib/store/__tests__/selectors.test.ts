@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { Invernada, Lot, LotPlacement, ManejoSession } from "@/lib/types";
+import type {
+  Animal,
+  Calving,
+  Invernada,
+  Lot,
+  LotPlacement,
+  ManejoSession,
+} from "@/lib/types";
 import { makeAnimal } from "@/lib/domain/__tests__/fixtures";
 import {
   animalById,
@@ -8,6 +15,7 @@ import {
   invernadasWithSummary,
   isLotDeletable,
   lotsWithSummary,
+  recentBirths,
 } from "@/lib/store/selectors";
 
 describe("animalById", () => {
@@ -218,5 +226,91 @@ describe("lot and invernada summaries", () => {
     expect(matrizes.currentInvernada?.id).toBe("invernada-1");
     expect(formerPasture?.lots).toEqual([]);
     expect(formerPasture?.headCount).toBe(0);
+  });
+});
+
+describe("recentBirths", () => {
+  const calf = (earTag: string, overrides: Partial<Animal> = {}): Animal =>
+    makeAnimal({ id: `calf-${earTag}`, earTag, category: "calf", ...overrides });
+
+  const dam = (id: string, calvings: Calving[], overrides: Partial<Animal> = {}): Animal =>
+    makeAnimal({
+      id,
+      earTag: id.toUpperCase(),
+      category: "cow",
+      sex: "female",
+      reproduction: { breedings: [], diagnoses: [], calvings },
+      ...overrides,
+    });
+
+  it("lists every calving across the herd, newest first", () => {
+    const animals = [
+      dam("dam-1", [
+        { date: "2026-01-10", calfEarTag: "BR-101" },
+        { date: "2026-03-02", calfEarTag: "BR-103" },
+      ]),
+      dam("dam-2", [{ date: "2026-02-20", calfEarTag: "BR-102" }]),
+      calf("BR-101"),
+      calf("BR-102"),
+      calf("BR-103"),
+    ];
+
+    expect(recentBirths(animals).map((b) => b.calfEarTag)).toEqual([
+      "BR-103",
+      "BR-102",
+      "BR-101",
+    ]);
+  });
+
+  it("joins the calf record and its birth weight", () => {
+    const animals = [
+      dam("dam-1", [{ date: "2026-03-02", calfEarTag: "BR-103" }]),
+      calf("BR-103", {
+        sex: "female",
+        weighings: [
+          { date: "2026-03-02", weightKg: 32 },
+          { date: "2026-06-02", weightKg: 120 },
+        ],
+      }),
+    ];
+
+    const [birth] = recentBirths(animals);
+
+    expect(birth.dam.id).toBe("dam-1");
+    expect(birth.calf?.sex).toBe("female");
+    expect(birth.birthWeightKg).toBe(32);
+  });
+
+  it("has no birth weight when the calf was never weighed on the calving day", () => {
+    const animals = [
+      dam("dam-1", [{ date: "2026-03-02", calfEarTag: "BR-103" }]),
+      calf("BR-103", { weighings: [{ date: "2026-06-02", weightKg: 120 }] }),
+    ];
+
+    expect(recentBirths(animals)[0].birthWeightKg).toBeNull();
+  });
+
+  it("keeps the birth when the calf's ear tag no longer resolves", () => {
+    const animals = [dam("dam-1", [{ date: "2026-03-02", calfEarTag: "BR-103" }])];
+
+    const [birth] = recentBirths(animals);
+
+    expect(birth.calfEarTag).toBe("BR-103");
+    expect(birth.calf).toBeNull();
+  });
+
+  it("keeps the births of a dam that has since left the herd", () => {
+    const animals = [
+      dam("dam-1", [{ date: "2026-03-02", calfEarTag: "BR-103" }], {
+        active: false,
+        inactiveReason: "sale",
+      }),
+    ];
+
+    expect(recentBirths(animals)).toHaveLength(1);
+  });
+
+  it("ignores animals with no reproduction record", () => {
+    expect(recentBirths([makeAnimal(), dam("dam-1", [])])).toEqual([]);
   });
 });

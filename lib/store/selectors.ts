@@ -37,6 +37,20 @@ export interface LotWithSummary {
   currentInvernada: Invernada | null;
 }
 
+/** A calving joined to both animals it involves, for the Nascimentos screen. */
+export interface Birth {
+  /** Stable list key: calvings have no id of their own. */
+  key: string;
+  /** The calving date, which is also the calf's birth date. */
+  date: string;
+  dam: Animal;
+  calfEarTag: string;
+  /** The calf in the herd, or null when its ear tag no longer resolves. */
+  calf: Animal | null;
+  /** Weight taken on the day of birth, when one was recorded. */
+  birthWeightKg: number | null;
+}
+
 /** Physical pasture with all logical lots currently occupying it. */
 export interface InvernadaWithSummary {
   invernada: Invernada;
@@ -275,4 +289,33 @@ export function herdStockingRateAuPerHa(animals: Animal[], invernadas: Invernada
   );
   if (totalHectares <= 0) return 0;
   return totalAu(activeAnimals(animals)) / totalHectares;
+}
+
+/**
+ * One calving as the Nascimentos screen shows it: the dam's record, the calf's
+ * when the ear tag still resolves, and the weight taken on the day of birth.
+ */
+export function recentBirths(animals: Animal[]): Birth[] {
+  const byEarTag = new Map(animals.map((animal) => [animal.earTag, animal]));
+  return animals
+    .flatMap((dam) =>
+      (dam.reproduction?.calvings ?? []).map((calving) => {
+        const calf = byEarTag.get(calving.calfEarTag) ?? null;
+        // The birth weight is the weighing dated the calving itself — a later
+        // weighing of the same calf is growth, not how it was born.
+        const birthWeighing = calf?.weighings.find((w) => w.date === calving.date);
+        return {
+          key: `${dam.id}-${calving.date}-${calving.calfEarTag}`,
+          date: calving.date,
+          dam,
+          calfEarTag: calving.calfEarTag,
+          calf,
+          birthWeightKg: birthWeighing?.weightKg ?? null,
+        };
+      })
+    )
+    .sort(
+      (a, b) =>
+        compareDate(b.date, a.date) || a.calfEarTag.localeCompare(b.calfEarTag)
+    );
 }

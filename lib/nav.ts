@@ -7,6 +7,7 @@
  * is shared so active-state matching stays identical everywhere.
  */
 import {
+  Baby,
   Beef,
   CalendarDays,
   CircleDollarSign,
@@ -30,6 +31,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: "Painel", href: "/dashboard", icon: LayoutDashboard },
   { label: "Rebanho", href: "/herd", icon: Beef },
   { label: "Manejo", href: "/manejo", icon: Syringe },
+  { label: "Nascimentos", href: "/nascimentos", icon: Baby },
   { label: "Calendário Sanitário", href: "/calendar", icon: CalendarDays },
   { label: "Lotes", href: "/lots", icon: Fence },
   { label: "Mapa", href: "/map", icon: Map },
