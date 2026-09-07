@@ -1,0 +1,1 @@
+ALTER TABLE "farm" ADD COLUMN "headquarters_zoom" integer;

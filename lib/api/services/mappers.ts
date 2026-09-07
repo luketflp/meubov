@@ -191,7 +191,13 @@ export function toFarmData(row: FarmRow): FarmData {
     manager: row.manager,
     headquarters:
       row.headquartersLat !== null && row.headquartersLng !== null
-        ? { lat: row.headquartersLat, lng: row.headquartersLng }
+        ? {
+            lat: row.headquartersLat,
+            lng: row.headquartersLng,
+            ...(row.headquartersZoom === null
+              ? {}
+              : { zoom: row.headquartersZoom }),
+          }
         : undefined,
   };
 }

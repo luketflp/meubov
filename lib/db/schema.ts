@@ -146,9 +146,14 @@ export const farm = pgTable("farm", {
   municipality: text("municipality").notNull(),
   stateRegistration: text("state_registration").notNull(),
   manager: text("manager").notNull(),
-  /** Farm HQ (sede) coordinates — map center before any invernada is drawn. */
+  /**
+   * Saved map view of the farm (sede): where the map opens and how close.
+   * All three are null until the farmer saves a view; the map then falls back
+   * to the drawn invernadas and, failing those, to a fixed center.
+   */
   headquartersLat: numeric("headquarters_lat", { mode: "number" }),
   headquartersLng: numeric("headquarters_lng", { mode: "number" }),
+  headquartersZoom: integer("headquarters_zoom"),
 });
 
 /** Membership of a user in a farm (a user can join many farms). */

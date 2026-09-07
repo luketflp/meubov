@@ -71,6 +71,13 @@
       "when": 1785979263019,
       "tag": "0009_sale_carcass_yield",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788816859965,
+      "tag": "0010_farm_map_view",
+      "breakpoints": true
     }
   ]
 }

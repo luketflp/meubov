@@ -292,8 +292,11 @@ export interface FarmData {
   municipality: string;
   stateRegistration: string;
   manager: string;
-  /** Farm HQ (sede) coordinates — map center before any invernada is drawn. */
-  headquarters?: { lat: number; lng: number };
+  /**
+   * Saved map view of the farm (sede): where the map opens and how close.
+   * Absent until the farmer saves one from the map.
+   */
+  headquarters?: { lat: number; lng: number; zoom?: number };
 }
 
 /** Root of the herd data. */

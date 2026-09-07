@@ -29,11 +29,18 @@ Ficou de fora, de propósito: tela de reprodução no menu (matrizes esperando D
 previsão de partos, taxa de prenhez), edição e exclusão de registros
 (append-only, como as pesagens) e testes da camada de serviço — que é o item 5.
 
-## 2. Sede no mapa
+## 2. Sede no mapa — feito
 
 Os contornos das invernadas já podem ser desenhados, redesenhados, apagados ou
-informados por coordenadas. Ainda falta definir `farm.headquarters` pela UI;
-sem sede nem contorno, o mapa cai no centro padrão de Uberaba.
+informados por coordenadas. A sede agora é gravada pela UI: "Definir sede aqui"
+na barra do mapa salva o centro e o zoom atuais em `farm.headquarters`
+(`headquarters_lat`, `headquarters_lng`, `headquarters_zoom`), e o mapa reabre
+nessa vista. Sem sede, ele continua ajustando aos contornos desenhados e, sem
+nenhum, cai no centro padrão de Uberaba.
+
+`PUT /farm` trata `headquarters` como três valores — ausente mantém, objeto
+substitui, null limpa — para que salvar os dados cadastrais em Ajustes não
+apague a vista do mapa. Falta só um botão para limpar a sede pela UI.
 
 ## 3. Multi-fazenda — só no backend
 

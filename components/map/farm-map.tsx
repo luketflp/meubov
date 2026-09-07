@@ -43,6 +43,7 @@ import {
   isUsableRing,
   normalizeRing,
   ringAreaHectares,
+  roundCoordinate,
   toLatLngRing,
   type Ring,
 } from "@/lib/domain/geo";
@@ -53,6 +54,7 @@ import { PlaceSearch, type PlaceHit } from "@/components/map/place-search";
 import { SaveBoundaryDialog } from "@/components/map/save-boundary-dialog";
 import { formatArroba, formatKg, formatNumber } from "@/lib/domain/format";
 import { kgToArroba } from "@/lib/domain/weights";
+import { useToast } from "@/components/providers/Toasts";
 import { SectionCard } from "@/components/ui/section-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -66,6 +68,8 @@ const TILE_ATTRIBUTION =
 
 /** Fallback center (Uberaba-MG countryside) when nothing is drawn yet. */
 const FALLBACK_CENTER: LatLngExpression = [-19.75, -47.93];
+/** Zoom used with a center, when the saved view carries none. */
+const DEFAULT_ZOOM = 14;
 
 /** Polygon color per stocking class — same tones as the StatusPill. */
 const CLASSIFICATION_COLOR: Record<StockingRateClass, string> = {
@@ -258,8 +262,11 @@ export function FarmMap() {
   const animals = useHerdStore((s) => s.animals);
   const farm = useHerdStore((s) => s.farm);
   const updateInvernada = useHerdStore((s) => s.updateInvernada);
+  const saveHeadquarters = useHerdStore((s) => s.saveHeadquarters);
+  const { addToast } = useToast();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tilesFailed, setTilesFailed] = useState(false);
+  const [savingHeadquarters, setSavingHeadquarters] = useState(false);
 
   /*
    * Draw state. `draft` is the trace in progress; `pending` is a closed ring
@@ -366,9 +373,42 @@ export function FarmMap() {
 
   const selected = summaries.find((s) => s.invernada.id === selectedId) ?? null;
 
-  const center: LatLngExpression = farm.headquarters
-    ? [farm.headquarters.lat, farm.headquarters.lng]
+  /*
+   * Where the map opens, in order: the view the farmer saved as the sede, the
+   * outlines already drawn, and only then a fixed center. The saved view wins
+   * over the outlines on purpose — it is the one choice someone made
+   * deliberately, and a farm can have invernadas registered with no outline at
+   * all, which is exactly when the fixed center is most wrong.
+   */
+  const savedView = farm.headquarters;
+  const center: LatLngExpression = savedView
+    ? [savedView.lat, savedView.lng]
     : FALLBACK_CENTER;
+
+  /** Saves the current viewport as the sede, so the map reopens right here. */
+  async function onSaveHeadquarters() {
+    const map = mapRef.current;
+    if (!map) return;
+    const { lat, lng } = map.getCenter();
+    setSavingHeadquarters(true);
+    try {
+      // Same precision the outlines are stored at; the extra digits Leaflet
+      // hands out are far below what any of this can mean.
+      await saveHeadquarters({
+        lat: roundCoordinate(lat),
+        lng: roundCoordinate(lng),
+        zoom: Math.round(map.getZoom()),
+      });
+      addToast({
+        messageType: "success",
+        text: "Sede salva. O mapa vai abrir nesta vista.",
+      });
+    } catch {
+      // Store already surfaced the failure.
+    } finally {
+      setSavingHeadquarters(false);
+    }
+  }
 
   const undrawnInvernadas = useMemo(
     () => withoutBoundary.map((s) => s.invernada),
@@ -412,6 +452,9 @@ export function FarmMap() {
         draft={draft ?? []}
         selectedName={selected ? invernadaLabel(selected.invernada) : null}
         selectedHasBoundary={selected?.invernada.boundary !== undefined}
+        hasHeadquarters={savedView !== undefined}
+        savingHeadquarters={savingHeadquarters}
+        onSaveHeadquarters={onSaveHeadquarters}
         onStartDraw={() => {
           setRedrawTarget(null);
           setDraft([]);
@@ -492,7 +535,11 @@ export function FarmMap() {
       */}
       <div className="isolate overflow-hidden rounded-lg border border-hairline">
         <MapContainer
-          {...(bounds ? { bounds } : { center, zoom: 14 })}
+          {...(savedView
+            ? { center, zoom: savedView.zoom ?? DEFAULT_ZOOM }
+            : bounds
+              ? { bounds }
+              : { center, zoom: DEFAULT_ZOOM })}
           scrollWheelZoom
           className="h-[55dvh] min-h-105 w-full"
         >
@@ -507,8 +554,13 @@ export function FarmMap() {
             }}
           />
           <MapHandle mapRef={mapRef} />
-          {/* Refitting mid-trace would yank the map out from under the tap. */}
-          {isDrawing || redrawSaving ? null : <FitBounds bounds={bounds} />}
+          {/*
+            Refitting mid-trace would yank the map out from under the tap, and
+            a saved sede is a deliberate view that auto-fitting would override.
+          */}
+          {isDrawing || redrawSaving || savedView ? null : (
+            <FitBounds bounds={bounds} />
+          )}
           {/* CircleMarker, not Marker: Leaflet's default icon assets don't
               survive bundling, and a dot is enough to anchor the eye. */}
           {searchedPlace ? (

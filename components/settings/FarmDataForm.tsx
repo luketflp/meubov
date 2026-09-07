@@ -9,9 +9,11 @@ import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
 import type { FarmData } from "@/lib/types";
 
+/** The registration fields; the sede is saved from the map, not from here. */
+type FarmRegistration = Omit<FarmData, "headquarters">;
+
 interface FarmField {
-  /** Only the free-text fields — headquarters (coordinates) is set via the map. */
-  key: Exclude<keyof FarmData, "headquarters">;
+  key: keyof FarmRegistration;
   label: string;
   mono: boolean;
 }
@@ -28,13 +30,21 @@ export function FarmDataForm() {
   const farm = useHerdStore((s) => s.farm);
   const saveFarm = useHerdStore((s) => s.saveFarm);
   const { addToast } = useToast();
-  const [form, setForm] = useState<FarmData>(farm);
+  // Copied field by field so the payload carries no `headquarters` key.
+  const [form, setForm] = useState<FarmRegistration>(() => ({
+    name: farm.name,
+    municipality: farm.municipality,
+    stateRegistration: farm.stateRegistration,
+    manager: farm.manager,
+  }));
 
   const hasChange = FIELDS.some(({ key }) => form[key] !== farm[key]);
 
   async function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!hasChange) return;
+    // Registration fields only: sending no `headquarters` is what tells the
+    // server to leave the map view alone.
     await saveFarm(form);
     addToast({ messageType: "success", text: "Dados da fazenda salvos" });
   }

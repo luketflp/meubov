@@ -9,7 +9,7 @@
  * never covers the ground being traced and needs no z-index fight with the
  * pane stack.
  */
-import { Keyboard, MapPin, Pencil, Trash2, Undo2, X } from "lucide-react";
+import { House, Keyboard, MapPin, Pencil, Trash2, Undo2, X } from "lucide-react";
 import {
   MIN_RING_VERTICES,
   isSelfIntersecting,
@@ -27,6 +27,9 @@ export function MapToolbar({
   draft,
   selectedName,
   selectedHasBoundary,
+  hasHeadquarters,
+  savingHeadquarters,
+  onSaveHeadquarters,
   onStartDraw,
   onTypeCoordinates,
   onRedraw,
@@ -42,6 +45,10 @@ export function MapToolbar({
   /** Display label of the selected invernada, when one is selected. */
   selectedName: string | null;
   selectedHasBoundary: boolean;
+  /** Whether the farm already has a saved map view. */
+  hasHeadquarters: boolean;
+  savingHeadquarters: boolean;
+  onSaveHeadquarters: () => void;
   onStartDraw: () => void;
   onTypeCoordinates: () => void;
   onRedraw: () => void;
@@ -128,6 +135,27 @@ export function MapToolbar({
       >
         <Keyboard aria-hidden />
         Digitar coordenadas
+      </Button>
+
+      {/*
+        The one control that makes the map open where the farm is. Without a
+        saved view the map can only guess from drawn outlines, and a farm whose
+        invernadas are registered but not traced opens on a fixed center far
+        from home.
+      */}
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onSaveHeadquarters}
+        disabled={disabled || savingHeadquarters}
+        className="min-h-11"
+      >
+        <House aria-hidden />
+        {savingHeadquarters
+          ? "Salvando sede…"
+          : hasHeadquarters
+            ? "Atualizar sede aqui"
+            : "Definir sede aqui"}
       </Button>
 
       {selectedName && selectedHasBoundary ? (

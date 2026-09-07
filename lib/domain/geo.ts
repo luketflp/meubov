@@ -63,7 +63,8 @@ export function isValidRing(value: unknown): value is Ring {
   );
 }
 
-function round(value: number): number {
+/** One coordinate at the stored precision of {@link COORD_DECIMALS}. */
+export function roundCoordinate(value: number): number {
   const factor = 10 ** COORD_DECIMALS;
   return Math.round(value * factor) / factor;
 }
@@ -76,7 +77,10 @@ function round(value: number): number {
  * Idempotent — normalizing an already-normalized ring returns an equal ring.
  */
 export function normalizeRing(ring: Ring): Ring {
-  const rounded: Ring = ring.map(([lng, lat]) => [round(lng), round(lat)]);
+  const rounded: Ring = ring.map(([lng, lat]) => [
+    roundCoordinate(lng),
+    roundCoordinate(lat),
+  ]);
 
   const deduped: Ring = [];
   for (const point of rounded) {

@@ -211,7 +211,12 @@ export interface HerdStore extends HerdData {
   updateInvernada: (id: string, patch: InvernadaPatch) => Promise<void>;
   /** Removes an unused invernada; false when current/history references it. */
   removeInvernada: (id: string) => Promise<boolean>;
-  saveFarm: (d: FarmData) => Promise<void>;
+  /** Saves the registration fields; the sede is left as it is. */
+  saveFarm: (d: Omit<FarmData, "headquarters">) => Promise<void>;
+  /** Saves where and how close the farm map opens. */
+  saveHeadquarters: (
+    view: NonNullable<FarmData["headquarters"]>
+  ) => Promise<void>;
   addProtocol: (p: Omit<HealthProtocol, "id">, generateSchedule: boolean) => Promise<void>;
   removeProtocol: (id: string) => Promise<void>;
   addExpense: (e: Omit<Expense, "id">) => Promise<void>;
@@ -756,8 +761,22 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   },
 
   saveFarm: async (d) => {
+    // No `headquarters` key: the server keeps the saved map view.
     const { data, error } = await api.farm.put(d);
     if (error) apiFail("salvar os dados da fazenda", error.status);
+    set({ farm: { ...(data as FarmData) } });
+  },
+
+  saveHeadquarters: async (view) => {
+    const { name, municipality, stateRegistration, manager } = get().farm;
+    const { data, error } = await api.farm.put({
+      name,
+      municipality,
+      stateRegistration,
+      manager,
+      headquarters: view,
+    });
+    if (error) apiFail("salvar a sede no mapa", error.status);
     set({ farm: { ...(data as FarmData) } });
   },
 
