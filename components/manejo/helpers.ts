@@ -11,6 +11,7 @@ import type {
   TreatmentType,
 } from "@/lib/types";
 import { daysBetween } from "@/lib/domain/dates";
+import { formatCurrency, formatPercent } from "@/lib/domain/format";
 import { TREATMENT_TYPE_LABEL } from "@/lib/domain/labels";
 import { deriveTreatmentStatus, isFootAndMouth } from "@/lib/domain/status";
 
@@ -115,6 +116,41 @@ export function activityDueLabel(activity: ManejoActivity, todayIso: string): st
   return `em ${ahead === 1 ? "1 dia" : `${ahead} dias`}`;
 }
 
+/**
+ * Subtitle line of a session that moves the herd: where to, for how much.
+ * Shared by the chute screen and the venda record.
+ */
+export function movementSubtitle(
+  session: ManejoSession,
+  lotName: string | undefined
+): string {
+  if (session.kind === "transfer") {
+    return lotName ? `Destino: ${lotName}` : "Troca de lote";
+  }
+  const who = session.counterparty ? ` \u00b7 ${session.counterparty}` : "";
+  if (session.kind === "sale") {
+    const price =
+      session.pricePerArroba !== undefined
+        ? `${formatCurrency(session.pricePerArroba)}/@${
+            session.carcassYieldPct !== undefined
+              ? ` \u00b7 rend. ${formatPercent(session.carcassYieldPct)}`
+              : ""
+          }`
+        : session.totalAmountBrl !== undefined
+          ? `${formatCurrency(session.totalAmountBrl)} pelo lote`
+          : "sem pre\u00e7o";
+    return `Venda \u00b7 ${price}${who}`;
+  }
+  const total =
+    session.totalAmountBrl !== undefined ? formatCurrency(session.totalAmountBrl) : "sem valor";
+  return `Compra \u00b7 ${total}${lotName ? ` \u00b7 entra em ${lotName}` : ""}${who}`;
+}
+
+/** Route of the venda screen of a closed sale session. */
+export function saleHref(sessionId: string): string {
+  return `/manejo/venda/${sessionId}`;
+}
+
 /** One history row: a batch of done treatments, a day's weighings, or a trade. */
 export interface ManejoHistoryRow {
   key: string;
@@ -129,6 +165,8 @@ export interface ManejoHistoryRow {
    * value of a compra/venda. Null when the row has no value at all.
    */
   amountBrl: number | null;
+  /** Screen the row opens, when it has one of its own (a venda encerrada). */
+  href?: string;
 }
 
 /**
@@ -202,6 +240,12 @@ export function manejoHistory(
       headCount: handled.length,
       responsible: session.counterparty,
       amountBrl: value,
+      // A venda that ended has a record of its own; while it runs, the chute
+      // screen at /manejo/[id] is still the place to open it.
+      href:
+        session.kind === "sale" && session.status === "closed"
+          ? saleHref(session.id)
+          : undefined,
     });
   }
 

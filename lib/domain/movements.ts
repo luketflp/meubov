@@ -13,6 +13,7 @@ import type {
   Animal,
   Category,
   ManejoKind,
+  ManejoOutcome,
   ManejoSession,
   Movement,
   MovementType,
@@ -147,6 +148,46 @@ export function saleSummary(session: ManejoSession): SaleSummary | null {
     grossPerHeadBrl: grossBrl === null ? null : grossBrl / done.length,
     netPerHeadBrl: netBrl === null ? null : netBrl / done.length,
   };
+}
+
+/** One animal of a venda, as the romaneio lists it. */
+export interface SaleRow {
+  earTag: string;
+  outcome: ManejoOutcome;
+  /** Weight read at the chute, null when the animal did not pass. */
+  weightKg: number | null;
+  /** Carcass arrobas paid by the R$/@; null on a venda closed as one lot. */
+  carcassArrobas: number | null;
+  /** What this animal was worth; null when only the batch has a price. */
+  amountBrl: number | null;
+  notes?: string;
+}
+
+/**
+ * Per-animal lines of a venda, in the order the session holds them. Money and
+ * carcass figures only exist for animals that passed a venda priced per arroba:
+ * a batch closed at one price has no per-head value to show.
+ */
+export function saleRows(session: ManejoSession): SaleRow[] {
+  if (session.kind !== "sale") return [];
+  const yieldPct =
+    session.pricePerArroba !== undefined
+      ? (session.carcassYieldPct ?? DEFAULT_CARCASS_YIELD_PCT)
+      : null;
+
+  return session.animals.map((entry) => {
+    const passed = entry.outcome === "done";
+    const weightKg = passed ? (entry.weightKg ?? null) : null;
+    return {
+      earTag: entry.earTag,
+      outcome: entry.outcome,
+      weightKg,
+      carcassArrobas:
+        yieldPct === null || weightKg === null ? null : carcassArrobas(weightKg, yieldPct),
+      amountBrl: passed ? (entry.amountBrl ?? null) : null,
+      notes: entry.notes,
+    };
+  });
 }
 
 /** Most frequent category among the animals (first one wins a tie). */

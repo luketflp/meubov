@@ -12,7 +12,7 @@ import Link from "next/link";
 import { ArrowLeft, CheckCircle2, ClipboardX, Percent, Search, Undo2 } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
-import type { ManejoSession, ManejoSessionAnimal } from "@/lib/types";
+import type { ManejoSessionAnimal } from "@/lib/types";
 import { formatDate, todayISO } from "@/lib/domain/dates";
 import { CATEGORY_LABEL } from "@/lib/domain/labels";
 import {
@@ -33,35 +33,15 @@ import { Label } from "@/components/ui/label";
 import { SectionCard } from "@/components/ui/section-card";
 import { ManejoProgressBar } from "@/components/manejo/progress-bar";
 import { ManejoTypePill } from "@/components/manejo/manejo-type-pill";
-import { sessionKind, sessionProgress } from "@/components/manejo/helpers";
+import {
+  movementSubtitle,
+  sessionKind,
+  sessionProgress,
+} from "@/components/manejo/helpers";
 import { cn } from "@/lib/utils";
 
 interface ManejoSessionRunnerProps {
   sessionId: string;
-}
-
-/** Subtitle line of a session that moves the herd: where to, for how much. */
-function movementSubtitle(session: ManejoSession, lotName: string | undefined): string {
-  if (session.kind === "transfer") {
-    return lotName ? `Destino: ${lotName}` : "Troca de lote";
-  }
-  const who = session.counterparty ? ` · ${session.counterparty}` : "";
-  if (session.kind === "sale") {
-    const price =
-      session.pricePerArroba !== undefined
-        ? `${formatCurrency(session.pricePerArroba)}/@${
-            session.carcassYieldPct !== undefined
-              ? ` · rend. ${formatPercent(session.carcassYieldPct)}`
-              : ""
-          }`
-        : session.totalAmountBrl !== undefined
-          ? `${formatCurrency(session.totalAmountBrl)} pelo lote`
-          : "sem preço";
-    return `Venda · ${price}${who}`;
-  }
-  const total =
-    session.totalAmountBrl !== undefined ? formatCurrency(session.totalAmountBrl) : "sem valor";
-  return `Compra · ${total}${lotName ? ` · entra em ${lotName}` : ""}${who}`;
 }
 
 export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {

@@ -5,8 +5,9 @@
  * filterable by action; table on desktop and stacked cards on mobile,
  * always in descending order of date.
  */
-import { useMemo, useState } from "react";
-import { ClipboardList } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { ChevronRight, ClipboardList } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { formatDate } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
@@ -41,6 +42,23 @@ const ALL = "all";
 
 function headsLabel(session: ManejoHistoryRow): string {
   return session.headCount === 1 ? "animal" : "animais";
+}
+
+/**
+ * Mobile card body: a link to the row's own screen when it has one (a venda
+ * encerrada), otherwise the plain block.
+ */
+function Wrapper({ href, children }: { href?: string; children: ReactNode }) {
+  if (!href) return <div className="p-4">{children}</div>;
+  return (
+    <Link href={href} className="block p-4">
+      {children}
+      <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-brand">
+        Ver a venda
+        <ChevronRight className="size-3.5" aria-hidden />
+      </span>
+    </Link>
+  );
 }
 
 export function ManejoHistory() {
@@ -104,7 +122,18 @@ export function ManejoHistory() {
                     <TableCell>
                       <ManejoTypePill action={session.kind} />
                     </TableCell>
-                    <TableCell className="text-ink">{session.name}</TableCell>
+                    <TableCell className="text-ink">
+                      {session.href ? (
+                        <Link
+                          href={session.href}
+                          className="font-medium text-brand hover:underline"
+                        >
+                          {session.name}
+                        </Link>
+                      ) : (
+                        session.name
+                      )}
+                    </TableCell>
                     <TableCell className="text-right font-mono text-ink">
                       {formatNumber(session.headCount)}
                     </TableCell>
@@ -121,27 +150,29 @@ export function ManejoHistory() {
           {/* Mobile: stacked cards */}
           <ul className="space-y-3 md:hidden">
             {filtered.map((session) => (
-              <li key={session.key} className="rounded-lg border border-hairline bg-surface p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <ManejoTypePill action={session.kind} />
-                  <span className="font-mono text-xs text-ink-soft">
-                    {formatDate(session.date)}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm font-medium text-ink">{session.name}</p>
-                <p className="mt-1 text-xs text-ink-soft">
-                  <span className="font-mono text-ink">{formatNumber(session.headCount)}</span>{" "}
-                  {headsLabel(session)}
-                  {session.responsible ? ` · ${session.responsible}` : ""}
-                </p>
-                {session.amountBrl !== null ? (
-                  <p className="mt-1 text-xs text-ink-soft">
-                    {isMovementAction(session.kind) ? "Valor" : "Custo total"}:{" "}
-                    <span className="font-mono text-ink">
-                      {formatCurrency(session.amountBrl)}
+              <li key={session.key} className="rounded-lg border border-hairline bg-surface">
+                <Wrapper href={session.href}>
+                  <div className="flex items-center justify-between gap-2">
+                    <ManejoTypePill action={session.kind} />
+                    <span className="font-mono text-xs text-ink-soft">
+                      {formatDate(session.date)}
                     </span>
+                  </div>
+                  <p className="mt-2 text-sm font-medium text-ink">{session.name}</p>
+                  <p className="mt-1 text-xs text-ink-soft">
+                    <span className="font-mono text-ink">{formatNumber(session.headCount)}</span>{" "}
+                    {headsLabel(session)}
+                    {session.responsible ? ` · ${session.responsible}` : ""}
                   </p>
-                ) : null}
+                  {session.amountBrl !== null ? (
+                    <p className="mt-1 text-xs text-ink-soft">
+                      {isMovementAction(session.kind) ? "Valor" : "Custo total"}:{" "}
+                      <span className="font-mono text-ink">
+                        {formatCurrency(session.amountBrl)}
+                      </span>
+                    </p>
+                  ) : null}
+                </Wrapper>
               </li>
             ))}
           </ul>

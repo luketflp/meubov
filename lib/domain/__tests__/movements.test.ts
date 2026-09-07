@@ -5,10 +5,15 @@ import {
   isMovementKind,
   predominantCategory,
   saleAmount,
+  saleRows,
   saleSummary,
   sessionToMovement,
 } from "@/lib/domain/movements";
-import { KG_PER_ARROBA } from "@/lib/domain/weights";
+import {
+  carcassArrobas,
+  DEFAULT_CARCASS_YIELD_PCT,
+  KG_PER_ARROBA,
+} from "@/lib/domain/weights";
 import type { ManejoSession, ManejoSessionAnimal, Movement } from "@/lib/types";
 import { makeAnimal } from "./fixtures";
 
@@ -126,6 +131,72 @@ describe("saleSummary", () => {
     expect(
       saleSummary(makeSession({ kind: "transfer", animals: [entry()] }))
     ).toBeNull();
+  });
+});
+
+describe("saleRows", () => {
+  it("prices each animal at the session's rendimento de carcaça", () => {
+    const session = makeSession({
+      pricePerArroba: 300,
+      carcassYieldPct: 48.5,
+      animals: [entry({ earTag: "BR-001", weightKg: 488, amountBrl: saleAmount(488, 300, 48.5) })],
+    });
+    expect(saleRows(session)).toEqual([
+      {
+        earTag: "BR-001",
+        outcome: "done",
+        weightKg: 488,
+        carcassArrobas: carcassArrobas(488, 48.5),
+        amountBrl: saleAmount(488, 300, 48.5),
+        notes: undefined,
+      },
+    ]);
+  });
+
+  it("assumes the default yield when the venda per arroba has none", () => {
+    const session = makeSession({
+      pricePerArroba: 310,
+      animals: [entry({ weightKg: 510, amountBrl: saleAmount(510, 310) })],
+    });
+    expect(saleRows(session)[0].carcassArrobas).toBeCloseTo(
+      carcassArrobas(510, DEFAULT_CARCASS_YIELD_PCT),
+      6
+    );
+  });
+
+  it("leaves carcass and value empty on a venda closed as one lot", () => {
+    const session = makeSession({
+      totalAmountBrl: 42000,
+      animals: [entry({ weightKg: 505 })],
+    });
+    expect(saleRows(session)[0]).toMatchObject({
+      weightKg: 505,
+      carcassArrobas: null,
+      amountBrl: null,
+    });
+  });
+
+  it("keeps the skipped animals with no weight and no money", () => {
+    const session = makeSession({
+      pricePerArroba: 300,
+      carcassYieldPct: 50,
+      animals: [
+        entry({ earTag: "BR-001", weightKg: 480, amountBrl: saleAmount(480, 300, 50) }),
+        entry({ earTag: "BR-002", outcome: "skipped", notes: "não passou" }),
+      ],
+    });
+    expect(saleRows(session)[1]).toEqual({
+      earTag: "BR-002",
+      outcome: "skipped",
+      weightKg: null,
+      carcassArrobas: null,
+      amountBrl: null,
+      notes: "não passou",
+    });
+  });
+
+  it("has no rows for a session that is not a venda", () => {
+    expect(saleRows(makeSession({ kind: "entry", animals: [entry()] }))).toEqual([]);
   });
 });
 
