@@ -11,8 +11,9 @@ services:
       POSTGRES_PASSWORD: meubov
       POSTGRES_DB: meubov
     ports:
-      # Host port 5433: 5432 is taken by another local project (NeonPG).
-      - "5433:5432"
+      # Host port 5432: the native PostgreSQL 18 service on this machine listens
+      # on 5433, so publishing there is shadowed by it.
+      - "5432:5432"
     volumes:
       - meubov-db-data:/var/lib/postgresql/data
     healthcheck:
