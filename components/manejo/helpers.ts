@@ -14,6 +14,7 @@ import { daysBetween } from "@/lib/domain/dates";
 import { formatCurrency, formatPercent } from "@/lib/domain/format";
 import { TREATMENT_TYPE_LABEL } from "@/lib/domain/labels";
 import { deriveTreatmentStatus, isFootAndMouth } from "@/lib/domain/status";
+import type { SaleRow } from "@/lib/domain/movements";
 
 /**
  * Action selectable in the register dialog: a health treatment, a weighing, or
@@ -149,6 +150,28 @@ export function movementSubtitle(
 /** Route of the venda screen of a closed sale session. */
 export function saleHref(sessionId: string): string {
   return `/manejo/venda/${sessionId}`;
+}
+
+/**
+ * Which animals of a venda the romaneio lists: the ones actually sold, or the
+ * whole lot the session opened with — the skipped ones included.
+ */
+export type SaleRowScope = "sold" | "lot";
+
+/**
+ * Rows of the venda record for a scope and a search term, in that order: the
+ * search looks inside the chosen scope, so narrowing to the sold animals never
+ * turns up a skipped one by its brinco.
+ */
+export function visibleSaleRows(
+  rows: SaleRow[],
+  scope: SaleRowScope,
+  search: string
+): SaleRow[] {
+  const inScope = scope === "sold" ? rows.filter((row) => row.outcome === "done") : rows;
+  const term = search.trim().toLowerCase();
+  if (term === "") return inScope;
+  return inScope.filter((row) => row.earTag.toLowerCase().includes(term));
 }
 
 /** One history row: a batch of done treatments, a day's weighings, or a trade. */

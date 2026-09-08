@@ -13,12 +13,23 @@ import { useHerdStore } from "@/lib/store/useHerdStore";
 import { formatDate } from "@/lib/domain/dates";
 import { formatArroba, formatCurrency, formatKg } from "@/lib/domain/format";
 import { saleRows, type SaleRow } from "@/lib/domain/movements";
-import { movementSubtitle } from "@/components/manejo/helpers";
+import {
+  movementSubtitle,
+  visibleSaleRows,
+  type SaleRowScope,
+} from "@/components/manejo/helpers";
 import { SaleSummaryCard } from "@/components/manejo/sale-summary";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { SectionCard } from "@/components/ui/section-card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -51,6 +62,9 @@ function BackLink({ className }: { className?: string }) {
 export function SaleDetail({ sessionId }: SaleDetailProps) {
   const session = useHerdStore((s) => s.manejoSessions.find((m) => m.id === sessionId));
   const [search, setSearch] = useState("");
+  // Opens on the animals actually sold — the romaneio the frigorífico paid.
+  // The whole lot, skipped animals included, is one switch away.
+  const [scope, setScope] = useState<SaleRowScope>("sold");
 
   const rows = useMemo(() => (session ? saleRows(session) : []), [session]);
 
@@ -115,9 +129,13 @@ export function SaleDetail({ sessionId }: SaleDetailProps) {
   // A venda closed at one price has no per-head money: the column would be a
   // stack of dashes, so it only shows when some animal carries a value.
   const priced = rows.some((row) => row.amountBrl !== null);
-  const term = search.trim().toLowerCase();
-  const visible =
-    term === "" ? rows : rows.filter((r) => r.earTag.toLowerCase().includes(term));
+  const soldCount = rows.filter((row) => row.outcome === "done").length;
+  const inScope = scope === "sold" ? soldCount : rows.length;
+  const visible = visibleSaleRows(rows, scope, search);
+  const countLabel =
+    scope === "sold" && soldCount < rows.length
+      ? `${soldCount} de ${rows.length}`
+      : `${rows.length}`;
 
   return (
     <div className="space-y-6">
@@ -130,28 +148,47 @@ export function SaleDetail({ sessionId }: SaleDetailProps) {
       <SaleSummaryCard session={session} />
 
       <SectionCard
-        title={`Animais (${rows.length})`}
+        title={`Animais (${countLabel})`}
         action={
           rows.length > 0 ? (
-            <div className="relative">
-              <Search
-                className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-soft"
-                aria-hidden
-              />
-              <Input
-                type="search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar brinco"
-                aria-label="Buscar animal da venda por brinco"
-                className="min-h-11 pl-9 font-mono md:min-h-9"
-              />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Select value={scope} onValueChange={(v) => setScope(v as SaleRowScope)}>
+                <SelectTrigger
+                  className="min-h-11 md:min-h-9"
+                  aria-label="Filtrar os animais da venda"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sold">Vendidos</SelectItem>
+                  <SelectItem value="lot">Todo o lote</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-soft"
+                  aria-hidden
+                />
+                <Input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar brinco"
+                  aria-label="Buscar animal da venda por brinco"
+                  className="min-h-11 pl-9 font-mono md:min-h-9"
+                />
+              </div>
             </div>
           ) : undefined
         }
       >
         {rows.length === 0 ? (
           <p className="py-1 text-xs text-ink-soft">Nenhum animal nesta venda.</p>
+        ) : inScope === 0 ? (
+          <p className="py-1 text-xs text-ink-soft">
+            Nenhum animal chegou a ser vendido. Veja todo o lote para conferir o que
+            saiu do brete.
+          </p>
         ) : visible.length === 0 ? (
           <p className="py-1 text-xs text-ink-soft">Nenhum brinco corresponde à busca.</p>
         ) : (
