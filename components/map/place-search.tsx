@@ -5,69 +5,31 @@
  * ("Fazenda Boa Vista, Uberaba") instead of panning satellite tiles from the
  * fallback center by hand.
  *
- * Geocoding is Nominatim (OpenStreetMap) — free and keyless like the Esri
- * tiles, but rate-limited to ~1 request/second. The debounce below is not a
- * UX nicety: firing per keystroke would get the app blocked by the provider.
- * Results are biased to Brazil and pt-BR labels, matching the audience.
+ * Geocoding goes through /api/geocode, never straight to Nominatim from the
+ * browser: the proxy is what identifies the app and honours the provider's
+ * ~1 request/second cap (app/api/geocode/route.ts). The debounce below is not
+ * a UX nicety either — firing per keystroke would queue behind that cap and
+ * land every result seconds late.
  */
 import { useEffect, useRef, useState } from "react";
 import { Loader2, MapPin, Search, X } from "lucide-react";
+import { MIN_QUERY_LENGTH, type PlaceHit } from "@/lib/data/nominatim";
 
-export type PlaceHit = {
-  id: number;
-  /** Full display name from the geocoder ("Uberaba, Minas Gerais, Brasil"). */
-  name: string;
-  lat: number;
-  lng: number;
-  /** [[south, west], [north, east]] when the place has an extent (a city does,
-      a single address does not always). */
-  bounds: [[number, number], [number, number]] | null;
-};
+export type { PlaceHit };
 
-const SEARCH_URL = "https://nominatim.openstreetmap.org/search";
-const MIN_QUERY_LENGTH = 3;
 const DEBOUNCE_MS = 500;
 
 async function searchPlaces(
   query: string,
   signal: AbortSignal
 ): Promise<PlaceHit[]> {
-  const params = new URLSearchParams({
-    q: query,
-    format: "jsonv2",
-    limit: "5",
-    countrycodes: "br",
-    "accept-language": "pt-BR",
-  });
-  const res = await fetch(`${SEARCH_URL}?${params.toString()}`, {
+  const res = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`, {
     signal,
     headers: { Accept: "application/json" },
   });
   if (!res.ok) throw new Error(`Geocoder respondeu ${res.status}`);
-  const rows = (await res.json()) as Array<{
-    place_id: number;
-    display_name: string;
-    lat: string;
-    lon: string;
-    boundingbox?: [string, string, string, string];
-  }>;
-  return rows.map((row) => {
-    const [south, north, west, east] = row.boundingbox ?? [];
-    const bounds =
-      south !== undefined
-        ? ([
-            [Number(south), Number(west)],
-            [Number(north), Number(east)],
-          ] as [[number, number], [number, number]])
-        : null;
-    return {
-      id: row.place_id,
-      name: row.display_name,
-      lat: Number(row.lat),
-      lng: Number(row.lon),
-      bounds,
-    };
-  });
+  const payload = (await res.json()) as { places?: PlaceHit[] };
+  return payload.places ?? [];
 }
 
 export function PlaceSearch({ onSelect }: { onSelect: (hit: PlaceHit) => void }) {
