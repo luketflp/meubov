@@ -201,6 +201,12 @@ export interface Lot {
   name: string;
   /** Set on groups synthesized from the former lot/paddock model at cutover. */
   needsReview?: boolean;
+  /**
+   * ISO instant the lot was deleted. A deleted lot is gone from every list and
+   * picker, but stays in the snapshot so past manejos, placements and sold
+   * animals can still print the name of the group they belonged to.
+   */
+  deletedAt?: string;
 }
 
 /** Fixed physical pasture/paddock of the farm. */

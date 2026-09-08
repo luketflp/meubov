@@ -674,14 +674,27 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   },
 
   removeLot: async (id) => {
-    const { error } = await api.lots({ id }).delete();
+    const { data, error } = await api.lots({ id }).delete();
     if (error) {
-      if (error.status === 409) return false;
-      apiFail("remover o lote", error.status);
+      if (error.status === CONFLICT) return false;
+      apiFail("excluir o lote", error.status);
     }
+    // The lot stays in the store carrying deletedAt: history still needs its
+    // name. Every list and picker filters it out from here on.
+    const result = data as {
+      lot: Lot;
+      closedPlacement?: LotPlacement;
+      removedPlacementId?: string;
+    };
     set((s) => ({
-      lots: s.lots.filter((l) => l.id !== id),
-      lotPlacements: s.lotPlacements.filter((placement) => placement.lotId !== id),
+      lots: s.lots.map((l) => (l.id === id ? result.lot : l)),
+      lotPlacements: s.lotPlacements
+        .filter((placement) => placement.id !== result.removedPlacementId)
+        .map((placement) =>
+          placement.id === result.closedPlacement?.id
+            ? result.closedPlacement
+            : placement
+        ),
     }));
     return true;
   },

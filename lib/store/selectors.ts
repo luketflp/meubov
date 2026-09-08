@@ -157,31 +157,30 @@ export function currentPlacementForLot(
   return current;
 }
 
+/** Lots the farmer still has: a deleted one only survives to name history. */
+export function activeLots(lots: Lot[]): Lot[] {
+  return lots.filter((lot) => lot.deletedAt == null);
+}
+
 /**
- * Whether a logical lot can still be hard-deleted (a mistaken/never-used
- * registration). Mirrors the server's removeLot guards so the UI only offers a
- * deletion that can succeed: any animal reference (active or inactive), any
- * manejo reference, or movement history (two or more placements) makes the lot
- * permanent — archive it instead.
+ * Whether a logical lot can be deleted right now. Mirrors the server's
+ * removeLot guards so the UI only offers a deletion that can succeed: live
+ * animals in the lot, or an open manejo session heading into it, would be
+ * stranded on a group the farmer can no longer see. History (past placements,
+ * closed manejos, sold animals) never blocks the deletion — the row stays
+ * behind for it.
  */
-export function isLotDeletable(
+export function canDeleteLot(
   lotId: string,
   animals: Animal[],
-  manejoSessions: ManejoSession[],
-  placements: LotPlacement[]
+  manejoSessions: ManejoSession[]
 ): boolean {
-  if (animals.some((animal) => animal.lotId === lotId)) return false;
-  const referenced = manejoSessions.some(
-    (session) =>
-      session.destinationLotId === lotId ||
-      session.animals.some((entry) => entry.previousLotId === lotId)
-  );
-  if (referenced) return false;
-  let placementCount = 0;
-  for (const placement of placements) {
-    if (placement.lotId === lotId && ++placementCount > 1) return false;
+  if (activeAnimals(animals).some((animal) => animal.lotId === lotId)) {
+    return false;
   }
-  return true;
+  return !manejoSessions.some(
+    (session) => session.status === "open" && session.destinationLotId === lotId
+  );
 }
 
 /** Logical lots with an open placement, eligible for new animal assignments. */
@@ -194,10 +193,13 @@ export function currentlyPlacedLots(
       .filter((placement) => placement.endedOn == null)
       .map((placement) => placement.lotId)
   );
-  return lots.filter((lot) => placedLotIds.has(lot.id));
+  return activeLots(lots).filter((lot) => placedLotIds.has(lot.id));
 }
 
-/** Summary per logical animal group, considering only active animals. */
+/**
+ * Summary per logical animal group, considering only active animals. Deleted
+ * lots are left out: the /lots page is the farmer's list of groups they have.
+ */
 export function lotsWithSummary(
   lots: Lot[],
   animals: Animal[],
@@ -212,7 +214,7 @@ export function lotsWithSummary(
     else activeByLot.set(animal.lotId, [animal]);
   }
 
-  return lots.map((lot) => {
+  return activeLots(lots).map((lot) => {
     const inLot = activeByLot.get(lot.id) ?? [];
     const currentPlacement = currentPlacementForLot(lot.id, placements);
     return {
@@ -238,9 +240,10 @@ export function invernadasWithSummary(
   placements: LotPlacement[],
   animals: Animal[]
 ): InvernadaWithSummary[] {
-  const lotById = new Map(lots.map((lot) => [lot.id, lot]));
+  const present = activeLots(lots);
+  const lotById = new Map(present.map((lot) => [lot.id, lot]));
   const invernadaIdByLotId = new Map<string, string>();
-  for (const lot of lots) {
+  for (const lot of present) {
     const placement = currentPlacementForLot(lot.id, placements);
     if (placement) invernadaIdByLotId.set(lot.id, placement.invernadaId);
   }

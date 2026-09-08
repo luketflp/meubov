@@ -78,6 +78,13 @@
       "when": 1788816859965,
       "tag": "0010_farm_map_view",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788818964858,
+      "tag": "0011_lot_soft_delete",
+      "breakpoints": true
     }
   ]
 }

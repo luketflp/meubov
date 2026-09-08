@@ -116,9 +116,10 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
   .delete(
     "/lots/:id",
     async ({ farmId, params, status }) => {
-      const removed = await settings.removeLot(farmId, params.id);
-      if (!removed) return status(409, { error: "lot_occupied" });
-      return { id: params.id };
+      const result = await settings.removeLot(farmId, params.id);
+      if (result === "lot_not_found") return status(404, { error: result });
+      if (result === "lot_occupied") return status(409, { error: result });
+      return result;
     },
     { farm: true }
   )

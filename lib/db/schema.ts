@@ -189,6 +189,13 @@ export const lots = pgTable("lots", {
     .references(() => farm.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   needsReview: boolean("needs_review").notNull().default(false),
+  /**
+   * Soft deletion. The row survives because manejo sessions, placements and
+   * sold animals still point at it — dropping it would tear holes in history.
+   * Every lookup that picks a lot to write to must ignore a deleted row; the
+   * herd snapshot still ships it so past records can print its name.
+   */
+  deletedAt: timestamp("deleted_at"),
   grass: text("grass"),
   hectares: numeric("hectares", { mode: "number" }),
   boundary: jsonb("boundary").$type<[number, number][]>(),

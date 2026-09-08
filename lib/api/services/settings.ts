@@ -14,7 +14,6 @@ import {
   invernadas,
   lotPlacements,
   lots,
-  manejoSessionAnimals,
   manejoSessions,
   treatments,
 } from "@/lib/db/schema";
@@ -104,10 +103,17 @@ export async function addLot(
       .where(eq(farm.id, farmId))
       .for("update");
 
+    // A deleted lot releases its name: the farmer sees no group holding it.
     const [existing] = await tx
       .select({ id: lots.id })
       .from(lots)
-      .where(and(eq(lots.farmId, farmId), eq(lots.name, name)))
+      .where(
+        and(
+          eq(lots.farmId, farmId),
+          eq(lots.name, name),
+          isNull(lots.deletedAt)
+        )
+      )
       .limit(1);
     if (existing) return "duplicate_name";
 
@@ -184,7 +190,8 @@ export async function updateLot(
           and(
             eq(lots.farmId, farmId),
             eq(lots.name, set.name),
-            ne(lots.id, id)
+            ne(lots.id, id),
+            isNull(lots.deletedAt)
           )
         )
         .limit(1);
@@ -194,79 +201,114 @@ export async function updateLot(
     const [row] = await tx
       .update(lots)
       .set(set)
-      .where(and(eq(lots.farmId, farmId), eq(lots.id, id)))
+      .where(
+        and(eq(lots.farmId, farmId), eq(lots.id, id), isNull(lots.deletedAt))
+      )
       .returning();
     return row ? toLot(row) : null;
   });
 }
 
+/** A lot that still holds the herd or an open manejo cannot be deleted. */
+export type RemoveLotError = "lot_not_found" | "lot_occupied";
+
+export interface RemoveLotResult {
+  lot: Lot;
+  /** The open placement, closed today because the lot grazed at least a day. */
+  closedPlacement?: LotPlacement;
+  /** The open placement, dropped because it started today and spans nothing. */
+  removedPlacementId?: string;
+}
+
 /**
- * Removes a mistaken/never-used lot atomically. One initial placement is
- * recoverable setup data and is deleted with it; two or more placements are
- * movement history and make the lot permanent. Any animal reference, active or
- * inactive, also preserves the lot.
+ * Soft-deletes a logical lot: it leaves every list and picker, while the row
+ * stays for the history pointing at it — past placements, manejo sessions and
+ * sold animals still print the name of the group they belonged to. Deleting
+ * also vacates the invernada, since a group that no longer exists cannot
+ * occupy pasture.
+ *
+ * Refused while active animals sit in the lot, or while an open manejo session
+ * has reserved it as its destination: both would strand live records on a
+ * group the farmer can no longer see. Deleting an already-deleted lot repeats
+ * the same answer instead of failing; only an id of no lot of this farm is a
+ * 404 (a lot of another farm is indistinguishable from a missing one).
  */
-export async function removeLot(farmId: number, id: string): Promise<boolean> {
+export async function removeLot(
+  farmId: number,
+  id: string
+): Promise<RemoveLotResult | RemoveLotError> {
   return db.transaction(async (tx) => {
-    const [lot] = await tx
-      .select({ id: lots.id })
+    const [lotRow] = await tx
+      .select()
       .from(lots)
       .where(and(eq(lots.farmId, farmId), eq(lots.id, id)))
       .for("update");
-    // Preserve the endpoint's idempotent success contract for an already-gone
-    // farm-scoped id; another farm's row remains indistinguishable from it.
-    if (!lot) return true;
+    if (!lotRow) return "lot_not_found";
+    if (lotRow.deletedAt) return { lot: toLot(lotRow) };
 
-    const [animalRef] = await tx
+    const [occupied] = await tx
       .select({ id: animals.id })
       .from(animals)
-      .where(and(eq(animals.farmId, farmId), eq(animals.lotId, id)))
+      .where(
+        and(
+          eq(animals.farmId, farmId),
+          eq(animals.lotId, id),
+          eq(animals.active, true)
+        )
+      )
       .limit(1);
-    if (animalRef) return false;
+    if (occupied) return "lot_occupied";
 
-    const [destinationSessionRef] = await tx
+    const [openDestinationSession] = await tx
       .select({ id: manejoSessions.id })
       .from(manejoSessions)
       .where(
         and(
           eq(manejoSessions.farmId, farmId),
-          eq(manejoSessions.destinationLotId, id)
+          eq(manejoSessions.destinationLotId, id),
+          eq(manejoSessions.status, "open")
         )
       )
       .limit(1);
-    if (destinationSessionRef) return false;
+    if (openDestinationSession) return "lot_occupied";
 
-    const [previousLotRef] = await tx
-      .select({ sessionId: manejoSessionAnimals.sessionId })
-      .from(manejoSessionAnimals)
-      .innerJoin(
-        manejoSessions,
-        eq(manejoSessionAnimals.sessionId, manejoSessions.id)
-      )
+    const [current] = await tx
+      .select()
+      .from(lotPlacements)
       .where(
         and(
-          eq(manejoSessions.farmId, farmId),
-          eq(manejoSessionAnimals.previousLotId, id)
+          eq(lotPlacements.farmId, farmId),
+          eq(lotPlacements.lotId, id),
+          isNull(lotPlacements.endedOn)
         )
       )
-      .limit(1);
-    if (previousLotRef) return false;
-
-    const placementRows = await tx
-      .select({ id: lotPlacements.id })
-      .from(lotPlacements)
-      .where(and(eq(lotPlacements.farmId, farmId), eq(lotPlacements.lotId, id)))
-      .limit(2)
       .for("update");
-    if (placementRows.length > 1) return false;
 
-    if (placementRows.length === 1) {
-      await tx
-        .delete(lotPlacements)
-        .where(eq(lotPlacements.id, placementRows[0].id));
+    let closedPlacement: LotPlacement | undefined;
+    let removedPlacementId: string | undefined;
+    if (current) {
+      const today = todayISO();
+      if (today > current.startedOn) {
+        const [closedRow] = await tx
+          .update(lotPlacements)
+          .set({ endedOn: today })
+          .where(eq(lotPlacements.id, current.id))
+          .returning();
+        closedPlacement = toLotPlacement(closedRow);
+      } else {
+        // A placement starting and ending today covers no day of grazing, and
+        // the period check rejects it — drop it instead of recording a void.
+        await tx.delete(lotPlacements).where(eq(lotPlacements.id, current.id));
+        removedPlacementId = current.id;
+      }
     }
-    await tx.delete(lots).where(and(eq(lots.farmId, farmId), eq(lots.id, id)));
-    return true;
+
+    const [deletedRow] = await tx
+      .update(lots)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(lots.farmId, farmId), eq(lots.id, id)))
+      .returning();
+    return { lot: toLot(deletedRow), closedPlacement, removedPlacementId };
   });
 }
 
@@ -497,7 +539,9 @@ export async function archiveLot(
     const [lotRow] = await tx
       .select()
       .from(lots)
-      .where(and(eq(lots.farmId, farmId), eq(lots.id, id)))
+      .where(
+        and(eq(lots.farmId, farmId), eq(lots.id, id), isNull(lots.deletedAt))
+      )
       .for("update");
     if (!lotRow) return "lot_not_found";
 
@@ -572,7 +616,9 @@ export async function moveLot(
     const [lotRow] = await tx
       .select()
       .from(lots)
-      .where(and(eq(lots.farmId, farmId), eq(lots.id, id)))
+      .where(
+        and(eq(lots.farmId, farmId), eq(lots.id, id), isNull(lots.deletedAt))
+      )
       .for("update");
     if (!lotRow) return "lot_not_found";
 

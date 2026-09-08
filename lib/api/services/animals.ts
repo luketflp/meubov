@@ -55,8 +55,8 @@ export type LotAssignmentError = "lot_not_found";
  * Verifies an active logical-lot assignment inside the caller's transaction.
  * The lot lock serializes this check with archive, movement and deletion; the
  * placement lock keeps the open assignment valid until the animal write
- * commits. Archived/unplaced and cross-farm lots are intentionally exposed as
- * the same `lot_not_found` result.
+ * commits. Deleted, archived/unplaced and cross-farm lots are intentionally
+ * exposed as the same `lot_not_found` result.
  */
 export async function validateLotAssignment(
   tx: Tx,
@@ -66,7 +66,9 @@ export async function validateLotAssignment(
   const [lot] = await tx
     .select({ id: lots.id })
     .from(lots)
-    .where(and(eq(lots.farmId, farmId), eq(lots.id, lotId)))
+    .where(
+      and(eq(lots.farmId, farmId), eq(lots.id, lotId), isNull(lots.deletedAt))
+    )
     .for("key share");
   if (!lot) return "lot_not_found";
 
@@ -241,10 +243,12 @@ export async function importAnimals(
     ] = await Promise.all([
       tx.select({ earTag: animals.earTag }).from(animals).where(eq(animals.farmId, farmId)),
       tx.select({ name: breeds.name }).from(breeds).where(eq(breeds.farmId, farmId)),
+      // Deleted lots are invisible to the import: a spreadsheet naming one
+      // creates a fresh group instead of reviving what the farmer removed.
       tx
         .select({ id: lots.id, name: lots.name })
         .from(lots)
-        .where(eq(lots.farmId, farmId))
+        .where(and(eq(lots.farmId, farmId), isNull(lots.deletedAt)))
         .for("update"),
       tx
         .select({ id: customCategories.id, baseCategory: customCategories.baseCategory })

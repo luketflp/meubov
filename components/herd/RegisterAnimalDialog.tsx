@@ -15,6 +15,7 @@ import { todayISO } from "@/lib/domain/dates";
 import { CATEGORY_LABEL, SEX_LABEL } from "@/lib/domain/labels";
 import {
   currentPlacementForLot,
+  activeLots,
   currentlyPlacedLots,
 } from "@/lib/store/selectors";
 import {
@@ -160,7 +161,7 @@ export function RegisterAnimalDialog() {
   // A new farm has no breed and no placed lot, so both dropdowns would open
   // empty; say what is missing instead of demanding a choice that cannot exist.
   const prerequisites = useMemo(
-    () => animalPrerequisites(breeds, lots, availableLots),
+    () => animalPrerequisites(breeds, activeLots(lots), availableLots),
     [breeds, lots, availableLots]
   );
   const blocked = blocksRegistration(prerequisites);

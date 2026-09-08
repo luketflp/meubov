@@ -23,7 +23,7 @@ import {
   type ImportParseResult,
   type ImportRow,
 } from "@/lib/domain/herdImport";
-import { currentPlacementForLot } from "@/lib/store/selectors";
+import { activeLots, currentPlacementForLot } from "@/lib/store/selectors";
 import type { ImportSummary } from "@/lib/store/useHerdStore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -191,7 +191,7 @@ export function ImportHerdDialog() {
       });
       const checked = validateImportRowLocations(
         parsed,
-        lots.map((lot) => ({
+        activeLots(lots).map((lot) => ({
           name: lot.name,
           currentInvernadaId:
             currentPlacementForLot(lot.id, lotPlacements)?.invernadaId,

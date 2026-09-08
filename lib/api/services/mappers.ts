@@ -122,6 +122,7 @@ export function toLot(row: LotRow): Lot {
     id: row.id,
     name: row.name,
     needsReview: row.needsReview || undefined,
+    deletedAt: row.deletedAt?.toISOString(),
   };
 }
 

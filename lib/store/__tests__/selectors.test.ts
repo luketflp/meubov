@@ -10,10 +10,10 @@ import type {
 import { makeAnimal } from "@/lib/domain/__tests__/fixtures";
 import {
   animalById,
+  canDeleteLot,
   currentlyPlacedLots,
   herdStockingRateAuPerHa,
   invernadasWithSummary,
-  isLotDeletable,
   lotsWithSummary,
   recentBirths,
 } from "@/lib/store/selectors";
@@ -146,15 +146,7 @@ describe("lot and invernada summaries", () => {
     expect(herdStockingRateAuPerHa(animals, invernadas)).toBeCloseTo(0.05);
   });
 
-  it("keeps a lot deletable only until anything references it", () => {
-    const onePlacement: LotPlacement[] = [
-      {
-        id: "placement-only",
-        lotId: "lot-new",
-        invernadaId: "invernada-1",
-        startedOn: "2026-07-01",
-      },
-    ];
+  it("blocks deletion for a live herd or an open manejo, never for history", () => {
     const makeSession = (overrides: Partial<ManejoSession>): ManejoSession => ({
       id: "session-1",
       name: "Transferência",
@@ -166,48 +158,56 @@ describe("lot and invernada summaries", () => {
       ...overrides,
     });
 
-    // Mistaken registration: no animals, no manejo, initial placement only.
-    expect(isLotDeletable("lot-new", [], [], onePlacement)).toBe(true);
-    // An archived never-used lot keeps its single (closed) placement.
+    // Empty lot: deletable even with placements and manejos behind it, since
+    // the row survives the deletion to keep naming that history.
+    expect(canDeleteLot("lot-new", [], [])).toBe(true);
     expect(
-      isLotDeletable("lot-new", [], [], [
-        { ...onePlacement[0], endedOn: "2026-07-20" },
+      canDeleteLot("lot-new", [], [makeSession({ destinationLotId: "lot-new" })])
+    ).toBe(true);
+    expect(
+      canDeleteLot("lot-new", [], [
+        makeSession({
+          animals: [{ earTag: "001", outcome: "done", previousLotId: "lot-new" }],
+        }),
       ])
     ).toBe(true);
 
-    // An INACTIVE animal still references the lot; the herd summary shows zero.
+    // A sold or dead animal is history too.
     const dead = makeAnimal({ id: "animal-dead", lotId: "lot-new", active: false });
-    expect(isLotDeletable("lot-new", [dead], [], onePlacement)).toBe(false);
+    expect(canDeleteLot("lot-new", [dead], [])).toBe(true);
 
-    // Manejo history: the lot was a destination, or an animal came from it.
+    // A live animal, or an open manejo heading into the lot, would be stranded.
+    const alive = makeAnimal({ id: "animal-live", lotId: "lot-new" });
+    expect(canDeleteLot("lot-new", [alive], [])).toBe(false);
     expect(
-      isLotDeletable("lot-new", [], [makeSession({ destinationLotId: "lot-new" })], onePlacement)
-    ).toBe(false);
-    expect(
-      isLotDeletable(
-        "lot-new",
-        [],
-        [
-          makeSession({
-            animals: [{ earTag: "001", outcome: "done", previousLotId: "lot-new" }],
-          }),
-        ],
-        onePlacement
-      )
-    ).toBe(false);
-
-    // Two placements are movement history, which makes the lot permanent.
-    expect(
-      isLotDeletable("lot-new", [], [], [
-        { ...onePlacement[0], endedOn: "2026-07-10" },
-        {
-          id: "placement-next",
-          lotId: "lot-new",
-          invernadaId: "invernada-2",
-          startedOn: "2026-07-10",
-        },
+      canDeleteLot("lot-new", [], [
+        makeSession({ status: "open", destinationLotId: "lot-new" }),
       ])
     ).toBe(false);
+  });
+
+  it("hides a deleted lot from the lots list, the pickers and the invernadas", () => {
+    const deleted: Lot = {
+      ...lots[1],
+      deletedAt: "2026-09-01T12:00:00.000Z",
+    };
+    const withDeleted = [lots[0], deleted];
+
+    expect(
+      lotsWithSummary(withDeleted, animals, invernadas, placements).map(
+        (summary) => summary.lot.id
+      )
+    ).toEqual(["lot-1"]);
+    expect(currentlyPlacedLots(withDeleted, placements).map((lot) => lot.id)).toEqual([
+      "lot-1",
+    ]);
+    const [invernada1] = invernadasWithSummary(
+      invernadas,
+      withDeleted,
+      placements,
+      animals
+    );
+    expect(invernada1.lots.map((lot) => lot.id)).toEqual(["lot-1"]);
   });
 
   it("uses the open placement after a movement, not the closed historical one", () => {

@@ -15,6 +15,7 @@ import { todayISO } from "@/lib/domain/dates";
 import { CATEGORY_LABEL, INACTIVE_REASON_LABEL } from "@/lib/domain/labels";
 import {
   currentPlacementForLot,
+  activeLots,
   currentlyPlacedLots,
 } from "@/lib/store/selectors";
 import { Button } from "@/components/ui/button";
@@ -85,7 +86,9 @@ export function EditAnimalDialog({ animal }: { animal: Animal }) {
   );
   const availableLots = useMemo(() => {
     const placed = currentlyPlacedLots(lots, lotPlacements);
-    const current = lots.find((lot) => lot.id === animal.lotId);
+    // An unplaced lot the animal still sits in stays selectable; a deleted one
+    // does not — the farmer removed that group on purpose.
+    const current = activeLots(lots).find((lot) => lot.id === animal.lotId);
     return current && !placed.some((lot) => lot.id === current.id)
       ? [...placed, current]
       : placed;

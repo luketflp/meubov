@@ -1,0 +1,1 @@
+ALTER TABLE "lots" ADD COLUMN "deleted_at" timestamp;

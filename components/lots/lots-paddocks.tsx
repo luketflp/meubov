@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { Fence, Trash2 } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
-import { isLotDeletable, lotsWithSummary, type LotWithSummary } from "@/lib/store/selectors";
+import { canDeleteLot, lotsWithSummary, type LotWithSummary } from "@/lib/store/selectors";
 import { KG_PER_AU } from "@/lib/domain/stocking";
 import { kgToArroba } from "@/lib/domain/weights";
 import { formatArroba, formatKg, formatNumber } from "@/lib/domain/format";
@@ -22,7 +22,7 @@ function LotCard({ summary }: { summary: LotWithSummary }) {
   const { lot, headCount, totalWeightKg, currentPlacement, currentInvernada } = summary;
   const removeLot = useHerdStore((state) => state.removeLot);
   const deletable = useHerdStore((state) =>
-    isLotDeletable(lot.id, state.animals, state.manejoSessions, state.lotPlacements)
+    canDeleteLot(lot.id, state.animals, state.manejoSessions)
   );
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
@@ -31,7 +31,7 @@ function LotCard({ summary }: { summary: LotWithSummary }) {
   async function onRemove() {
     if (
       !window.confirm(
-        `Excluir o cadastro do lote ${lot.name}? Use esta opção apenas para um lote criado por engano. Esta ação não pode ser desfeita.`
+        `Excluir o lote ${lot.name}? Ele sai das listas e libera a invernada. O histórico já registrado continua guardado.`
       )
     ) {
       return;
@@ -40,7 +40,9 @@ function LotCard({ summary }: { summary: LotWithSummary }) {
     setRemoveError(null);
     try {
       if (!(await removeLot(lot.id))) {
-        setRemoveError("Este lote já tem animais ou histórico e não pode ser excluído.");
+        setRemoveError(
+          "Este lote ainda tem animais ou um manejo em aberto e não pode ser excluído."
+        );
       }
     } finally {
       setRemoving(false);
@@ -99,7 +101,7 @@ function LotCard({ summary }: { summary: LotWithSummary }) {
             className="min-h-9 text-ink-soft hover:text-overdue"
           >
             <Trash2 aria-hidden />
-            {removing ? "Excluindo…" : "Excluir cadastro"}
+            {removing ? "Excluindo…" : "Excluir lote"}
           </Button>
         ) : null}
         <MoveLotDialog lot={lot} currentInvernada={currentInvernada} />
