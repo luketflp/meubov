@@ -9,6 +9,7 @@ import {
   daysToCalving,
   breedingsAwaitingDiagnosis,
   hasCalvedSince,
+  breedingOutcome,
 } from "@/lib/domain/reproduction";
 
 const emptyRecord: ReproductionRecord = { breedings: [], diagnoses: [], calvings: [] };
@@ -116,5 +117,86 @@ describe("hasCalvedSince", () => {
 
   it("is false without calvings", () => {
     expect(hasCalvedSince(emptyRecord, "2026-01-01")).toBe(false);
+  });
+});
+
+describe("breedingOutcome", () => {
+  const breeding: ReproductionRecord["breedings"][number] = {
+    id: "c1",
+    date: "2026-01-01",
+    type: "timedAI",
+    bullEarTag: "T-10",
+  };
+
+  it("is pending without a diagnosis and forecasts nothing", () => {
+    const record: ReproductionRecord = { breedings: [breeding], diagnoses: [], calvings: [] };
+
+    expect(breedingOutcome(record, breeding)).toEqual({
+      result: "pending",
+      diagnosis: null,
+      expectedCalvingDate: null,
+    });
+  });
+
+  it("forecasts the calving 283 days after a breeding diagnosed pregnant", () => {
+    const diagnosis = { breedingId: "c1", result: "pregnant" as const, date: "2026-02-05" };
+    const record: ReproductionRecord = {
+      breedings: [breeding],
+      diagnoses: [diagnosis],
+      calvings: [],
+    };
+
+    expect(breedingOutcome(record, breeding)).toEqual({
+      result: "pregnant",
+      diagnosis,
+      expectedCalvingDate: "2026-10-11",
+    });
+  });
+
+  it("stops forecasting once the dam has calved since the breeding", () => {
+    const diagnosis = { breedingId: "c1", result: "pregnant" as const, date: "2026-02-05" };
+    const record: ReproductionRecord = {
+      breedings: [breeding],
+      diagnoses: [diagnosis],
+      calvings: [{ date: "2026-10-05", calfEarTag: "BR-2001" }],
+    };
+
+    expect(breedingOutcome(record, breeding)).toEqual({
+      result: "pregnant",
+      diagnosis,
+      expectedCalvingDate: null,
+    });
+  });
+
+  it("forecasts nothing for an open diagnosis", () => {
+    const diagnosis = { breedingId: "c1", result: "open" as const, date: "2026-02-05" };
+    const record: ReproductionRecord = {
+      breedings: [breeding],
+      diagnoses: [diagnosis],
+      calvings: [],
+    };
+
+    expect(breedingOutcome(record, breeding)).toEqual({
+      result: "open",
+      diagnosis,
+      expectedCalvingDate: null,
+    });
+  });
+
+  it("reads the diagnosis of this breeding, not of another one", () => {
+    const other: ReproductionRecord["breedings"][number] = {
+      id: "c2",
+      date: "2025-10-01",
+      type: "naturalMating",
+      bullEarTag: "T-11",
+    };
+    const record: ReproductionRecord = {
+      breedings: [other, breeding],
+      diagnoses: [{ breedingId: "c2", result: "open", date: "2025-11-05" }],
+      calvings: [],
+    };
+
+    expect(breedingOutcome(record, breeding).result).toBe("pending");
+    expect(breedingOutcome(record, other).result).toBe("open");
   });
 });

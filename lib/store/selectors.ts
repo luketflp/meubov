@@ -4,6 +4,7 @@
  */
 import type {
   Animal,
+  Breeding,
   Category,
   Invernada,
   StockingRateClass,
@@ -14,6 +15,7 @@ import type {
   Treatment,
 } from "@/lib/types";
 import { deriveAnimalStatus, deriveTreatmentStatus, attentionReason } from "@/lib/domain/status";
+import { breedingOutcome, type BreedingOutcome } from "@/lib/domain/reproduction";
 import { calculateAdg } from "@/lib/domain/adg";
 import { kgToArroba, currentWeight, totalWeightKg } from "@/lib/domain/weights";
 import { classifyStockingRate, stockingRateAuPerHa, totalAu } from "@/lib/domain/stocking";
@@ -49,6 +51,20 @@ export interface Birth {
   calf: Animal | null;
   /** Weight taken on the day of birth, when one was recorded. */
   birthWeightKg: number | null;
+}
+
+/** Which outcomes the Coberturas screen shows; "all" keeps every breeding. */
+export type BreedingFilter = "all" | "pending" | "pregnant" | "open";
+
+/** A breeding joined to both animals it involves, for the Coberturas screen. */
+export interface BreedingRow {
+  /** Stable list key: the breeding id. */
+  key: string;
+  breeding: Breeding;
+  dam: Animal;
+  /** The bull when its ear tag resolves to a herd animal; null for an external bull or a semen code. */
+  bull: Animal | null;
+  outcome: BreedingOutcome;
 }
 
 /** Physical pasture with all logical lots currently occupying it. */
@@ -321,4 +337,37 @@ export function recentBirths(animals: Animal[]): Birth[] {
       (a, b) =>
         compareDate(b.date, a.date) || a.calfEarTag.localeCompare(b.calfEarTag)
     );
+}
+
+/**
+ * Every breeding on the farm as the Coberturas screen shows it: the dam's
+ * record, the bull's when the ear tag resolves, and the outcome of the
+ * breeding. Newest first, then by dam ear tag so a batch of IATF on the same
+ * day reads in a stable order.
+ */
+export function recentBreedings(animals: Animal[]): BreedingRow[] {
+  const byEarTag = new Map(animals.map((animal) => [animal.earTag, animal]));
+  return animals
+    .flatMap((dam) => {
+      const record = dam.reproduction;
+      if (!record) return [];
+      return record.breedings.map((breeding) => ({
+        key: breeding.id,
+        breeding,
+        dam,
+        bull: byEarTag.get(breeding.bullEarTag) ?? null,
+        outcome: breedingOutcome(record, breeding),
+      }));
+    })
+    .sort(
+      (a, b) =>
+        compareDate(b.breeding.date, a.breeding.date) ||
+        a.dam.earTag.localeCompare(b.dam.earTag)
+    );
+}
+
+/** Rows whose outcome matches the filter; "all" keeps everything. */
+export function filterBreedings(rows: BreedingRow[], filter: BreedingFilter): BreedingRow[] {
+  if (filter === "all") return rows;
+  return rows.filter((row) => row.outcome.result === filter);
 }

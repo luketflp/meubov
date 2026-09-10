@@ -1,21 +1,25 @@
 import { describe, expect, it } from "vitest";
 import type {
   Animal,
+  Breeding,
   Calving,
   Invernada,
   Lot,
   LotPlacement,
   ManejoSession,
+  ReproductionRecord,
 } from "@/lib/types";
 import { makeAnimal } from "@/lib/domain/__tests__/fixtures";
 import {
   animalById,
   canDeleteLot,
   currentlyPlacedLots,
+  filterBreedings,
   herdStockingRateAuPerHa,
   invernadasWithSummary,
   lotsWithSummary,
   recentBirths,
+  recentBreedings,
 } from "@/lib/store/selectors";
 
 describe("animalById", () => {
@@ -313,4 +317,133 @@ describe("recentBirths", () => {
   it("ignores animals with no reproduction record", () => {
     expect(recentBirths([makeAnimal(), dam("dam-1", [])])).toEqual([]);
   });
+});
+
+describe("recentBreedings", () => {
+  const breeding = (id: string, date: string, bullEarTag = "T-10"): Breeding => ({
+    id,
+    date,
+    type: "timedAI",
+    bullEarTag,
+  });
+
+  const dam = (
+    id: string,
+    record: Partial<ReproductionRecord>,
+    overrides: Partial<Animal> = {}
+  ): Animal =>
+    makeAnimal({
+      id,
+      earTag: id.toUpperCase(),
+      category: "cow",
+      sex: "female",
+      reproduction: { breedings: [], diagnoses: [], calvings: [], ...record },
+      ...overrides,
+    });
+
+  const bull = (earTag: string): Animal =>
+    makeAnimal({ id: `bull-${earTag}`, earTag, category: "bull" });
+
+  it("lists every breeding across the herd, newest first, then by dam ear tag", () => {
+    const animals = [
+      dam("dam-2", { breedings: [breeding("c1", "2026-03-02")] }),
+      dam("dam-1", {
+        breedings: [breeding("c2", "2026-03-02"), breeding("c3", "2026-01-10")],
+      }),
+      dam("dam-3", { breedings: [breeding("c4", "2026-02-20")] }),
+    ];
+
+    expect(recentBreedings(animals).map((row) => row.key)).toEqual([
+      "c2",
+      "c1",
+      "c4",
+      "c3",
+    ]);
+  });
+
+  it("joins the dam, the bull and the outcome of the breeding", () => {
+    const covered = breeding("c1", "2026-01-01", "T-10");
+    const diagnosis = { breedingId: "c1", result: "pregnant" as const, date: "2026-02-05" };
+    const animals = [
+      dam("dam-1", { breedings: [covered], diagnoses: [diagnosis] }),
+      bull("T-10"),
+    ];
+
+    const [row] = recentBreedings(animals);
+
+    expect(row.key).toBe("c1");
+    expect(row.breeding).toBe(covered);
+    expect(row.dam.id).toBe("dam-1");
+    expect(row.bull?.id).toBe("bull-T-10");
+    expect(row.outcome).toEqual({
+      result: "pregnant",
+      diagnosis,
+      expectedCalvingDate: "2026-10-11",
+    });
+  });
+
+  it("has no bull when the tag is an external bull or a semen code", () => {
+    const animals = [
+      dam("dam-1", { breedings: [breeding("c1", "2026-01-01", "SEMEN-4521")] }),
+      bull("T-10"),
+    ];
+
+    const [row] = recentBreedings(animals);
+
+    expect(row.breeding.bullEarTag).toBe("SEMEN-4521");
+    expect(row.bull).toBeNull();
+  });
+
+  it("keeps the breedings of a dam that has since left the herd", () => {
+    const animals = [
+      dam("dam-1", { breedings: [breeding("c1", "2026-01-01")] }, {
+        active: false,
+        inactiveReason: "sale",
+      }),
+    ];
+
+    expect(recentBreedings(animals)).toHaveLength(1);
+  });
+
+  it("ignores animals with no reproduction record or no breedings", () => {
+    expect(recentBreedings([makeAnimal(), dam("dam-1", {})])).toEqual([]);
+  });
+});
+
+describe("filterBreedings", () => {
+  const rows = recentBreedings([
+    makeAnimal({
+      id: "dam-1",
+      earTag: "DAM-1",
+      category: "cow",
+      sex: "female",
+      reproduction: {
+        breedings: [
+          { id: "pending", date: "2026-05-01", type: "timedAI", bullEarTag: "T-10" },
+          { id: "pregnant", date: "2026-01-01", type: "timedAI", bullEarTag: "T-10" },
+          { id: "open", date: "2025-10-01", type: "naturalMating", bullEarTag: "T-11" },
+        ],
+        diagnoses: [
+          { breedingId: "pregnant", result: "pregnant", date: "2026-02-05" },
+          { breedingId: "open", result: "open", date: "2025-11-05" },
+        ],
+        calvings: [],
+      },
+    }),
+  ]);
+
+  it("keeps everything for 'all'", () => {
+    expect(filterBreedings(rows, "all").map((row) => row.key)).toEqual([
+      "pending",
+      "pregnant",
+      "open",
+    ]);
+  });
+
+  it.each(["pending", "pregnant", "open"] as const)(
+    "keeps only the rows whose outcome is %s",
+    (filter) => {
+      expect(filterBreedings(rows, filter).map((row) => row.key)).toEqual([filter]);
+    }
+  );
 });
