@@ -113,6 +113,19 @@ describe("parseImportDate", () => {
     expect(parseImportDate("not a date")).toBeNull();
     expect(parseImportDate("")).toBeNull();
   });
+
+  it("accepts a bare year as the first of January", () => {
+    expect(parseImportDate("2021")).toBe("2021-01-01");
+  });
+
+  it("accepts a numeric year (SheetJS raw mode)", () => {
+    expect(parseImportDate(2021)).toBe("2021-01-01");
+  });
+
+  it("rejects a bare year before 1900 as a typo", () => {
+    expect(parseImportDate("1899")).toBeNull();
+    expect(parseImportDate(1899)).toBeNull();
+  });
 });
 
 describe("parseWeight", () => {
@@ -307,6 +320,34 @@ describe("buildImportRows — rows", () => {
     expect(result.rows[0].status).toBe("ok");
     expect(result.rows[0].cells.birthDate).toBe("2023-03-15");
     expect(result.rows[0].payload?.birthDate).toBe("2023-03-15");
+  });
+
+  it("accepts a year-only birth cell and shows the year in the preview", () => {
+    const result = buildImportRows(
+      sheet(["A1", "Novilha", "Nelore", "", 2021, "Lote 1", "01", ""]),
+      ctx()
+    );
+    expect(result.rows[0].status).toBe("ok");
+    expect(result.rows[0].cells.birthDate).toBe("2021");
+    expect(result.rows[0].payload?.birthDate).toBe("2021-01-01");
+  });
+
+  it("flags a year-only birth in the future", () => {
+    const result = buildImportRows(
+      sheet(["A1", "Novilha", "Nelore", "", "2027", "Lote 1", "01", ""]),
+      ctx()
+    );
+    expect(result.rows[0].errors.birthDate).toContain("futuro");
+  });
+
+  it("names the year-only option in the invalid date message", () => {
+    const result = buildImportRows(
+      sheet(["A1", "Novilha", "Nelore", "", "março", "Lote 1", "01", ""]),
+      ctx()
+    );
+    expect(result.rows[0].errors.birthDate).toBe(
+      "Data inválida (use DD/MM/AAAA ou só o ano)."
+    );
   });
 
   it("flags unknown category and future birth date", () => {

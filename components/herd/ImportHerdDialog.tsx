@@ -255,7 +255,7 @@ export function ImportHerdDialog() {
               <p className="font-medium">Colunas esperadas</p>
               <p className="text-ink-soft">
                 brinco, categoria, raça, sexo (opcional quando a categoria já
-                define), nascimento (DD/MM/AAAA), lote (grupo de animais),
+                define), nascimento (DD/MM/AAAA ou só o ano), lote (grupo de animais),
                 invernada (código), peso (kg, opcional).
               </p>
               <button

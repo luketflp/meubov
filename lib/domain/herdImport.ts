@@ -188,25 +188,40 @@ export function parseSex(raw: string): Sex | null {
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const BR_DATE = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/;
+const BARE_YEAR = /^(\d{4})$/;
+/**
+ * Lowest bare year accepted. No cattle alive today was born earlier, so a
+ * smaller number is a typo (or an Excel date serial) rather than a year.
+ */
+const MIN_BARE_YEAR = 1900;
 
 /**
  * Parses a date cell into ISO "YYYY-MM-DD". Accepts a JS Date (SheetJS with
- * `cellDates`), ISO strings, and Brazilian `DD/MM/YYYY` (also `-` separated).
- * Returns null when the value cannot be read as a real calendar date.
+ * `cellDates`), ISO strings, Brazilian `DD/MM/YYYY` (also `-` separated), and a
+ * bare year — many farms only know the year an animal was born, so "2021"
+ * becomes "2021-01-01". Returns null when the value cannot be read as a real
+ * calendar date.
  */
 export function parseImportDate(raw: unknown): string | null {
   if (raw instanceof Date) {
     if (Number.isNaN(raw.getTime())) return null;
     return toISO(raw);
   }
+  // SheetJS raw mode hands a "2021" cell over as the number 2021.
   const text = String(raw ?? "").trim();
   if (text === "") return null;
 
   let year: number;
   let month: number;
   let day: number;
+  const bareYear = BARE_YEAR.exec(text);
   const iso = ISO_DATE.exec(text);
-  if (iso) {
+  if (bareYear) {
+    year = Number(bareYear[1]);
+    if (year < MIN_BARE_YEAR) return null;
+    month = 1;
+    day = 1;
+  } else if (iso) {
     year = Number(iso[1]);
     month = Number(iso[2]);
     day = Number(iso[3]);
@@ -426,7 +441,7 @@ export function buildImportRows(
     if (cells.birthDate === "") {
       errors.birthDate = "Informe o nascimento.";
     } else if (!birthDate) {
-      errors.birthDate = "Data inválida (use DD/MM/AAAA).";
+      errors.birthDate = "Data inválida (use DD/MM/AAAA ou só o ano).";
     } else if (birthDate > ctx.todayIso) {
       errors.birthDate = "O nascimento não pode ser no futuro.";
     }
