@@ -32,7 +32,14 @@ async function searchPlaces(
   return payload.places ?? [];
 }
 
-export function PlaceSearch({ onSelect }: { onSelect: (hit: PlaceHit) => void }) {
+export function PlaceSearch({
+  onSelect,
+  inputRef,
+}: {
+  onSelect: (hit: PlaceHit) => void;
+  /** Lifted so a setup step can send the farmer straight into the field. */
+  inputRef?: React.Ref<HTMLInputElement>;
+}) {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<PlaceHit[]>([]);
   const [open, setOpen] = useState(false);
@@ -125,6 +132,7 @@ export function PlaceSearch({ onSelect }: { onSelect: (hit: PlaceHit) => void })
           <Search className="size-4 shrink-0 text-ink-soft" aria-hidden />
         )}
         <input
+          ref={inputRef}
           id="place-search"
           type="search"
           value={query}
