@@ -1,12 +1,13 @@
 "use client";
 
+import { Fragment } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { authClient } from "@/lib/auth/client";
 import { useSignOut } from "@/lib/auth/navigation";
 import { displayName, getInitials } from "@/lib/auth/user";
-import { NAV_ITEMS, isActiveRoute } from "@/lib/nav";
+import { NAV_ITEMS, activeChild, isActiveRoute } from "@/lib/nav";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { cn } from "@/lib/utils";
 import {
@@ -16,6 +17,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+/** Highlight shared by an active parent row and an active child row. */
+const activeClass =
+  "bg-sidebar-active text-surface before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-brand";
+
+/** Child rows indent past the parent's icon (16) + gap (10) + padding (12) so the labels line up. */
+const childClass =
+  "relative flex items-center rounded-md py-2 pr-3 pl-[38px] text-sm text-surface/75 transition-colors hover:bg-sidebar-active/60 hover:text-surface";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -58,21 +67,35 @@ export function Sidebar() {
 
       <nav className="flex-1 space-y-0.5 px-2" aria-label="Navegação principal">
         {NAV_ITEMS.map((item) => {
-          const active = isActiveRoute(pathname, item.href);
+          const child = activeChild(pathname, item);
+          // On a child route the child row takes the highlight and the parent
+          // keeps only the bright text.
+          const active = child === null && isActiveRoute(pathname, item.href);
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "relative flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-surface/75 transition-colors hover:bg-sidebar-active/60 hover:text-surface",
-                active &&
-                  "bg-sidebar-active text-surface before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-brand"
-              )}
-            >
-              <item.icon className="size-4 shrink-0" aria-hidden />
-              {item.label}
-            </Link>
+            <Fragment key={item.href}>
+              <Link
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "relative flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-surface/75 transition-colors hover:bg-sidebar-active/60 hover:text-surface",
+                  active && activeClass,
+                  child !== null && "text-surface"
+                )}
+              >
+                <item.icon className="size-4 shrink-0" aria-hidden />
+                {item.label}
+              </Link>
+              {item.children?.map((sub) => (
+                <Link
+                  key={sub.href}
+                  href={sub.href}
+                  aria-current={sub === child ? "page" : undefined}
+                  className={cn(childClass, sub === child && activeClass)}
+                >
+                  {sub.label}
+                </Link>
+              ))}
+            </Fragment>
           );
         })}
       </nav>

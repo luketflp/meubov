@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Ellipsis, LogOut } from "lucide-react";
@@ -13,7 +13,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useSignOut } from "@/lib/auth/navigation";
-import { NAV_ITEMS, type NavItem, isActiveRoute } from "@/lib/nav";
+import { NAV_ITEMS, type NavItem, activeChild, isActiveRoute } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
 /**
@@ -39,11 +39,16 @@ const moreLinks = NAV_ITEMS.slice(PRIMARY_TAB_COUNT);
 const tabClass =
   "flex min-h-11 min-w-11 flex-1 flex-col items-center justify-center gap-0.5 py-1.5";
 
+const moreLinkClass =
+  "flex min-h-11 items-center gap-2.5 rounded-md px-3 text-sm font-medium text-ink transition-colors hover:bg-surface";
+
 export function MobileTabBar() {
   const pathname = usePathname();
   const signOut = useSignOut();
   const [moreOpen, setMoreOpen] = useState(false);
-  const moreActive = moreLinks.some((link) => isActiveRoute(pathname, link.href));
+  const moreActive = moreLinks.some(
+    (link) => isActiveRoute(pathname, link.href) || activeChild(pathname, link) !== null
+  );
 
   async function handleSignOut() {
     setMoreOpen(false);
@@ -84,16 +89,33 @@ export function MobileTabBar() {
               <DialogDescription>Outras áreas do MeuBov</DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-1">
-              {moreLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setMoreOpen(false)}
-                  className="flex min-h-11 items-center gap-2.5 rounded-md px-3 text-sm font-medium text-ink transition-colors hover:bg-surface"
-                >
-                  <link.icon className="size-4 text-ink-soft" aria-hidden />
-                  {link.label}
-                </Link>
+              {/* Primary tabs already sit in the bar, so only their children are listed here. */}
+              {NAV_ITEMS.map((item, index) => (
+                <Fragment key={item.href}>
+                  {index >= PRIMARY_TAB_COUNT && (
+                    <Link
+                      href={item.href}
+                      onClick={() => setMoreOpen(false)}
+                      className={moreLinkClass}
+                    >
+                      <item.icon className="size-4 text-ink-soft" aria-hidden />
+                      {item.label}
+                    </Link>
+                  )}
+                  {item.children?.map((child) => (
+                    <Link
+                      key={child.href}
+                      href={child.href}
+                      onClick={() => setMoreOpen(false)}
+                      className={moreLinkClass}
+                    >
+                      {/* The parent's icon, so the child reads as part of that area. */}
+                      <item.icon className="size-4 text-ink-soft" aria-hidden />
+                      {child.label}
+                      <span className="ml-auto text-[11px] text-ink-soft">em {item.label}</span>
+                    </Link>
+                  ))}
+                </Fragment>
               ))}
               <button
                 type="button"
