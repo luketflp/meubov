@@ -52,6 +52,7 @@ export function SaveBoundaryDialog({
   ring,
   targetInvernadas,
   initialTargetId,
+  preferNew = false,
   onSaved,
   onCancel,
 }: {
@@ -61,6 +62,12 @@ export function SaveBoundaryDialog({
   targetInvernadas: Invernada[];
   /** Preferred target captured when drawing/coordinate entry began. */
   initialTargetId?: string;
+  /**
+   * Starts the form on "cadastrar uma nova invernada". The trace came from a
+   * flow whose whole purpose is a new area, so defaulting to the first undrawn
+   * invernada in the list would quietly attach the fence to the wrong one.
+   */
+  preferNew?: boolean;
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -76,6 +83,7 @@ export function SaveBoundaryDialog({
     ) {
       return initialTargetId;
     }
+    if (preferNew) return NEW_INVERNADA;
     return targetInvernadas[0]?.id ?? NEW_INVERNADA;
   });
   const [code, setCode] = useState("");
