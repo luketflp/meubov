@@ -10,62 +10,22 @@
  * the herd (sold, dead), the history stays readable.
  */
 import Link from "next/link";
-import type { Animal, ReproductionRecord, DiagnosisResult, BreedingType } from "@/lib/types";
+import type { Animal, ReproductionRecord } from "@/lib/types";
 import { todayISO, formatDate } from "@/lib/domain/dates";
 import {
   expectedCalvingDate,
   currentDiagnosis,
   daysToCalving,
+  daysToCalvingText,
   hasCalvedSince,
 } from "@/lib/domain/reproduction";
-import {
-  DIAGNOSIS_RESULT_LABEL,
-  BREEDING_TYPE_LABEL,
-} from "@/lib/domain/labels";
 import { SectionCard } from "@/components/ui/section-card";
 import { RegisterBreedingDialog } from "@/components/animal/RegisterBreedingDialog";
 import { RegisterDiagnosisDialog } from "@/components/animal/RegisterDiagnosisDialog";
 import { RegisterCalvingDialog } from "@/components/animal/RegisterCalvingDialog";
-import { cn } from "@/lib/utils";
+import { ResultPill, BreedingPill } from "@/components/animal/reproduction-pills";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { animalByEarTag } from "@/lib/store/selectors";
-
-const RESULT_STYLE: Record<DiagnosisResult, string> = {
-  pregnant: "bg-healthy-soft text-healthy",
-  open: "border border-hairline bg-surface text-ink-soft",
-  pending: "bg-attention-soft text-attention",
-};
-
-const BREEDING_STYLE: Record<BreedingType, string> = {
-  timedAI: "bg-scheduled-soft text-scheduled",
-  naturalMating: "bg-fmd-soft text-fmd",
-};
-
-function ResultPill({ result }: { result: DiagnosisResult }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium whitespace-nowrap",
-        RESULT_STYLE[result]
-      )}
-    >
-      {DIAGNOSIS_RESULT_LABEL[result]}
-    </span>
-  );
-}
-
-function BreedingPill({ type }: { type: BreedingType }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium whitespace-nowrap",
-        BREEDING_STYLE[type]
-      )}
-    >
-      {BREEDING_TYPE_LABEL[type]}
-    </span>
-  );
-}
 
 function EarTagLink({ earTag }: { earTag: string }) {
   const animal = useHerdStore((state) => animalByEarTag(state.animals, earTag));
@@ -78,13 +38,6 @@ function EarTagLink({ earTag }: { earTag: string }) {
       {earTag}
     </Link>
   );
-}
-
-function daysToCalvingText(days: number): string {
-  if (days === 0) return "hoje";
-  if (days === 1) return "em 1 dia";
-  if (days === -1) return "há 1 dia";
-  return days > 0 ? `em ${days} dias` : `há ${-days} dias`;
 }
 
 /** A female with no history yet: the section still opens, ready for the first record. */
