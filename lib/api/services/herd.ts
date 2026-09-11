@@ -94,7 +94,7 @@ export async function loadHerdData(farmId: number): Promise<HerdData> {
     db
       .select()
       .from(manejoSessions)
-      .where(eq(manejoSessions.farmId, farmId))
+      .where(and(eq(manejoSessions.farmId, farmId), isNull(manejoSessions.deletedAt)))
       .orderBy(asc(manejoSessions.date), asc(manejoSessions.id)),
     db
       .select()
@@ -110,7 +110,7 @@ export async function loadHerdData(farmId: number): Promise<HerdData> {
       .select({ row: weighings })
       .from(weighings)
       .innerJoin(animals, eq(weighings.animalId, animals.id))
-      .where(eq(animals.farmId, farmId))
+      .where(and(eq(animals.farmId, farmId), isNull(weighings.deletedAt)))
       .orderBy(asc(weighings.date), asc(weighings.id)),
     db
       .select({ row: treatments, earTag: animals.earTag })
@@ -142,7 +142,7 @@ export async function loadHerdData(farmId: number): Promise<HerdData> {
       .from(manejoSessionAnimals)
       .innerJoin(manejoSessions, eq(manejoSessionAnimals.sessionId, manejoSessions.id))
       .innerJoin(animals, eq(manejoSessionAnimals.animalId, animals.id))
-      .where(eq(manejoSessions.farmId, farmId))
+      .where(and(eq(manejoSessions.farmId, farmId), isNull(manejoSessions.deletedAt)))
       .orderBy(asc(manejoSessionAnimals.position)),
   ]);
 

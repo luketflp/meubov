@@ -37,6 +37,7 @@ import {
   type ManejoHistoryRow,
 } from "@/components/manejo/helpers";
 import { ManejoTypePill } from "@/components/manejo/manejo-type-pill";
+import { ManejoRowMenu } from "@/components/manejo/manejo-row-menu";
 
 const ALL = "all";
 
@@ -111,6 +112,9 @@ export function ManejoHistory() {
                   <TableHead className="text-right">Animais</TableHead>
                   <TableHead>Responsável</TableHead>
                   <TableHead className="text-right">Custo / Valor</TableHead>
+                  <TableHead className="w-10">
+                    <span className="sr-only">Ações</span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -141,6 +145,9 @@ export function ManejoHistory() {
                     <TableCell className="text-right font-mono text-ink">
                       {session.amountBrl === null ? "—" : formatCurrency(session.amountBrl)}
                     </TableCell>
+                    <TableCell className="text-right">
+                      <ManejoRowMenu row={session} />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -154,8 +161,11 @@ export function ManejoHistory() {
                 <Wrapper href={session.href}>
                   <div className="flex items-center justify-between gap-2">
                     <ManejoTypePill action={session.kind} />
-                    <span className="font-mono text-xs text-ink-soft">
-                      {formatDate(session.date)}
+                    <span className="flex items-center gap-1">
+                      <span className="font-mono text-xs text-ink-soft">
+                        {formatDate(session.date)}
+                      </span>
+                      <ManejoRowMenu row={session} />
                     </span>
                   </div>
                   <p className="mt-2 text-sm font-medium text-ink">{session.name}</p>

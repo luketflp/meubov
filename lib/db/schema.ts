@@ -334,6 +334,8 @@ export const weighings = pgTable(
       .references(() => animals.id, { onDelete: "cascade" }),
     date: date("date").notNull(),
     weightKg: numeric("weight_kg", { mode: "number" }).notNull(),
+    /** Soft delete: the reading stays for audit, the herd stops seeing it. */
+    deletedAt: timestamp("deleted_at"),
   },
   (t) => [index("weighings_animal_id_date_idx").on(t.animalId, t.date)]
 );
@@ -487,6 +489,8 @@ export const manejoSessions = pgTable(
     planCostBrl: numeric("plan_cost_brl", { mode: "number" }),
     planNextDate: date("plan_next_date"),
     planNotes: text("plan_notes"),
+    /** Soft delete: the manejo leaves the history, the row stays for audit. */
+    deletedAt: timestamp("deleted_at"),
   },
   (t) => [index("manejo_sessions_farm_id_idx").on(t.farmId)]
 );

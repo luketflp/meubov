@@ -9,7 +9,16 @@
  */
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, ClipboardX, Percent, Search, Undo2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ClipboardX,
+  Percent,
+  Search,
+  Trash2,
+  Undo2,
+} from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
 import type { ManejoSessionAnimal } from "@/lib/types";
@@ -25,6 +34,7 @@ import { saleAmount } from "@/lib/domain/movements";
 import { EntryChuteForm } from "@/components/manejo/entry-chute-form";
 import { SaleSummaryCard } from "@/components/manejo/sale-summary";
 import { SaleYieldDialog } from "@/components/manejo/sale-yield-dialog";
+import { DeleteManejoDialog } from "@/components/manejo/delete-manejo-dialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -53,7 +63,9 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
   const reopenManejoAnimal = useHerdStore((s) => s.reopenManejoAnimal);
   const closeManejoSession = useHerdStore((s) => s.closeManejoSession);
   const { addToast } = useToast();
+  const router = useRouter();
 
+  const [deleting, setDeleting] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [weight, setWeight] = useState("");
@@ -176,14 +188,33 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
             : `${formatDate(session.date)} · ${movementSubtitle(session, destinationName)}`
         }
         actions={
-          <Link
-            href="/manejo"
-            className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand hover:underline md:min-h-0"
-          >
-            <ArrowLeft className="size-4" aria-hidden />
-            Voltar
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="min-h-11 text-ink-soft hover:text-overdue md:min-h-9"
+              onClick={() => setDeleting(true)}
+            >
+              <Trash2 data-icon="inline-start" aria-hidden />
+              {open ? "Descartar manejo" : "Excluir manejo"}
+            </Button>
+            <Link
+              href="/manejo"
+              className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand hover:underline md:min-h-0"
+            >
+              <ArrowLeft className="size-4" aria-hidden />
+              Voltar
+            </Link>
+          </div>
         }
+      />
+
+      <DeleteManejoDialog
+        target={{ kind: "session", session }}
+        open={deleting}
+        onOpenChange={setDeleting}
+        onDeleted={() => router.push("/manejo")}
       />
 
       <SectionCard

@@ -92,6 +92,13 @@
       "when": 1789159603574,
       "tag": "0012_treatment_soft_delete",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1789163195993,
+      "tag": "0013_manejo-soft-delete",
+      "breakpoints": true
     }
   ]
 }

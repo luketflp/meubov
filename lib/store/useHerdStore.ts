@@ -34,6 +34,8 @@ import { ApiHerdRepository } from "@/lib/repository/ApiHerdRepository";
 import { api } from "@/lib/api/client";
 import { setActiveFarmId } from "@/lib/api/activeFarm";
 import type { ImportAnimalPayload } from "@/lib/domain/herdImport";
+import type { BlockedAnimal } from "@/lib/domain/manejoRevert";
+import type { DeletedManejo } from "@/lib/api/services/manejo";
 
 /** Animal to register; the optional initial weight becomes the first weighing. */
 export type NewAnimal = Omit<Animal, "id" | "active" | "weighings" | "reproduction"> & {
@@ -191,12 +193,19 @@ export interface HerdStore extends HerdData {
   /** Closes the session (remaining animals stay recorded as they are). */
   closeManejoSession: (sessionId: string) => Promise<void>;
   /**
+   * Deletes a manejo and puts the herd back where it was. Returns null when it
+   * went through, or the animals that blocked it when the server refused.
+   */
+  deleteManejoSession: (sessionId: string) => Promise<BlockedAnimal[] | null>;
+  /**
    * Registers one animal arriving in an entry session (compra): it joins the
    * herd in the session's destination lot, already handled. False when the ear
    * tag is already in use.
    */
   registerEntryAnimal: (sessionId: string, animal: EntryAnimal) => Promise<boolean>;
   recordWeighing: (earTag: string, w: Weighing) => Promise<void>;
+  /** Deletes the weight readings of one day (a "Pesagem" row of the history). */
+  deleteWeighingGroup: (date: string, earTags: string[]) => Promise<number>;
   addBreed: (name: string) => Promise<void>;
   /** Removes the breed via the API; false when an active animal uses it. */
   removeBreed: (name: string) => Promise<boolean>;
@@ -621,6 +630,49 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     }));
   },
 
+  deleteManejoSession: async (sessionId) => {
+    const sessionDate = get().manejoSessions.find((m) => m.id === sessionId)?.date;
+    const response = await api.manejo({ id: sessionId }).delete();
+    if (response.error) {
+      if (response.error.status === CONFLICT) {
+        return (response.error.value as { blocked: BlockedAnimal[] }).blocked;
+      }
+      apiFail("excluir o manejo", response.error.status);
+    }
+    const result = response.data as DeletedManejo;
+    const removedTreatments = new Set(result.treatmentIds);
+    const weighed = new Set(result.weighedEarTags);
+    const restored = new Map(result.restored.map((r) => [r.earTag, r]));
+    const removed = new Set(result.removedEarTags);
+    set((s) => ({
+      manejoSessions: s.manejoSessions.filter((m) => m.id !== sessionId),
+      treatments: s.treatments.filter((t) => !removedTreatments.has(t.id)),
+      animals: s.animals
+        .filter((a) => !removed.has(a.earTag))
+        .map((a) => {
+          const back = restored.get(a.earTag);
+          // The session wrote at most one reading per animal, on its own date.
+          const dropsWeighing = weighed.has(a.earTag) && sessionDate !== undefined;
+          if (!back && !dropsWeighing) return a;
+          return {
+            ...a,
+            ...(back
+              ? {
+                  ...(back.lotId !== null ? { lotId: back.lotId } : {}),
+                  ...(back.active
+                    ? { active: true, inactiveReason: undefined, inactiveDate: undefined }
+                    : {}),
+                }
+              : {}),
+            ...(dropsWeighing
+              ? { weighings: a.weighings.filter((w) => w.date !== sessionDate) }
+              : {}),
+          };
+        }),
+    }));
+    return null;
+  },
+
   recordWeighing: async (earTag, w) => {
     const id = animalIdByEarTag(get().animals, earTag);
     const { data, error } = await api.animals({ id }).weighings.post(w);
@@ -651,6 +703,20 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       ),
     }));
     return true;
+  },
+
+  deleteWeighingGroup: async (date, earTags) => {
+    const { data, error } = await api.weighings.delete({ date, earTags });
+    if (error) apiFail("excluir a pesagem", error.status);
+    const affected = new Set(earTags);
+    set((s) => ({
+      animals: s.animals.map((a) =>
+        affected.has(a.earTag)
+          ? { ...a, weighings: a.weighings.filter((w) => w.date !== date) }
+          : a
+      ),
+    }));
+    return (data as { count: number }).count;
   },
 
   addBreed: async (name) => {

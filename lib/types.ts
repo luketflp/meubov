@@ -153,6 +153,8 @@ export interface ManejoSessionAnimal {
   treatmentId?: string;
   /** Id of the scheduled booster this pass created (for undo). */
   boosterId?: string;
+  /** Id of the weighing this pass wrote (for undo and for a session delete). */
+  weighingId?: number;
   /** What this animal was worth in a priced sale (R$/@ × its chute weight). */
   amountBrl?: number;
   /** Lot the animal came from, so undoing a transfer pass can restore it. */

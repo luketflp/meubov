@@ -18,6 +18,7 @@ import {
   CompleteTreatmentsBody,
   DeactivateAnimalBody,
   DeleteTreatmentQuery,
+  DeleteWeighingsBody,
   EntryAnimalBody,
   FarmDataBody,
   ImportAnimalsBody,
@@ -292,6 +293,11 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
     },
     { farm: true, body: WeighingBody }
   )
+  .delete(
+    "/weighings",
+    async ({ farmId, body }) => animalsService.deleteWeighings(farmId, body.date, body.earTags),
+    { farm: true, body: DeleteWeighingsBody }
+  )
   .post(
     "/treatments/schedule",
     async ({ farmId, body, status }) => {
@@ -487,6 +493,16 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
       const closed = await manejoService.closeSession(farmId, params.id);
       if (!closed) return status(404, { error: "not_found" });
       return { id: params.id, status: "closed" as const };
+    },
+    { farm: true }
+  )
+  .delete(
+    "/manejo/:id",
+    async ({ farmId, params, status }) => {
+      const result = await manejoService.deleteSession(farmId, params.id);
+      if (result === "session_not_found") return status(404, { error: result });
+      if ("blocked" in result) return status(409, result);
+      return result;
     },
     { farm: true }
   );

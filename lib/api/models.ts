@@ -166,6 +166,12 @@ export const DeleteTreatmentQuery = t.Object({
   scope: t.Optional(t.Union([t.Literal("one"), t.Literal("batch")])),
 });
 
+/** Body of DELETE /weighings: the day and whose readings of it fall. */
+export const DeleteWeighingsBody = t.Object({
+  date: DateString,
+  earTags: t.Array(t.String({ minLength: 1 }), { minItems: 1 }),
+});
+
 /** Body of POST /treatments/schedule. */
 export const ScheduleTreatmentsBody = t.Object({
   date: DateString,

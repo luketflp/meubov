@@ -190,6 +190,12 @@ export interface ManejoHistoryRow {
   amountBrl: number | null;
   /** Screen the row opens, when it has one of its own (a venda encerrada). */
   href?: string;
+  /** Session behind the row, when a manejo at the chute wrote it. */
+  sessionId?: string;
+  /** A treatment of the group, enough to delete every one booked with it. */
+  treatmentId?: string;
+  /** Animals of a pesagem row, whose readings of the day fall together. */
+  earTags?: string[];
 }
 
 /**
@@ -222,6 +228,7 @@ export function manejoHistory(
         headCount: 1,
         responsible: t.responsible,
         amountBrl: t.costBrl ?? null,
+        treatmentId: t.id,
       });
     }
   }
@@ -232,6 +239,7 @@ export function manejoHistory(
       const existing = map.get(key);
       if (existing) {
         existing.headCount += 1;
+        existing.earTags?.push(animal.earTag);
       } else {
         map.set(key, {
           key,
@@ -240,6 +248,7 @@ export function manejoHistory(
           name: "Pesagem",
           headCount: 1,
           amountBrl: null,
+          earTags: [animal.earTag],
         });
       }
     }
@@ -263,6 +272,7 @@ export function manejoHistory(
       headCount: handled.length,
       responsible: session.counterparty,
       amountBrl: value,
+      sessionId: session.id,
       // A venda that ended has a record of its own; while it runs, the chute
       // screen at /manejo/[id] is still the place to open it.
       href:

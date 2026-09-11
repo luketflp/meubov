@@ -232,6 +232,7 @@ export function toManejoSessionAnimal(
     notes: orNothing(row.notes),
     treatmentId: orNothing(row.treatmentId),
     boosterId: orNothing(row.boosterId),
+    weighingId: orNothing(row.weighingId),
     amountBrl: orNothing(row.amountBrl),
     previousLotId: orNothing(row.previousLotId),
     createdAnimal: row.createdAnimal,
