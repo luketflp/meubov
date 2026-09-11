@@ -3,7 +3,7 @@
  *
  * A manejo session applies its effects one animal at a time as the herd passes
  * the chute. This module computes WHICH effects one pass produces; persistence
- * (ids, transactions) stays in lib/api/services/manejo.ts.
+ * (ids, transactions) stays in lib/api/domains/manejo/.
  */
 import type { ManejoPassData } from "@/lib/store/useHerdStore";
 import type {

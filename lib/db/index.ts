@@ -3,8 +3,8 @@
  *
  * Uses node-postgres (`pg`) because the local database is a plain Postgres
  * running in Docker (see docker-compose.yml). This is the single app-side
- * database handle, consumed by Better Auth and the herd API services
- * (lib/api/services/*).
+ * database handle, consumed by Better Auth and the herd API use cases
+ * (lib/api/domains/*).
  *
  * The connection string comes from `DATABASE_URL` (loaded by Next.js from
  * `.env.local`). We fail fast with a clear message when it is missing.

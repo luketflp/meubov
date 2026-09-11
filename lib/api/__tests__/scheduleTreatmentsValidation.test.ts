@@ -1,6 +1,6 @@
 import { Elysia } from "elysia";
 import { describe, expect, it, vi } from "vitest";
-import { ScheduleTreatmentsBody } from "@/lib/api/models";
+import { ScheduleTreatmentsBody } from "@/lib/api/domains/treatments/schemas/treatment.schema";
 
 const jsonRequest = (body: unknown) =>
   new Request("http://localhost/api/herd/treatments/schedule", {

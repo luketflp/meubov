@@ -4,7 +4,7 @@
  * Routes opting in with `{ farm: true }` get `user`, `farmId`, `farmRole` and
  * `superuser`. The active farm is the optional `x-farm-id` header (403 unless
  * the user is a member of that farm) or the user's oldest membership; a user
- * with no farm gets one lazily via ensureFarmForUser. E-mails in the
+ * with no farm gets one lazily via EnsureFarmForUserUseCase. E-mails in the
  * SUPERUSER_EMAILS allowlist bypass the membership check: any existing farm id
  * in the header is accepted (404 if the farm doesn't exist), and without a
  * header they fall back to the first farm in the database instead of creating
@@ -17,7 +17,7 @@ import { auth } from "@/lib/auth";
 import { isSuperuser } from "@/lib/auth/superuser";
 import { db } from "@/lib/db";
 import { farm, farmUsers } from "@/lib/db/schema";
-import { ensureFarmForUser } from "@/lib/api/services/onboarding";
+import { EnsureFarmForUserUseCase } from "@/lib/api/domains/farm/useCases/EnsureForUser.useCase";
 
 export const farmPlugin = new Elysia({ name: "farm" }).macro({
   farm: {
@@ -72,7 +72,7 @@ export const farmPlugin = new Elysia({ name: "farm" }).macro({
         }
       }
 
-      const farmId = await ensureFarmForUser(user.id);
+      const farmId = await new EnsureFarmForUserUseCase().run({ userId: user.id });
       return { user, farmId, farmRole: "owner" as const, superuser };
     },
   },

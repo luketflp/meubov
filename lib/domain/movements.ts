@@ -7,7 +7,7 @@
  * screens consume (`Movement`) is therefore a PROJECTION of those sessions —
  * head count and category always come from real animals, never from a form
  * field. Legacy rows written by the old screen keep flowing through
- * `lib/api/services/mappers.ts#toMovement` untouched.
+ * `lib/api/mappers.ts#toMovement` untouched.
  */
 import type {
   Animal,

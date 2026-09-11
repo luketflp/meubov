@@ -35,7 +35,7 @@ import { api } from "@/lib/api/client";
 import { setActiveFarmId } from "@/lib/api/activeFarm";
 import type { ImportAnimalPayload } from "@/lib/domain/herdImport";
 import type { BlockedAnimal } from "@/lib/domain/manejoRevert";
-import type { DeletedManejo } from "@/lib/api/services/manejo";
+import type { DeletedManejo } from "@/lib/api/domains/manejo/useCases/Delete.useCase";
 
 /** Animal to register; the optional initial weight becomes the first weighing. */
 export type NewAnimal = Omit<Animal, "id" | "active" | "weighings" | "reproduction"> & {

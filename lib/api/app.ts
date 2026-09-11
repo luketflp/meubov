@@ -1,53 +1,29 @@
 /**
- * Herd API — single Elysia app mounted under /api/herd by the Next.js
+ * Herd API — a single Elysia app mounted under /api/herd by the Next.js
  * catch-all route handler (app/api/herd/[[...slugs]]/route.ts).
  *
- * Every route opts into the `farm` macro, which resolves the authenticated
- * user and the active farm (401 without a session). `HerdApi` is the type the
- * Eden Treaty client derives end-to-end types from — import it with
- * `import type` only, so no server code leaks into the client bundle.
+ * This file only composes: every route lives in its domain's controller under
+ * lib/api/domains/, and each controller opts into the `farm` macro, which
+ * resolves the authenticated user and the active farm (401 without a session).
+ * `HerdApi` is the type the Eden Treaty client derives end-to-end types from —
+ * import it with `import type` only, so no server code leaks into the client
+ * bundle.
  */
 import { Elysia } from "elysia";
-import { farmPlugin } from "@/lib/api/plugins/farm";
-import { todayISO } from "@/lib/domain/dates";
-import { loadHerdData } from "@/lib/api/services/herd";
-import {
-  AnimalPatchBody,
-  ArchiveLotBody,
-  BreedBody,
-  CompleteTreatmentsBody,
-  DeactivateAnimalBody,
-  DeleteTreatmentQuery,
-  DeleteWeighingsBody,
-  EntryAnimalBody,
-  FarmDataBody,
-  ImportAnimalsBody,
-  InvernadaPatchBody,
-  LotPatchBody,
-  ManejoPassBody,
-  ManejoSkipBody,
-  MoveLotBody,
-  NewAnimalBody,
-  NewBreedingBody,
-  NewCalvingBody,
-  NewCustomCategoryBody,
-  NewDiagnosisBody,
-  NewExpenseBody,
-  NewInvernadaBody,
-  NewLotBody,
-  NewManejoSessionBody,
-  NewProtocolBody,
-  SaleYieldBody,
-  ScheduleTreatmentsBody,
-  WeighingBody,
-} from "@/lib/api/models";
-import * as settings from "@/lib/api/services/settings";
-import * as animalsService from "@/lib/api/services/animals";
-import * as manejoService from "@/lib/api/services/manejo";
-import * as expensesService from "@/lib/api/services/expenses";
-import * as farmsService from "@/lib/api/services/farms";
-import * as categoriesService from "@/lib/api/services/categories";
-import * as reproductionService from "@/lib/api/services/reproduction";
+
+import { animalsController } from "@/lib/api/domains/animals/animals.controller";
+import { weighingsController } from "@/lib/api/domains/animals/weighings.controller";
+import { breedsController } from "@/lib/api/domains/breeds/breeds.controller";
+import { categoriesController } from "@/lib/api/domains/categories/categories.controller";
+import { expensesController } from "@/lib/api/domains/expenses/expenses.controller";
+import { farmController } from "@/lib/api/domains/farm/farm.controller";
+import { herdController } from "@/lib/api/domains/herd/herd.controller";
+import { invernadasController } from "@/lib/api/domains/invernadas/invernadas.controller";
+import { lotsController } from "@/lib/api/domains/lots/lots.controller";
+import { manejoController } from "@/lib/api/domains/manejo/manejo.controller";
+import { protocolsController } from "@/lib/api/domains/protocols/protocols.controller";
+import { reproductionController } from "@/lib/api/domains/reproduction/reproduction.controller";
+import { treatmentsController } from "@/lib/api/domains/treatments/treatments.controller";
 
 /** Postgres `foreign_key_violation`. */
 const FOREIGN_KEY_VIOLATION = "23503";
@@ -62,449 +38,42 @@ function isForeignKeyViolation(error: unknown): boolean {
 }
 
 export const herdApi = new Elysia({ prefix: "/api/herd" })
-  .use(farmPlugin)
   /*
    * A delete can still fail at the database after its own guard passed: the
    * lot guard only looks at ACTIVE animals, while inactive animals and manejo
    * history reference the lot with ON DELETE NO ACTION. Answering 409 keeps
    * the client's "still in use" branch working instead of an opaque 500.
+   *
+   * This stays on the root instance, declared before the controllers: an
+   * onError extracted into its own plugin does NOT cover sibling controllers,
+   * and the 409 would silently become a 500. See errorScope.test.ts.
    */
   .onError(({ error, status }) => {
     if (isForeignKeyViolation(error)) return status(409, { error: "in_use" });
   })
-  .get("/health", ({ farmId }) => ({ ok: true, farmId }), { farm: true })
-  .get("/", ({ farmId }) => loadHerdData(farmId), { farm: true })
 
-  /* ---- Settings: breeds, lots, farm, protocols -------------------------- */
-  .post(
-    "/breeds",
-    async ({ farmId, body }) => {
-      await settings.addBreed(farmId, body.name);
-      return { name: body.name };
-    },
-    { farm: true, body: BreedBody }
-  )
-  .delete(
-    "/breeds/:name",
-    async ({ farmId, params, status }) => {
-      const removed = await settings.removeBreed(farmId, params.name);
-      if (!removed) return status(409, { error: "breed_in_use" });
-      return { name: params.name };
-    },
-    { farm: true }
-  )
-  .post(
-    "/lots",
-    async ({ farmId, body, status }) => {
-      const result = await settings.addLot(farmId, body);
-      if (result === "invernada_not_found") return status(404, { error: result });
-      if (result === "duplicate_name") return status(409, { error: result });
-      if (result === "invalid_name") return status(422, { error: result });
-      return result;
-    },
-    { farm: true, body: NewLotBody }
-  )
-  .patch(
-    "/lots/:id",
-    async ({ farmId, params, body, status }) => {
-      const result = await settings.updateLot(farmId, params.id, body);
-      if (result === "duplicate_name") return status(409, { error: result });
-      if (result === "empty_patch") return status(422, { error: result });
-      if (result === "invalid_name") return status(422, { error: result });
-      if (result === null) return status(404, { error: "not_found" });
-      return result;
-    },
-    { farm: true, body: LotPatchBody }
-  )
-  .delete(
-    "/lots/:id",
-    async ({ farmId, params, status }) => {
-      const result = await settings.removeLot(farmId, params.id);
-      if (result === "lot_not_found") return status(404, { error: result });
-      if (result === "lot_occupied") return status(409, { error: result });
-      return result;
-    },
-    { farm: true }
-  )
-  .post(
-    "/lots/:id/archive",
-    async ({ farmId, params, body, status }) => {
-      const result = await settings.archiveLot(farmId, params.id, body.endedOn);
-      if (result === "lot_not_found") return status(404, { error: result });
-      if (result === "lot_occupied" || result === "placement_not_found") {
-        return status(409, { error: result });
-      }
-      if (result === "future_date" || result === "nonmonotonic_date") {
-        return status(422, { error: result });
-      }
-      return result;
-    },
-    { farm: true, body: ArchiveLotBody }
-  )
-  .post(
-    "/lots/:id/placements",
-    async ({ farmId, params, body, status }) => {
-      const result = await settings.moveLot(farmId, params.id, body);
-      if (result === "lot_not_found" || result === "invernada_not_found") {
-        return status(404, { error: result });
-      }
-      if (result === "future_date" || result === "nonmonotonic_date") {
-        return status(422, { error: result });
-      }
-      if (result === "placement_not_found" || result === "same_destination") {
-        return status(409, { error: result });
-      }
-      return result;
-    },
-    { farm: true, body: MoveLotBody }
-  )
-  .post(
-    "/invernadas",
-    async ({ farmId, body, status }) => {
-      const result = await settings.addInvernada(farmId, body);
-      if (result === "duplicate_code") return status(409, { error: result });
-      if (
-        result === "invalid_boundary" ||
-        result === "invalid_code" ||
-        result === "invalid_grass" ||
-        result === "invalid_name"
-      ) {
-        return status(422, { error: result });
-      }
-      return result;
-    },
-    { farm: true, body: NewInvernadaBody }
-  )
-  .patch(
-    "/invernadas/:id",
-    async ({ farmId, params, body, status }) => {
-      const result = await settings.updateInvernada(farmId, params.id, body);
-      if (result === "not_found") return status(404, { error: result });
-      if (result === "duplicate_code") return status(409, { error: result });
-      if (result === "immutable_code") return status(409, { error: result });
-      if (
-        result === "empty_patch" ||
-        result === "invalid_boundary" ||
-        result === "invalid_code" ||
-        result === "invalid_grass" ||
-        result === "invalid_name"
-      ) {
-        return status(422, { error: result });
-      }
-      return result;
-    },
-    { farm: true, body: InvernadaPatchBody }
-  )
-  .delete(
-    "/invernadas/:id",
-    async ({ farmId, params, status }) => {
-      const result = await settings.removeInvernada(farmId, params.id);
-      if (result === "not_found") return status(404, { error: result });
-      if (result === "in_use") return status(409, { error: result });
-      return result;
-    },
-    { farm: true }
-  )
-  .put(
-    "/farm",
-    ({ farmId, body }) => settings.saveFarm(farmId, body),
-    { farm: true, body: FarmDataBody }
-  )
-  .get(
-    "/farms",
-    async ({ user, farmId, superuser }) => ({
-      farms: await farmsService.listFarmsForUser(user.id, superuser),
-      activeFarmId: farmId,
-    }),
-    { farm: true }
-  )
-  .post(
-    "/protocols",
-    ({ farmId, body }) =>
-      settings.addProtocol(farmId, body.protocol, body.generateSchedule),
-    { farm: true, body: NewProtocolBody }
-  )
-  .delete(
-    "/protocols/:id",
-    async ({ farmId, params }) => {
-      await settings.removeProtocol(farmId, params.id);
-      return { id: params.id };
-    },
-    { farm: true }
-  )
+  .use(herdController)
+
+  /* ---- Settings: breeds, lots, invernadas, farm, protocols --------------- */
+  .use(breedsController)
+  .use(lotsController)
+  .use(invernadasController)
+  .use(farmController)
+  .use(protocolsController)
 
   /* ---- Animals, weighings, treatments ----------------------------------- */
-  .post(
-    "/animals",
-    async ({ farmId, body, status }) => {
-      const animal = await animalsService.addAnimal(farmId, body);
-      if (animal === "lot_not_found") return status(404, { error: animal });
-      if (animal === null) return status(409, { error: "duplicate_ear_tag" });
-      return animal;
-    },
-    { farm: true, body: NewAnimalBody }
-  )
-  .post(
-    "/animals/import",
-    async ({ farmId, body, status }) => {
-      const result = await animalsService.importAnimals(farmId, body.animals);
-      if ("error" in result) {
-        return status(422, result);
-      }
-      return result;
-    },
-    { farm: true, body: ImportAnimalsBody }
-  )
-  .patch(
-    "/animals/:id",
-    async ({ farmId, params, body, status }) => {
-      const result = await animalsService.updateAnimal(farmId, params.id, body);
-      if (result === "animal_not_found") return status(404, { error: result });
-      if (result === "category_not_found") return status(404, { error: result });
-      if (result === "lot_not_found") return status(404, { error: result });
-      if (result === "duplicate_ear_tag") return status(409, { error: result });
-      if (result === "invalid_ear_tag") return status(422, { error: result });
-      return result;
-    },
-    { farm: true, body: AnimalPatchBody }
-  )
-  .post(
-    "/animals/:id/deactivate",
-    async ({ farmId, params, body, status }) => {
-      // A baixa is history: it can be backdated, never postdated.
-      if (body.date > todayISO()) return status(422, { error: "future_date" });
-      const done = await animalsService.deactivateAnimal(farmId, params.id, body);
-      if (!done) return status(404, { error: "animal_not_found" });
-      return {
-        id: params.id,
-        reason: body.reason,
-        date: body.date,
-        notes: body.notes,
-      };
-    },
-    { farm: true, body: DeactivateAnimalBody }
-  )
-  .post(
-    "/animals/:id/weighings",
-    async ({ farmId, params, body, status }) => {
-      const weighing = await animalsService.recordWeighing(farmId, params.id, body);
-      if (weighing === null) return status(404, { error: "animal_not_found" });
-      return weighing;
-    },
-    { farm: true, body: WeighingBody }
-  )
-  .delete(
-    "/weighings",
-    async ({ farmId, body }) => animalsService.deleteWeighings(farmId, body.date, body.earTags),
-    { farm: true, body: DeleteWeighingsBody }
-  )
-  .post(
-    "/treatments/schedule",
-    async ({ farmId, body, status }) => {
-      const result = await settings.scheduleTreatments(farmId, body);
-      if (result === "protocol_not_found") return status(404, { error: result });
-      if (result === "animals_not_found") return status(404, { error: result });
-      return result;
-    },
-    { farm: true, body: ScheduleTreatmentsBody }
-  )
-  .post(
-    "/treatments/complete",
-    async ({ farmId, body }) => ({
-      ids: await settings.completeTreatments(farmId, body.ids),
-    }),
-    { farm: true, body: CompleteTreatmentsBody }
-  )
-  .delete(
-    "/treatments/:id",
-    async ({ farmId, params, query, status }) => {
-      const result = await settings.deleteTreatments(farmId, params.id, query.scope ?? "batch");
-      if (result === "treatment_not_found") return status(404, { error: result });
-      return result;
-    },
-    { farm: true, query: DeleteTreatmentQuery }
-  )
+  .use(animalsController)
+  .use(weighingsController)
+  .use(treatmentsController)
 
-  /* ---- Reproduction (females) -------------------------------------------- */
-  .post(
-    "/animals/:id/breedings",
-    async ({ farmId, params, body, status }) => {
-      const result = await reproductionService.addBreeding(farmId, params.id, body);
-      if (result === "animal_not_found") return status(404, { error: result });
-      if (result === "not_female") return status(422, { error: result });
-      return result;
-    },
-    { farm: true, body: NewBreedingBody }
-  )
-  .post(
-    "/animals/:id/diagnoses",
-    async ({ farmId, params, body, status }) => {
-      const result = await reproductionService.setDiagnosis(farmId, params.id, body);
-      if (result === "animal_not_found" || result === "breeding_not_found") {
-        return status(404, { error: result });
-      }
-      if (result === "not_female") return status(422, { error: result });
-      return result;
-    },
-    { farm: true, body: NewDiagnosisBody }
-  )
-  .post(
-    "/animals/:id/calvings",
-    async ({ farmId, params, body, status }) => {
-      const result = await reproductionService.addCalving(farmId, params.id, body);
-      if (result === "animal_not_found") return status(404, { error: result });
-      if (result === "lot_not_found") return status(404, { error: result });
-      if (result === "not_female") return status(422, { error: result });
-      if (result === "duplicate_ear_tag") return status(409, { error: result });
-      return result;
-    },
-    { farm: true, body: NewCalvingBody }
-  )
+  /* ---- Reproduction (females) ------------------------------------------- */
+  .use(reproductionController)
 
-  /* ---- Custom herd categories -------------------------------------------- */
-  .post(
-    "/categories",
-    async ({ farmId, body, status }) => {
-      const category = await categoriesService.addCustomCategory(farmId, body);
-      if (category === null) return status(409, { error: "duplicate_name" });
-      return category;
-    },
-    { farm: true, body: NewCustomCategoryBody }
-  )
-  .delete(
-    "/categories/:id",
-    async ({ farmId, params, status }) => {
-      const removed = await categoriesService.removeCustomCategory(farmId, params.id);
-      if (!removed) return status(409, { error: "category_in_use" });
-      return { id: params.id };
-    },
-    { farm: true }
-  )
-
-  /* ---- Expenses ---------------------------------------------------------- */
-  .post(
-    "/expenses",
-    ({ farmId, body }) => expensesService.addExpense(farmId, body),
-    { farm: true, body: NewExpenseBody }
-  )
-  .delete(
-    "/expenses/:id",
-    async ({ farmId, params, status }) => {
-      const removed = await expensesService.removeExpense(farmId, params.id);
-      if (!removed) return status(404, { error: "not_found" });
-      return { id: params.id };
-    },
-    { farm: true }
-  )
+  /* ---- Custom herd categories, expenses ---------------------------------- */
+  .use(categoriesController)
+  .use(expensesController)
 
   /* ---- Manejo sessions --------------------------------------------------- */
-  .post(
-    "/manejo",
-    async ({ farmId, body, status }) => {
-      // Only an entry (compra) starts with no animals: they are registered as
-      // they arrive. Transfers need somewhere to land.
-      if (body.earTags.length === 0 && body.kind !== "entry") {
-        return status(422, { error: "animals_required" });
-      }
-      if (
-        (body.kind === "transfer" || body.kind === "entry") &&
-        body.destinationLotId === undefined
-      ) {
-        return status(422, { error: "destination_required" });
-      }
-      const session = await manejoService.startSession(farmId, body);
-      if (session === "lot_not_found") return status(404, { error: session });
-      if (session === null) return status(404, { error: "animal_not_found" });
-      return session;
-    },
-    { farm: true, body: NewManejoSessionBody }
-  )
-  .post(
-    "/manejo/:id/animals",
-    async ({ farmId, params, body, status }) => {
-      const result = await manejoService.registerEntryAnimal(farmId, params.id, body);
-      if (result === "lot_not_found") return status(404, { error: result });
-      if (result === null) return status(404, { error: "not_found" });
-      if (result === "duplicate") return status(409, { error: "duplicate_ear_tag" });
-      if ("conflict" in result) return status(409, { error: result.conflict });
-      return result;
-    },
-    { farm: true, body: EntryAnimalBody }
-  )
-  .post(
-    "/manejo/:id/animals/:animalId/complete",
-    async ({ farmId, params, body, status }) => {
-      const result = await manejoService.completeAnimal(
-        farmId,
-        params.id,
-        params.animalId,
-        body
-      );
-      if (result === "lot_not_found") return status(404, { error: result });
-      if (result === null) return status(404, { error: "not_found" });
-      if ("conflict" in result) return status(409, { error: result.conflict });
-      return result;
-    },
-    { farm: true, body: ManejoPassBody }
-  )
-  .post(
-    "/manejo/:id/animals/:animalId/skip",
-    async ({ farmId, params, body, status }) => {
-      const result = await manejoService.skipAnimal(
-        farmId,
-        params.id,
-        params.animalId,
-        body.notes
-      );
-      if (result === null) return status(404, { error: "not_found" });
-      if ("conflict" in result) return status(409, { error: result.conflict });
-      return result;
-    },
-    { farm: true, body: ManejoSkipBody }
-  )
-  .post(
-    "/manejo/:id/animals/:animalId/reopen",
-    async ({ farmId, params, status }) => {
-      const result = await manejoService.reopenAnimal(farmId, params.id, params.animalId);
-      if (result === "lot_not_found") return status(404, { error: result });
-      if (result === null) return status(404, { error: "not_found" });
-      if ("conflict" in result) return status(409, { error: result.conflict });
-      return result;
-    },
-    { farm: true }
-  )
-  .post(
-    "/manejo/:id/carcass-yield",
-    async ({ farmId, params, body, status }) => {
-      const result = await manejoService.setCarcassYield(
-        farmId,
-        params.id,
-        body.carcassYieldPct
-      );
-      if (result === null) return status(404, { error: "not_found" });
-      if ("conflict" in result) return status(409, { error: result.conflict });
-      return result;
-    },
-    { farm: true, body: SaleYieldBody }
-  )
-  .post(
-    "/manejo/:id/close",
-    async ({ farmId, params, status }) => {
-      const closed = await manejoService.closeSession(farmId, params.id);
-      if (!closed) return status(404, { error: "not_found" });
-      return { id: params.id, status: "closed" as const };
-    },
-    { farm: true }
-  )
-  .delete(
-    "/manejo/:id",
-    async ({ farmId, params, status }) => {
-      const result = await manejoService.deleteSession(farmId, params.id);
-      if (result === "session_not_found") return status(404, { error: result });
-      if ("blocked" in result) return status(409, result);
-      return result;
-    },
-    { farm: true }
-  );
+  .use(manejoController);
 
 export type HerdApi = typeof herdApi;

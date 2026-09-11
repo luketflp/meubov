@@ -1,6 +1,9 @@
 import { Elysia } from "elysia";
 import { describe, expect, it, vi } from "vitest";
-import { ArchiveLotBody, MoveLotBody } from "@/lib/api/models";
+import {
+  ArchiveLotBody,
+  MoveLotBody,
+} from "@/lib/api/domains/lots/schemas/lot.schema";
 
 const jsonRequest = (path: string, body: unknown) =>
   new Request(`http://localhost${path}`, {

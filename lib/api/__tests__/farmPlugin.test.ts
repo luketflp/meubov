@@ -18,7 +18,11 @@ const { state, getSession, ensureFarmForUser } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: { api: { getSession } } }));
-vi.mock("@/lib/api/services/onboarding", () => ({ ensureFarmForUser }));
+vi.mock("@/lib/api/domains/farm/useCases/EnsureForUser.useCase", () => ({
+  EnsureFarmForUserUseCase: class {
+    run = ({ userId }: { userId: string }) => ensureFarmForUser(userId);
+  },
+}));
 vi.mock("@/lib/db", () => ({
   db: {
     select: () => {
