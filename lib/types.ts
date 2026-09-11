@@ -117,6 +117,8 @@ export interface Treatment {
   /** Cost of the application per animal, in BRL. */
   costBrl?: number;
   notes?: string;
+  /** Groups the treatments one scheduling action created for several animals. */
+  batchId?: string;
 }
 
 /** Template or one-off details used to create scheduled calendar treatments. */

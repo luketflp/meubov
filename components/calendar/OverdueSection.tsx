@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Trash2 } from "lucide-react";
 import type { Treatment } from "@/lib/types";
 import { todayISO, daysBetween, formatDate } from "@/lib/domain/dates";
 import { isFootAndMouth } from "@/lib/domain/status";
@@ -15,10 +15,15 @@ import { useHerdStore } from "@/lib/store/useHerdStore";
 interface OverdueSectionProps {
   overdue: Treatment[];
   onMarkDone: (id: string) => void;
+  onDelete: (treatment: Treatment) => void;
 }
 
 /** Overdue treatments of the whole herd, independent of the navigated month. */
-export function OverdueSection({ overdue, onMarkDone }: OverdueSectionProps) {
+export function OverdueSection({
+  overdue,
+  onMarkDone,
+  onDelete,
+}: OverdueSectionProps) {
   const animals = useHerdStore((state) => state.animals);
   const animalIdsByEarTag = new Map(animals.map((animal) => [animal.earTag, animal.id]));
   return (
@@ -71,6 +76,15 @@ export function OverdueSection({ overdue, onMarkDone }: OverdueSectionProps) {
                 onClick={() => onMarkDone(t.id)}
               >
                 Marcar como feito
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Excluir tratamento"
+                className="size-11 shrink-0 text-ink-soft hover:text-overdue md:size-9"
+                onClick={() => onDelete(t)}
+              >
+                <Trash2 className="size-4" aria-hidden />
               </Button>
             </li>
           ))}

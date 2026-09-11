@@ -85,6 +85,13 @@
       "when": 1788818964858,
       "tag": "0011_lot_soft_delete",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1789159603574,
+      "tag": "0012_treatment_soft_delete",
+      "breakpoints": true
     }
   ]
 }

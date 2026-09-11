@@ -283,6 +283,16 @@ export function treatmentsInMonth(treatments: Treatment[], year: number, month: 
 }
 
 /**
+ * How many treatments one delete would remove: the whole batch created by a
+ * single scheduling action, or just this row when it has no batch (treatments
+ * born in a manejo or scheduled before batches existed).
+ */
+export function treatmentBatchSize(treatments: Treatment[], treatment: Treatment): number {
+  if (treatment.batchId === undefined) return 1;
+  return treatments.filter((t) => t.batchId === treatment.batchId).length;
+}
+
+/**
  * The current placement of a lot. Historical placements have an `endedOn`;
  * in the unlikely event of malformed input with two open rows, the newest one
  * wins deterministically.

@@ -3,11 +3,12 @@
 import { use, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import type { Treatment } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
-import { treatmentsInMonth, pendingTreatments } from "@/lib/store/selectors";
+import { treatmentsInMonth, pendingTreatments, treatmentBatchSize } from "@/lib/store/selectors";
 import { deriveTreatmentStatus, isFootAndMouth } from "@/lib/domain/status";
-import { todayISO } from "@/lib/domain/dates";
+import { todayISO, formatDate } from "@/lib/domain/dates";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { FootAndMouthBanner } from "@/components/calendar/FootAndMouthBanner";
@@ -36,12 +37,40 @@ export default function CalendarPage({ searchParams }: CalendarPageProps) {
   const treatments = useHerdStore((s) => s.treatments);
   const protocols = useHerdStore((s) => s.protocols);
   const markTreatmentDone = useHerdStore((s) => s.markTreatmentDone);
+  const deleteTreatment = useHerdStore((s) => s.deleteTreatment);
   const { addToast } = useToast();
 
   /** Completes one treatment and confirms it with a toast. */
   async function onMarkDone(id: string) {
     await markTreatmentDone(id);
     addToast({ messageType: "success", text: "Tratamento concluído" });
+  }
+
+  /**
+   * Deletes a treatment after confirming. One agendamento books the same
+   * treatment for many animals, so the confirmation says how many fall with it.
+   */
+  async function onDelete(treatment: Treatment) {
+    const heads = treatmentBatchSize(treatments, treatment);
+    const scope =
+      heads === 1
+        ? "Isso remove o tratamento de 1 animal."
+        : `Isso remove o tratamento de ${heads} animais.`;
+    const applied =
+      deriveTreatmentStatus(treatment, todayISO()) === "done"
+        ? " Ele já foi aplicado: o histórico dos animais perde esse registro."
+        : "";
+    const question = `Excluir ${treatment.name} de ${formatDate(treatment.date)}?`;
+    if (!window.confirm(`${question} ${scope}${applied}`)) return;
+
+    const removed = await deleteTreatment(treatment.id);
+    addToast({
+      messageType: "success",
+      text:
+        removed === 1
+          ? "Tratamento excluído"
+          : `Tratamento excluído para ${removed} animais`,
+    });
   }
 
   const [yearMonth, setYearMonth] = useState<YearMonth>(() => yearMonthOf(todayISO()));
@@ -152,7 +181,7 @@ export default function CalendarPage({ searchParams }: CalendarPageProps) {
 
       {activeTab === "agenda" ? (
         <>
-          <OverdueSection overdue={overdue} onMarkDone={onMarkDone} />
+          <OverdueSection overdue={overdue} onMarkDone={onMarkDone} onDelete={onDelete} />
 
           {showBanner ? <FootAndMouthBanner /> : null}
 
@@ -163,13 +192,19 @@ export default function CalendarPage({ searchParams }: CalendarPageProps) {
             onOpenDay={setOpenDay}
           />
 
-          <MonthList yearMonth={yearMonth} treatments={ofMonth} onMarkDone={onMarkDone} />
+          <MonthList
+            yearMonth={yearMonth}
+            treatments={ofMonth}
+            onMarkDone={onMarkDone}
+            onDelete={onDelete}
+          />
 
           <DayDialog
             iso={openDay}
             treatments={ofOpenDay}
             onClose={() => setOpenDay(null)}
             onMarkDone={onMarkDone}
+            onDelete={onDelete}
           />
         </>
       ) : (

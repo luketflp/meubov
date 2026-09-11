@@ -5,7 +5,7 @@
  * joining through `animals` (they carry no farm_id of their own). Weighings
  * come sorted asc from SQL, matching the domain invariant.
  */
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   animals,
@@ -116,7 +116,7 @@ export async function loadHerdData(farmId: number): Promise<HerdData> {
       .select({ row: treatments, earTag: animals.earTag })
       .from(treatments)
       .innerJoin(animals, eq(treatments.animalId, animals.id))
-      .where(eq(animals.farmId, farmId))
+      .where(and(eq(animals.farmId, farmId), isNull(treatments.deletedAt)))
       .orderBy(asc(treatments.date)),
     db
       .select({ row: breedings })

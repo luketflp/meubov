@@ -355,8 +355,15 @@ export const treatments = pgTable(
     responsible: text("responsible"),
     costBrl: numeric("cost_brl", { mode: "number" }),
     notes: text("notes"),
+    /** Shared by the treatments one scheduling action created; null before batches. */
+    batchId: text("batch_id"),
+    /** Soft delete: the row stays for audit, the herd stops seeing it. */
+    deletedAt: timestamp("deleted_at"),
   },
-  (t) => [index("treatments_animal_id_date_idx").on(t.animalId, t.date)]
+  (t) => [
+    index("treatments_animal_id_date_idx").on(t.animalId, t.date),
+    index("treatments_batch_id_idx").on(t.batchId),
+  ]
 );
 
 /** Breeding (timed AI or natural mating) of a female. */

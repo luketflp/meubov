@@ -308,6 +308,15 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
     }),
     { farm: true, body: CompleteTreatmentsBody }
   )
+  .delete(
+    "/treatments/:id",
+    async ({ farmId, params, status }) => {
+      const result = await settings.deleteTreatments(farmId, params.id);
+      if (result === "treatment_not_found") return status(404, { error: result });
+      return result;
+    },
+    { farm: true }
+  )
 
   /* ---- Reproduction (females) -------------------------------------------- */
   .post(

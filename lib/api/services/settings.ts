@@ -832,6 +832,8 @@ export async function scheduleTreatments(
       };
     }
 
+    // One id for the whole action: deleting any of these removes them all.
+    const batchId = randomUUID();
     const rows = await tx
       .insert(treatments)
       .values(
@@ -843,6 +845,7 @@ export async function scheduleTreatments(
           date: input.date,
           status: "scheduled" as const,
           withdrawalDays: details.withdrawalDays,
+          batchId,
         }))
       )
       .returning();
@@ -871,4 +874,56 @@ export async function completeTreatments(
     .where(and(inArray(treatments.id, ids), inArray(treatments.animalId, farmAnimals)))
     .returning({ id: treatments.id });
   return rows.map((r) => r.id);
+}
+
+/**
+ * Soft-deletes a treatment and everything scheduled with it: one calendar
+ * action books the same treatment for many animals, and the farmer undoes it
+ * as one. Treatments born outside the calendar (manejo, older schedules) carry
+ * no batch, so they fall alone. The rows stay in the table for audit.
+ */
+export async function deleteTreatments(
+  farmId: number,
+  id: string
+): Promise<{ ids: string[] } | "treatment_not_found"> {
+  return db.transaction(async (tx) => {
+    const [target] = await tx
+      .select({ id: treatments.id, batchId: treatments.batchId })
+      .from(treatments)
+      .innerJoin(animals, eq(treatments.animalId, animals.id))
+      .where(
+        and(
+          eq(animals.farmId, farmId),
+          eq(treatments.id, id),
+          isNull(treatments.deletedAt)
+        )
+      )
+      .limit(1);
+
+    if (!target) return "treatment_not_found";
+
+    const ids =
+      target.batchId === null
+        ? [target.id]
+        : (
+            await tx
+              .select({ id: treatments.id })
+              .from(treatments)
+              .innerJoin(animals, eq(treatments.animalId, animals.id))
+              .where(
+                and(
+                  eq(animals.farmId, farmId),
+                  eq(treatments.batchId, target.batchId),
+                  isNull(treatments.deletedAt)
+                )
+              )
+          ).map((row) => row.id);
+
+    await tx
+      .update(treatments)
+      .set({ deletedAt: new Date() })
+      .where(inArray(treatments.id, ids));
+
+    return { ids };
+  });
 }

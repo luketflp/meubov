@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Trash2 } from "lucide-react";
 import type { TreatmentStatus, Treatment } from "@/lib/types";
 import { isFootAndMouth } from "@/lib/domain/status";
 import { Button } from "@/components/ui/button";
@@ -14,10 +15,16 @@ interface TreatmentRowProps {
   treatment: Treatment;
   status: TreatmentStatus;
   onMarkDone: (id: string) => void;
+  onDelete: (treatment: Treatment) => void;
 }
 
 /** Treatment row reused in the day dialog and in the month list. */
-export function TreatmentRow({ treatment, status, onMarkDone }: TreatmentRowProps) {
+export function TreatmentRow({
+  treatment,
+  status,
+  onMarkDone,
+  onDelete,
+}: TreatmentRowProps) {
   const animal = useHerdStore((state) =>
     animalByEarTag(state.animals, treatment.animalEarTag)
   );
@@ -53,6 +60,15 @@ export function TreatmentRow({ treatment, status, onMarkDone }: TreatmentRowProp
           Marcar como feito
         </Button>
       ) : null}
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label="Excluir tratamento"
+        className="size-11 shrink-0 text-ink-soft hover:text-overdue md:size-9"
+        onClick={() => onDelete(treatment)}
+      >
+        <Trash2 className="size-4" aria-hidden />
+      </Button>
     </li>
   );
 }

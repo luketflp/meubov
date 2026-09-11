@@ -24,10 +24,17 @@ interface DayDialogProps {
   treatments: Treatment[];
   onClose: () => void;
   onMarkDone: (id: string) => void;
+  onDelete: (treatment: Treatment) => void;
 }
 
 /** Dialog with the full list of treatments of the day clicked on the grid. */
-export function DayDialog({ iso, treatments, onClose, onMarkDone }: DayDialogProps) {
+export function DayDialog({
+  iso,
+  treatments,
+  onClose,
+  onMarkDone,
+  onDelete,
+}: DayDialogProps) {
   const [scheduling, setScheduling] = useState(false);
   const { addToast } = useToast();
 
@@ -96,6 +103,7 @@ export function DayDialog({ iso, treatments, onClose, onMarkDone }: DayDialogPro
                         treatment={t}
                         status={deriveTreatmentStatus(t, todayISO())}
                         onMarkDone={onMarkDone}
+                        onDelete={onDelete}
                       />
                     ))}
                   </ul>

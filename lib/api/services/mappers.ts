@@ -65,6 +65,7 @@ export function toTreatment(row: TreatmentRow, earTag: string): Treatment {
     responsible: orNothing(row.responsible),
     costBrl: orNothing(row.costBrl),
     notes: orNothing(row.notes),
+    batchId: orNothing(row.batchId),
   };
 }
 

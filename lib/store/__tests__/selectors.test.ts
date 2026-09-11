@@ -23,6 +23,7 @@ import {
   lotsWithSummary,
   recentBirths,
   recentBreedings,
+  treatmentBatchSize,
 } from "@/lib/store/selectors";
 
 describe("animalById", () => {
@@ -734,5 +735,27 @@ describe("lotsByInvernada", () => {
     });
     expect(totals.totalAu).toBeCloseTo(3);
     expect(totals.herdAuPerHa).toBeCloseTo(0.05);
+  });
+});
+
+describe("treatmentBatchSize", () => {
+  it("counts every treatment scheduled by the same calendar action", () => {
+    const treatments: Treatment[] = [
+      makeTreatment({ id: "t-1", batchId: "batch-1", animalEarTag: "BR-001" }),
+      makeTreatment({ id: "t-2", batchId: "batch-1", animalEarTag: "BR-002" }),
+      makeTreatment({ id: "t-3", batchId: "batch-2", animalEarTag: "BR-003" }),
+    ];
+
+    expect(treatmentBatchSize(treatments, treatments[0])).toBe(2);
+  });
+
+  it("counts a treatment without a batch alone", () => {
+    const manejoTreatment = makeTreatment({ id: "t-9", status: "done" });
+    const treatments: Treatment[] = [
+      manejoTreatment,
+      makeTreatment({ id: "t-10", status: "done" }),
+    ];
+
+    expect(treatmentBatchSize(treatments, manejoTreatment)).toBe(1);
   });
 });

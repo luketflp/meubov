@@ -18,10 +18,16 @@ interface MonthListProps {
   yearMonth: YearMonth;
   treatments: Treatment[];
   onMarkDone: (id: string) => void;
+  onDelete: (treatment: Treatment) => void;
 }
 
 /** List of the shown month's treatments, grouped by day. */
-export function MonthList({ yearMonth, treatments, onMarkDone }: MonthListProps) {
+export function MonthList({
+  yearMonth,
+  treatments,
+  onMarkDone,
+  onDelete,
+}: MonthListProps) {
   const groups = groupByDay(treatments);
 
   return (
@@ -49,6 +55,7 @@ export function MonthList({ yearMonth, treatments, onMarkDone }: MonthListProps)
                     treatment={t}
                     status={deriveTreatmentStatus(t, todayISO())}
                     onMarkDone={onMarkDone}
+                    onDelete={onDelete}
                   />
                 ))}
               </ul>
