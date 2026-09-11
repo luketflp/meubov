@@ -33,15 +33,27 @@ const invernadaLabel = (invernada: Invernada): string =>
 export function MoveLotDialog({
   lot,
   currentInvernada,
+  trigger = "button",
+  open: controlledOpen,
+  onOpenChange: onOpenChangeProp,
 }: {
   lot: Lot;
   currentInvernada: Invernada | null;
+  /** "none" leaves the opening to the parent (the card's ••• menu). */
+  trigger?: "button" | "none";
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const invernadas = useHerdStore((state) => state.invernadas);
   const placements = useHerdStore((state) => state.lotPlacements);
   const moveLot = useHerdStore((state) => state.moveLot);
 
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = (next: boolean) => {
+    setInternalOpen(next);
+    onOpenChangeProp?.(next);
+  };
   const [invernadaId, setInvernadaId] = useState("");
   const [startedOn, setStartedOn] = useState(todayISO());
   const [notes, setNotes] = useState("");
@@ -122,12 +134,14 @@ export function MoveLotDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="min-h-9">
-          {archived ? <History aria-hidden /> : <ArrowRightLeft aria-hidden />}
-          {archived ? "Ver histórico" : "Mover lote"}
-        </Button>
-      </DialogTrigger>
+      {trigger === "none" ? null : (
+        <DialogTrigger asChild>
+          <Button type="button" variant="outline" size="sm" className="min-h-9">
+            {archived ? <History aria-hidden /> : <ArrowRightLeft aria-hidden />}
+            {archived ? "Ver histórico" : "Mover lote"}
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{archived ? `Histórico de ${lot.name}` : `Mover ${lot.name}`}</DialogTitle>

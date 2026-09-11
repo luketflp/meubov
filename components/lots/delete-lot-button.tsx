@@ -1,14 +1,13 @@
 "use client";
 
 /**
- * "Excluir lote": the confirm, the API call and the refusal message, shared
- * by the /lots card and the ficha of the lote. The failure line wraps to its
- * own row inside a flex-wrap actions row (basis-full).
+ * "Excluir lote" as a button, used on the ficha of the lote. The flow itself
+ * lives in useDeleteLot; the failure line wraps to its own row inside a
+ * flex-wrap actions row (basis-full).
  */
-import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import type { Lot } from "@/lib/types";
-import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useDeleteLot } from "@/components/lots/use-delete-lot";
 import { Button } from "@/components/ui/button";
 
 interface DeleteLotButtonProps {
@@ -18,30 +17,7 @@ interface DeleteLotButtonProps {
 }
 
 export function DeleteLotButton({ lot, onDeleted }: DeleteLotButtonProps) {
-  const removeLot = useHerdStore((state) => state.removeLot);
-  const [removing, setRemoving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function onRemove() {
-    if (
-      !window.confirm(
-        `Excluir o lote ${lot.name}? Ele sai das listas e libera a invernada. O histórico já registrado continua guardado.`
-      )
-    ) {
-      return;
-    }
-    setRemoving(true);
-    setError(null);
-    try {
-      if (await removeLot(lot.id)) {
-        onDeleted?.();
-      } else {
-        setError("Este lote ainda tem animais ou um manejo em aberto e não pode ser excluído.");
-      }
-    } finally {
-      setRemoving(false);
-    }
-  }
+  const { remove, removing, error } = useDeleteLot(lot, onDeleted);
 
   return (
     <>
@@ -50,7 +26,7 @@ export function DeleteLotButton({ lot, onDeleted }: DeleteLotButtonProps) {
         variant="ghost"
         size="sm"
         disabled={removing}
-        onClick={onRemove}
+        onClick={remove}
         className="min-h-9 text-ink-soft hover:text-overdue"
       >
         <Trash2 aria-hidden />

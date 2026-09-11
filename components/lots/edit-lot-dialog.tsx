@@ -24,14 +24,31 @@ import { Label } from "@/components/ui/label";
 
 interface EditLotDialogProps {
   lot: Lot;
-  /** "icon" (the card's pencil) or "button" (outline "Editar" on the ficha). */
-  trigger?: "icon" | "button";
+  /**
+   * "icon" (the card's pencil), "button" (outline "Editar" on the ficha) or
+   * "none" — no trigger at all, for a parent that opens the dialog itself (the
+   * card's ••• menu).
+   */
+  trigger?: "icon" | "button" | "none";
+  /** Controlled open state; the dialog still manages its own when absent. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function EditLotDialog({ lot, trigger = "icon" }: EditLotDialogProps) {
+export function EditLotDialog({
+  lot,
+  trigger = "icon",
+  open: controlledOpen,
+  onOpenChange: onOpenChangeProp,
+}: EditLotDialogProps) {
   const updateLot = useHerdStore((s) => s.updateLot);
 
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = (next: boolean) => {
+    setInternalOpen(next);
+    onOpenChangeProp?.(next);
+  };
   const [name, setName] = useState(lot.name);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -78,24 +95,26 @@ export function EditLotDialog({ lot, trigger = "icon" }: EditLotDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        {trigger === "button" ? (
-          <Button type="button" variant="outline" size="sm" className="min-h-11 md:min-h-9">
-            <Pencil aria-hidden />
-            Editar
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Editar lote ${lot.name}`}
-            className="min-h-11 min-w-11 text-ink-soft hover:text-ink md:min-h-7 md:min-w-7"
-          >
-            <Pencil aria-hidden />
-          </Button>
-        )}
-      </DialogTrigger>
+      {trigger === "none" ? null : (
+        <DialogTrigger asChild>
+          {trigger === "button" ? (
+            <Button type="button" variant="outline" size="sm" className="min-h-11 md:min-h-9">
+              <Pencil aria-hidden />
+              Editar
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Editar lote ${lot.name}`}
+              className="min-h-11 min-w-11 text-ink-soft hover:text-ink md:min-h-7 md:min-w-7"
+            >
+              <Pencil aria-hidden />
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Editar lote</DialogTitle>

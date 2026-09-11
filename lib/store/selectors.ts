@@ -21,7 +21,12 @@ import { breedingOutcome, type BreedingOutcome } from "@/lib/domain/reproduction
 import { calculateAdg, herdAdgSamples } from "@/lib/domain/adg";
 import { ageInMonths, daysBetween } from "@/lib/domain/dates";
 import { kgToArroba, currentWeight, totalWeightKg } from "@/lib/domain/weights";
-import { classifyStockingRate, stockingRateAuPerHa, totalAu } from "@/lib/domain/stocking";
+import {
+  KG_PER_AU,
+  classifyStockingRate,
+  stockingRateAuPerHa,
+  totalAu,
+} from "@/lib/domain/stocking";
 
 /** Animal with the derived indicators shown in lists and records. */
 export interface AnimalWithDerived {
@@ -141,9 +146,68 @@ export interface LotSummary {
   nextActivity: LotNextActivity | null;
 }
 
+/** One lote as the card on the /lots index shows it. */
+export interface LotCardRow {
+  lot: Lot;
+  heads: number;
+  totalWeightKg: number;
+  totalArrobas: number;
+  /** Mean ADG of the lot's active animals (120-day window); null with no sample. */
+  adg: number | null;
+  health: { healthy: number; attention: number; overdue: number };
+  /** Open placement of the lot, or null when it is closed. */
+  placement: LotPlacement | null;
+  canDelete: boolean;
+}
+
+/** One occupied invernada with the lotes standing on it today. */
+export interface InvernadaSection {
+  invernada: Invernada;
+  lots: LotCardRow[];
+  /** Aggregates of the WHOLE invernada, every lot on it included. */
+  headCount: number;
+  totalWeightKg: number;
+  totalAu: number;
+  auPerHa: number;
+  classification: StockingRateClass;
+}
+
+/** An invernada with no lote on it today. */
+export interface FreeInvernada {
+  invernada: Invernada;
+  /** Days since the newest placement ended; null when it never held a lot. */
+  freeForDays: number | null;
+}
+
+/** A closed lote, with where and when it last stood. */
+export interface ClosedLotRow extends LotCardRow {
+  closedOn: string | null;
+  lastInvernada: Invernada | null;
+}
+
+/** Everything the /lots index renders, derived from the snapshot. */
+export interface LotsByInvernada {
+  sections: InvernadaSection[];
+  free: FreeInvernada[];
+  closed: ClosedLotRow[];
+  totals: {
+    activeLots: number;
+    occupiedInvernadas: number;
+    heads: number;
+    weighedHeads: number;
+    totalAu: number;
+    herdAuPerHa: number;
+    herdClassification: StockingRateClass;
+  };
+}
+
 const STATUS_ORDER: Record<AnimalStatus, number> = { overdue: 0, attention: 1, healthy: 2 };
 
 const compareDate = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+/** Codes and names sort the way a farmer reads them: "02" before "10". */
+const compareLabel = (a: string, b: string): number =>
+  a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 
 /** Only the active animals (excludes sold/removed). */
 export function activeAnimals(animals: Animal[]): Animal[] {
@@ -486,6 +550,143 @@ export function lotSummary(
     placements,
     health,
     nextActivity,
+  };
+}
+
+/**
+ * The /lots index read by pasture: the invernadas that hold a lote today, each
+ * with its grazing pressure and the cards of the lotes on it, then the free
+ * invernadas and the closed lotes. Composes invernadasWithSummary, so a section
+ * and the ficha of a lote can never disagree on the stocking rate.
+ */
+export function lotsByInvernada(
+  state: Pick<
+    HerdData,
+    "lots" | "animals" | "treatments" | "invernadas" | "lotPlacements" | "manejoSessions"
+  >,
+  todayIso: string
+): LotsByInvernada {
+  const lots = activeLots(state.lots);
+  const animals = activeAnimals(state.animals);
+
+  const animalsByLotId = new Map<string, Animal[]>();
+  for (const animal of animals) {
+    const group = animalsByLotId.get(animal.lotId);
+    if (group) group.push(animal);
+    else animalsByLotId.set(animal.lotId, [animal]);
+  }
+
+  const invernadaById = new Map(state.invernadas.map((invernada) => [invernada.id, invernada]));
+
+  const cardRow = (lot: Lot): LotCardRow => {
+    const lotAnimals = animalsByLotId.get(lot.id) ?? [];
+    const kg = totalWeightKg(lotAnimals);
+    const samples = herdAdgSamples(lotAnimals, todayIso);
+    const health = { healthy: 0, attention: 0, overdue: 0 };
+    for (const item of withStatus(lotAnimals, state.treatments, todayIso)) {
+      health[item.status] += 1;
+    }
+    return {
+      lot,
+      heads: lotAnimals.length,
+      totalWeightKg: kg,
+      totalArrobas: kgToArroba(kg),
+      adg:
+        samples.length === 0
+          ? null
+          : samples.reduce((sum, value) => sum + value, 0) / samples.length,
+      health,
+      placement: currentPlacementForLot(lot.id, state.lotPlacements),
+      canDelete: canDeleteLot(lot.id, state.animals, state.manejoSessions),
+    };
+  };
+
+  const rows = lots.map(cardRow).sort((a, b) => compareLabel(a.lot.name, b.lot.name));
+
+  const rowsByInvernadaId = new Map<string, LotCardRow[]>();
+  const closedRows: LotCardRow[] = [];
+  for (const row of rows) {
+    if (!row.placement) {
+      closedRows.push(row);
+      continue;
+    }
+    const group = rowsByInvernadaId.get(row.placement.invernadaId);
+    if (group) group.push(row);
+    else rowsByInvernadaId.set(row.placement.invernadaId, [row]);
+  }
+
+  const occupancyById = new Map(
+    invernadasWithSummary(state.invernadas, state.lots, state.lotPlacements, state.animals).map(
+      (item) => [item.invernada.id, item]
+    )
+  );
+
+  const sections: InvernadaSection[] = [];
+  const free: FreeInvernada[] = [];
+  for (const invernada of [...state.invernadas].sort((a, b) => compareLabel(a.code, b.code))) {
+    const placed = rowsByInvernadaId.get(invernada.id);
+    if (placed) {
+      const occupancy = occupancyById.get(invernada.id);
+      const kg = occupancy?.totalWeightKg ?? 0;
+      const auPerHa = occupancy?.auPerHa ?? 0;
+      sections.push({
+        invernada,
+        lots: placed,
+        headCount: occupancy?.headCount ?? 0,
+        totalWeightKg: kg,
+        totalAu: kg / KG_PER_AU,
+        auPerHa,
+        classification: occupancy?.classification ?? classifyStockingRate(auPerHa),
+      });
+      continue;
+    }
+    let lastEndedOn: string | null = null;
+    for (const placement of state.lotPlacements) {
+      if (placement.invernadaId !== invernada.id || !placement.endedOn) continue;
+      if (lastEndedOn === null || compareDate(lastEndedOn, placement.endedOn) < 0) {
+        lastEndedOn = placement.endedOn;
+      }
+    }
+    free.push({
+      invernada,
+      freeForDays: lastEndedOn === null ? null : daysBetween(lastEndedOn, todayIso),
+    });
+  }
+
+  const closed: ClosedLotRow[] = closedRows
+    .map((row) => {
+      const [last] = state.lotPlacements
+        .filter((placement) => placement.lotId === row.lot.id && placement.endedOn)
+        .sort((a, b) => compareDate(b.endedOn ?? "", a.endedOn ?? ""));
+      return {
+        ...row,
+        closedOn: last?.endedOn ?? null,
+        lastInvernada: last ? (invernadaById.get(last.invernadaId) ?? null) : null,
+      };
+    })
+    .sort(
+      (a, b) =>
+        compareDate(b.closedOn ?? "", a.closedOn ?? "") || compareLabel(a.lot.name, b.lot.name)
+    );
+
+  const placedAnimals = sections.flatMap((section) =>
+    section.lots.flatMap((row) => animalsByLotId.get(row.lot.id) ?? [])
+  );
+  const herdAuPerHa = herdStockingRateAuPerHa(state.animals, state.invernadas);
+
+  return {
+    sections,
+    free,
+    closed,
+    totals: {
+      activeLots: sections.reduce((sum, section) => sum + section.lots.length, 0),
+      occupiedInvernadas: sections.length,
+      heads: placedAnimals.length,
+      weighedHeads: placedAnimals.filter((animal) => currentWeight(animal) !== null).length,
+      totalAu: totalAu(placedAnimals),
+      herdAuPerHa,
+      herdClassification: classifyStockingRate(herdAuPerHa),
+    },
   };
 }
 

@@ -19,6 +19,7 @@ import {
   herdStockingRateAuPerHa,
   invernadasWithSummary,
   lotSummary,
+  lotsByInvernada,
   lotsWithSummary,
   recentBirths,
   recentBreedings,
@@ -630,5 +631,108 @@ describe("lotSummary", () => {
       name: "Vermífugo",
       heads: 2,
     });
+  });
+});
+
+describe("lotsByInvernada", () => {
+  const state = {
+    lots,
+    animals,
+    treatments: [] as Treatment[],
+    invernadas,
+    lotPlacements: placements,
+    manejoSessions: [] as ManejoSession[],
+  };
+
+  it("groups the placed lots under their invernada, ordered by code", () => {
+    const { sections } = lotsByInvernada(state, "2026-09-11");
+
+    expect(sections.map((section) => section.invernada.code)).toEqual(["01"]);
+    expect(sections[0].lots.map((row) => row.lot.name)).toEqual(["Matrizes", "Recria"]);
+    expect(sections[0].headCount).toBe(2);
+    expect(sections[0].totalWeightKg).toBe(1350);
+    expect(sections[0].totalAu).toBeCloseTo(3);
+    expect(sections[0].auPerHa).toBeCloseTo(0.3);
+    expect(sections[0].classification).toBe("light");
+  });
+
+  it("agrees with invernadasWithSummary on the stocking rate", () => {
+    const { sections } = lotsByInvernada(state, "2026-09-11");
+    const occupancy = invernadasWithSummary(invernadas, lots, placements, animals).find(
+      (item) => item.invernada.id === "invernada-1"
+    );
+
+    expect(sections[0].auPerHa).toBe(occupancy?.auPerHa);
+  });
+
+  it("carries per-lot weight, arrobas and health onto the card row", () => {
+    const { sections } = lotsByInvernada(state, "2026-09-11");
+    const [matrizes] = sections[0].lots;
+
+    expect(matrizes).toMatchObject({
+      heads: 1,
+      totalWeightKg: 450,
+      health: { healthy: 1, attention: 0, overdue: 0 },
+      canDelete: false,
+    });
+    expect(matrizes.totalArrobas).toBeCloseTo(15);
+    expect(matrizes.adg).toBeNull();
+    expect(matrizes.placement?.id).toBe("placement-current-1");
+  });
+
+  it("lists the invernadas with no lot, with the days since the last one left", () => {
+    const { free } = lotsByInvernada(state, "2026-09-11");
+
+    expect(free.map((item) => item.invernada.code)).toEqual(["02", "03"]);
+    expect(free[0].freeForDays).toBe(72);
+    expect(free[1].freeForDays).toBeNull();
+  });
+
+  it("puts a lot with no open placement under closed, newest first", () => {
+    const closedLot: Lot = { id: "lot-3", name: "Bezerros 2024" };
+    const closedPlacement: LotPlacement = {
+      id: "placement-closed",
+      lotId: "lot-3",
+      invernadaId: "invernada-3",
+      startedOn: "2026-01-05",
+      endedOn: "2026-02-28",
+    };
+    const { closed, sections } = lotsByInvernada(
+      { ...state, lots: [...lots, closedLot], lotPlacements: [...placements, closedPlacement] },
+      "2026-09-11"
+    );
+
+    expect(closed.map((row) => row.lot.name)).toEqual(["Bezerros 2024"]);
+    expect(closed[0].closedOn).toBe("2026-02-28");
+    expect(closed[0].lastInvernada?.code).toBe("03");
+    expect(closed[0].canDelete).toBe(true);
+    expect(sections.map((section) => section.invernada.code)).toEqual(["01"]);
+  });
+
+  it("leaves a deleted lot out of every group", () => {
+    const deleted: Lot = { id: "lot-9", name: "Apagado", deletedAt: "2026-08-01T12:00:00.000Z" };
+    const { sections, closed } = lotsByInvernada(
+      { ...state, lots: [...lots, deleted] },
+      "2026-09-11"
+    );
+
+    expect(sections.flatMap((section) => section.lots).map((row) => row.lot.id)).not.toContain(
+      "lot-9"
+    );
+    expect(closed.map((row) => row.lot.id)).not.toContain("lot-9");
+  });
+
+  it("totals the placed lots and the whole-herd stocking rate", () => {
+    const { totals } = lotsByInvernada(state, "2026-09-11");
+
+    expect(totals).toMatchObject({
+      activeLots: 2,
+      occupiedInvernadas: 1,
+      heads: 2,
+      weighedHeads: 2,
+      herdClassification: "light",
+    });
+    expect(totals.totalAu).toBeCloseTo(3);
+    expect(totals.herdAuPerHa).toBeCloseTo(0.05);
   });
 });

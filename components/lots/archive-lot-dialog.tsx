@@ -22,12 +22,24 @@ import { Label } from "@/components/ui/label";
 export function ArchiveLotDialog({
   lot,
   currentPlacement,
+  trigger = "button",
+  open: controlledOpen,
+  onOpenChange: onOpenChangeProp,
 }: {
   lot: Lot;
   currentPlacement: LotPlacement;
+  /** "none" leaves the opening to the parent (the card's ••• menu). */
+  trigger?: "button" | "none";
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const archiveLot = useHerdStore((state) => state.archiveLot);
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = (next: boolean) => {
+    setInternalOpen(next);
+    onOpenChangeProp?.(next);
+  };
   const [endedOn, setEndedOn] = useState(todayISO());
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -73,12 +85,14 @@ export function ArchiveLotDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="min-h-9 text-ink-soft">
-          <Archive aria-hidden />
-          Encerrar lote
-        </Button>
-      </DialogTrigger>
+      {trigger === "none" ? null : (
+        <DialogTrigger asChild>
+          <Button type="button" variant="ghost" size="sm" className="min-h-9 text-ink-soft">
+            <Archive aria-hidden />
+            Encerrar lote
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Encerrar {lot.name}</DialogTitle>
