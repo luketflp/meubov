@@ -1,13 +1,8 @@
 "use client";
 
 import { useId } from "react";
-import { NeloreMark } from "@/components/ui/nelore-mark";
+import { NELORE_HEAD_VIEWBOX, NeloreMark } from "@/components/ui/nelore-mark";
 import { cn } from "@/lib/utils";
-
-/* Head-and-ear crop of the full 1348x1084 artwork — legible at small sizes
-   and keeps the ear tag (pivot 655,540) in frame. Corridors that animate
-   outside the crop simply reveal off-screen. */
-const HEAD_CROP_VIEWBOX = "20 40 720 900";
 
 interface LoadingInlineProps {
   message?: string;
@@ -29,7 +24,7 @@ export function LoadingInline({ message, className }: LoadingInlineProps) {
       className={cn("flex items-center justify-center gap-3 py-6", className)}
     >
       <NeloreMark
-        viewBox={HEAD_CROP_VIEWBOX}
+        viewBox={NELORE_HEAD_VIEWBOX}
         className="w-12 shrink-0"
         durationMs={2500}
         maskId={maskId}

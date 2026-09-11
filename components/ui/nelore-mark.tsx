@@ -1,3 +1,10 @@
+/**
+ * Head-and-ear crop of the full 1348x1084 artwork: legible at small sizes and
+ * keeps the ear tag (pivot 655,540) in frame. Corridors that animate outside
+ * the crop simply reveal off-screen. Pair it with `overflow: hidden`.
+ */
+export const NELORE_HEAD_VIEWBOX = "20 40 720 900";
+
 interface NeloreMarkProps extends React.SVGProps<SVGSVGElement> {
   /**
    * Unique per simultaneously-mounted instance: SVG url(#id) resolution is
@@ -47,7 +54,7 @@ export function NeloreMark({
       {...props}
     >
       <style>{`
-        .meubov-nelore { color: var(--color-sidebar); }
+        .meubov-nelore { color: var(--color-mark); }
         .meubov-nelore .static-fallback { display: none; }
         @media (prefers-reduced-motion: reduce) {
           .meubov-nelore .animated { display: none; }

@@ -3,13 +3,14 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut } from "lucide-react";
+import { LogOut, Tractor } from "lucide-react";
 import { authClient } from "@/lib/auth/client";
 import { useSignOut } from "@/lib/auth/navigation";
 import { displayName, getInitials } from "@/lib/auth/user";
 import { NAV_ITEMS, activeChild, isActiveRoute } from "@/lib/nav";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { cn } from "@/lib/utils";
+import { NELORE_HEAD_VIEWBOX, NeloreMark } from "@/components/ui/nelore-mark";
 import {
   Select,
   SelectContent,
@@ -18,13 +19,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-/** Highlight shared by an active parent row and an active child row. */
-const activeClass =
-  "bg-sidebar-active text-surface before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-brand";
+/**
+ * Quiet, paper-toned rows: the sidebar is one tone below the canvas, rows are
+ * flat text that gain a soft pill on hover, and the active row keeps the pill.
+ * No accent bars — the only colour in the rail is the ear tag on the mark and
+ * the avatar.
+ */
+const rowClass =
+  "flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm text-ink/80 transition-colors hover:bg-sidebar-active/60 hover:text-ink";
 
-/** Child rows indent past the parent's icon (16) + gap (10) + padding (12) so the labels line up. */
+/** Highlight shared by an active parent row and an active child row. */
+const activeClass = "bg-sidebar-active font-medium text-ink";
+
+/**
+ * Child rows hang off a hairline rule under the parent's icon (px 10 + half of
+ * the 16px icon = 18) so they read as part of that area.
+ */
 const childClass =
-  "relative flex items-center rounded-md py-2 pr-3 pl-[38px] text-sm text-surface/75 transition-colors hover:bg-sidebar-active/60 hover:text-surface";
+  "flex items-center rounded-md px-2.5 py-1 text-[13px] text-ink-soft transition-colors hover:bg-sidebar-active/60 hover:text-ink";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -36,23 +48,35 @@ export function Sidebar() {
   const switchFarm = useHerdStore((s) => s.switchFarm);
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col bg-sidebar md:flex">
-      <div className="px-5 pt-6 pb-5">
-        <p className="font-heading text-xl font-semibold text-surface">MeuBov</p>
-        <p className="mt-0.5 text-[11px] text-surface/60">Gestão de rebanho de corte</p>
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-hairline bg-sidebar md:flex">
+      <div className="flex items-center gap-2 px-4 pt-4 pb-3">
+        {/* Draws once on mount and freezes with the tag in place. */}
+        <NeloreMark
+          viewBox={NELORE_HEAD_VIEWBOX}
+          maskId="nelore-sidebar"
+          durationMs={2500}
+          loop={false}
+          className="size-8 shrink-0"
+          style={{ display: "block", overflow: "hidden" }}
+        />
+        <p className="font-heading text-lg leading-none font-semibold text-ink">MeuBov</p>
       </div>
 
       {farms.length > 1 && (
-        <div className="px-4 pb-4">
+        <div className="px-2.5 pb-3">
           <Select
             value={activeFarmId === null ? undefined : String(activeFarmId)}
             onValueChange={(value) => void switchFarm(Number(value))}
           >
             <SelectTrigger
               aria-label="Selecionar fazenda"
-              className="w-full border-surface/15 bg-sidebar-active/40 text-surface hover:bg-sidebar-active/60 [&_svg]:text-surface/60"
+              className="w-full rounded-lg border-hairline bg-panel text-ink shadow-none hover:bg-surface [&_svg]:text-ink-soft"
             >
-              <SelectValue placeholder="Fazenda" />
+              {/* One flex child so the trigger's justify-between only separates it from the chevron. */}
+              <span className="flex min-w-0 items-center gap-2">
+                <Tractor className="size-4 shrink-0" aria-hidden />
+                <SelectValue placeholder="Fazenda" />
+              </span>
             </SelectTrigger>
             <SelectContent>
               {farms.map((f) => (
@@ -65,55 +89,58 @@ export function Sidebar() {
         </div>
       )}
 
-      <nav className="flex-1 space-y-0.5 px-2" aria-label="Navegação principal">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5" aria-label="Navegação principal">
         {NAV_ITEMS.map((item) => {
           const child = activeChild(pathname, item);
           // On a child route the child row takes the highlight and the parent
-          // keeps only the bright text.
+          // keeps only the darker text.
           const active = child === null && isActiveRoute(pathname, item.href);
           return (
             <Fragment key={item.href}>
               <Link
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={cn(
-                  "relative flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-surface/75 transition-colors hover:bg-sidebar-active/60 hover:text-surface",
-                  active && activeClass,
-                  child !== null && "text-surface"
-                )}
+                className={cn(rowClass, active && activeClass, child !== null && "text-ink")}
               >
-                <item.icon className="size-4 shrink-0" aria-hidden />
+                <item.icon
+                  className={cn("size-4 shrink-0", active || child !== null ? "text-ink" : "text-ink-soft")}
+                  aria-hidden
+                />
                 {item.label}
               </Link>
-              {item.children?.map((sub) => (
-                <Link
-                  key={sub.href}
-                  href={sub.href}
-                  aria-current={sub === child ? "page" : undefined}
-                  className={cn(childClass, sub === child && activeClass)}
-                >
-                  {sub.label}
-                </Link>
-              ))}
+              {item.children && (
+                <div className="ml-[18px] space-y-0.5 border-l border-hairline pl-2">
+                  {item.children.map((sub) => (
+                    <Link
+                      key={sub.href}
+                      href={sub.href}
+                      aria-current={sub === child ? "page" : undefined}
+                      className={cn(childClass, sub === child && activeClass)}
+                    >
+                      {sub.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
             </Fragment>
           );
         })}
       </nav>
 
-      <div className="border-t border-surface/10 px-4 py-4">
-        <div className="flex items-center gap-2.5">
+      <div className="border-t border-hairline px-2.5 py-2.5">
+        <div className="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
           <span
             aria-hidden
-            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-semibold text-surface"
+            className="flex size-7 shrink-0 items-center justify-center rounded-full bg-brand text-[11px] font-semibold text-surface"
           >
             {isPending ? "…" : getInitials(user?.name)}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-surface">
+            <p className="truncate text-sm font-medium text-ink">
               {isPending ? "Carregando…" : displayName(user?.name, user?.email)}
             </p>
             {user?.email ? (
-              <p className="truncate text-[11px] text-surface/60">{user.email}</p>
+              <p className="truncate text-[11px] text-ink-soft">{user.email}</p>
             ) : null}
           </div>
           <button
@@ -121,7 +148,7 @@ export function Sidebar() {
             onClick={signOut}
             aria-label="Sair"
             title="Sair"
-            className="flex size-8 shrink-0 items-center justify-center rounded-md text-surface/60 transition-colors hover:bg-sidebar-active/60 hover:text-surface"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-soft transition-colors hover:bg-sidebar-active/60 hover:text-ink"
           >
             <LogOut className="size-4" aria-hidden />
           </button>
