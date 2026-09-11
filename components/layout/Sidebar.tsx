@@ -32,11 +32,17 @@ const rowClass =
 const activeClass = "bg-sidebar-active font-medium text-ink";
 
 /**
- * Child rows hang off a hairline rule under the parent's icon (px 10 + half of
- * the 16px icon = 18) so they read as part of that area.
+ * Child rows hang off a tree line that drops from the parent's icon (px 10 +
+ * half of the 16px icon = 18). Each row draws its own elbow with `before` (a
+ * rounded corner that reaches the row's edge) and, unless it is the last
+ * child, continues the trunk down to the next row with `after`; both stretch
+ * 2px past the row to bridge the `space-y-0.5` gap.
  */
 const childClass =
-  "flex items-center rounded-md px-2.5 py-1 text-[13px] text-ink-soft transition-colors hover:bg-sidebar-active/60 hover:text-ink";
+  "relative flex items-center rounded-md py-1 pr-2.5 pl-2 text-[13px] text-ink-soft transition-colors hover:bg-sidebar-active/60 hover:text-ink before:absolute before:-top-0.5 before:-left-2.5 before:h-[calc(50%+2px)] before:w-2.5 before:rounded-bl-md before:border-b before:border-l before:border-ink/15";
+
+const childTrunkClass =
+  "after:absolute after:top-1/2 after:-left-2.5 after:h-[calc(50%+2px)] after:w-px after:bg-ink/15";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -109,13 +115,17 @@ export function Sidebar() {
                 {item.label}
               </Link>
               {item.children && (
-                <div className="ml-[18px] space-y-0.5 border-l border-hairline pl-2">
-                  {item.children.map((sub) => (
+                <div className="ml-[18px] space-y-0.5 pl-2.5">
+                  {item.children.map((sub, index, all) => (
                     <Link
                       key={sub.href}
                       href={sub.href}
                       aria-current={sub === child ? "page" : undefined}
-                      className={cn(childClass, sub === child && activeClass)}
+                      className={cn(
+                        childClass,
+                        index < all.length - 1 && childTrunkClass,
+                        sub === child && activeClass
+                      )}
                     >
                       {sub.label}
                     </Link>
