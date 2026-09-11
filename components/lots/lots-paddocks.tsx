@@ -3,8 +3,8 @@
 /**
  * Logical cattle groups with their current physical invernada.
  */
-import { useState } from "react";
-import { Fence, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { ChevronRight, Fence } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { canDeleteLot, lotsWithSummary, type LotWithSummary } from "@/lib/store/selectors";
 import { KG_PER_AU } from "@/lib/domain/stocking";
@@ -13,47 +13,30 @@ import { formatArroba, formatKg, formatNumber } from "@/lib/domain/format";
 import { SectionCard } from "@/components/ui/section-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { DeleteLotButton } from "@/components/lots/delete-lot-button";
 import { EditLotDialog } from "@/components/lots/edit-lot-dialog";
 import { MoveLotDialog } from "@/components/lots/move-lot-dialog";
 import { ArchiveLotDialog } from "@/components/lots/archive-lot-dialog";
 
 function LotCard({ summary }: { summary: LotWithSummary }) {
   const { lot, headCount, totalWeightKg, currentPlacement, currentInvernada } = summary;
-  const removeLot = useHerdStore((state) => state.removeLot);
   const deletable = useHerdStore((state) =>
     canDeleteLot(lot.id, state.animals, state.manejoSessions)
   );
-  const [removing, setRemoving] = useState(false);
-  const [removeError, setRemoveError] = useState<string | null>(null);
   const totalAu = totalWeightKg / KG_PER_AU;
-
-  async function onRemove() {
-    if (
-      !window.confirm(
-        `Excluir o lote ${lot.name}? Ele sai das listas e libera a invernada. O histórico já registrado continua guardado.`
-      )
-    ) {
-      return;
-    }
-    setRemoving(true);
-    setRemoveError(null);
-    try {
-      if (!(await removeLot(lot.id))) {
-        setRemoveError(
-          "Este lote ainda tem animais ou um manejo em aberto e não pode ser excluído."
-        );
-      }
-    } finally {
-      setRemoving(false);
-    }
-  }
 
   return (
     <article className="rounded-lg border border-hairline bg-surface p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="font-heading text-base font-semibold text-ink">{lot.name}</h3>
+          <Link
+            href={`/lots/${lot.id}`}
+            aria-label={`Abrir lote ${lot.name}`}
+            className="inline-flex items-center gap-1 font-heading text-base font-semibold text-ink underline-offset-2 hover:underline"
+          >
+            {lot.name}
+            <ChevronRight className="size-4 text-ink-soft" aria-hidden />
+          </Link>
           <p className="mt-0.5 truncate text-xs text-ink-soft">
             {currentInvernada
               ? `Invernada ${currentInvernada.code}${currentInvernada.name ? ` · ${currentInvernada.name}` : ""}`
@@ -91,22 +74,9 @@ function LotCard({ summary }: { summary: LotWithSummary }) {
         {currentPlacement && headCount === 0 ? (
           <ArchiveLotDialog lot={lot} currentPlacement={currentPlacement} />
         ) : null}
-        {deletable ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={removing}
-            onClick={onRemove}
-            className="min-h-9 text-ink-soft hover:text-overdue"
-          >
-            <Trash2 aria-hidden />
-            {removing ? "Excluindo…" : "Excluir lote"}
-          </Button>
-        ) : null}
+        {deletable ? <DeleteLotButton lot={lot} /> : null}
         <MoveLotDialog lot={lot} currentInvernada={currentInvernada} />
       </div>
-      {removeError ? <p className="mt-2 text-right text-xs text-overdue">{removeError}</p> : null}
     </article>
   );
 }

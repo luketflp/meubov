@@ -4,6 +4,7 @@ import {
   daysBetween,
   formatDate,
   formatAge,
+  formatMonths,
   today,
   todayISO,
   ageInMonths,
@@ -105,5 +106,14 @@ describe("firstDayOfMonth / lastDayOfMonth", () => {
 
   it("handles February of a non-leap year", () => {
     expect(lastDayOfMonth("2026-02-10")).toBe("2026-02-28");
+  });
+});
+
+describe("formatMonths", () => {
+  it("formats a number of months like formatAge does", () => {
+    expect(formatMonths(0)).toBe("0m");
+    expect(formatMonths(8)).toBe("8m");
+    expect(formatMonths(36)).toBe("3a");
+    expect(formatMonths(28)).toBe("2a 4m");
   });
 });

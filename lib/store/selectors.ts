@@ -6,6 +6,7 @@ import type {
   Animal,
   Breeding,
   Category,
+  HerdData,
   Invernada,
   StockingRateClass,
   Lot,
@@ -13,10 +14,12 @@ import type {
   AnimalStatus,
   ManejoSession,
   Treatment,
+  TreatmentType,
 } from "@/lib/types";
 import { deriveAnimalStatus, deriveTreatmentStatus, attentionReason } from "@/lib/domain/status";
 import { breedingOutcome, type BreedingOutcome } from "@/lib/domain/reproduction";
-import { calculateAdg } from "@/lib/domain/adg";
+import { calculateAdg, herdAdgSamples } from "@/lib/domain/adg";
+import { ageInMonths, daysBetween } from "@/lib/domain/dates";
 import { kgToArroba, currentWeight, totalWeightKg } from "@/lib/domain/weights";
 import { classifyStockingRate, stockingRateAuPerHa, totalAu } from "@/lib/domain/stocking";
 
@@ -75,6 +78,67 @@ export interface InvernadaWithSummary {
   totalWeightKg: number;
   auPerHa: number;
   classification: StockingRateClass;
+}
+
+/** One placement of a lot as the ficha lists it: where, and for how long. */
+export interface LotPlacementRow {
+  placement: LotPlacement;
+  invernada: Invernada | null;
+  /** Days the lot spent there: (endedOn ?? today) − startedOn. */
+  days: number;
+}
+
+/** The next scheduled treatment of a lot, grouped like a manejo activity. */
+export interface LotNextActivity {
+  date: string;
+  type: TreatmentType;
+  name: string;
+  /** Animals of the lot booked on that same date/type/name. */
+  heads: number;
+}
+
+/** Grazing pressure of the invernada a lot stands on. */
+export interface LotStocking {
+  /** Density of the current invernada with every lot on it (invernadasWithSummary). */
+  auPerHa: number;
+  classification: StockingRateClass;
+  /** The other active lots sharing the invernada right now. */
+  otherLots: Lot[];
+}
+
+/** Everything the ficha of a lote shows, derived from the snapshot. */
+export interface LotSummary {
+  lot: Lot;
+  /** Active animals of the lot. */
+  animals: Animal[];
+  heads: number;
+  byCategory: Record<Category, number>;
+  /** Active animals with at least one weighing. */
+  weighedHeads: number;
+  totalWeightKg: number;
+  totalArrobas: number;
+  totalAu: number;
+  /** Newest weighing date across the active animals, or null. */
+  lastWeighingDate: string | null;
+  /** totalWeightKg / weighedHeads, or null when nobody was weighed. */
+  avgWeightKg: number | null;
+  avgLiveArrobas: number | null;
+  /** Mean age in complete months, floored; null with no animals. */
+  avgAgeMonths: number | null;
+  /** herdAverageAdg over the lot's animals (120-day window). */
+  adg: number | null;
+  /** How many animals that mean covers (herdAdgSamples length). */
+  adgHeads: number;
+  currentPlacement: LotPlacement | null;
+  currentInvernada: Invernada | null;
+  /** Days since the open placement started, or null when closed. */
+  daysInInvernada: number | null;
+  stocking: LotStocking | null;
+  /** Every placement of the lot, newest first (startedOn desc, then id). */
+  placements: LotPlacementRow[];
+  health: { healthy: number; attention: number; overdue: number };
+  /** Earliest scheduled (not overdue, not done) treatment among the lot's animals. */
+  nextActivity: LotNextActivity | null;
 }
 
 const STATUS_ORDER: Record<AnimalStatus, number> = { overdue: 0, attention: 1, healthy: 2 };
@@ -294,6 +358,135 @@ export function invernadasWithSummary(
       classification: classifyStockingRate(auPerHa),
     };
   });
+}
+
+/**
+ * Everything the ficha of a lote shows, derived from the snapshot: only the
+ * ACTIVE animals count, the stocking is the whole invernada's (every lot on
+ * it), and the health calendar is read the way the ficha of an animal reads
+ * it. Null for a lot that does not exist or was deleted — the page shows
+ * "não encontrado" instead of a ghost group.
+ */
+export function lotSummary(
+  lotId: string,
+  state: Pick<HerdData, "lots" | "animals" | "treatments" | "invernadas" | "lotPlacements">,
+  todayIso: string
+): LotSummary | null {
+  const lot = state.lots.find((item) => item.id === lotId);
+  if (!lot || lot.deletedAt != null) return null;
+
+  const animals = activeAnimals(state.animals).filter((animal) => animal.lotId === lotId);
+  const heads = animals.length;
+  const weighedHeads = animals.filter((animal) => currentWeight(animal) !== null).length;
+  const totalKg = totalWeightKg(animals);
+  let lastWeighingDate: string | null = null;
+  for (const animal of animals) {
+    for (const weighing of animal.weighings) {
+      if (lastWeighingDate === null || compareDate(lastWeighingDate, weighing.date) < 0) {
+        lastWeighingDate = weighing.date;
+      }
+    }
+  }
+  const avgWeightKg = weighedHeads > 0 ? totalKg / weighedHeads : null;
+  const avgAgeMonths =
+    heads === 0
+      ? null
+      : Math.floor(
+          animals.reduce((sum, animal) => sum + ageInMonths(animal.birthDate, todayIso), 0) /
+            heads
+        );
+  const adgSamples = herdAdgSamples(animals, todayIso);
+  const adg =
+    adgSamples.length === 0
+      ? null
+      : adgSamples.reduce((sum, value) => sum + value, 0) / adgSamples.length;
+
+  const invernadaById = new Map(state.invernadas.map((invernada) => [invernada.id, invernada]));
+  const currentPlacement = currentPlacementForLot(lotId, state.lotPlacements);
+  const currentInvernada = currentPlacement
+    ? (invernadaById.get(currentPlacement.invernadaId) ?? null)
+    : null;
+
+  let stocking: LotStocking | null = null;
+  if (currentInvernada) {
+    const occupancy = invernadasWithSummary(
+      state.invernadas,
+      state.lots,
+      state.lotPlacements,
+      state.animals
+    ).find((item) => item.invernada.id === currentInvernada.id);
+    if (occupancy) {
+      stocking = {
+        auPerHa: occupancy.auPerHa,
+        classification: occupancy.classification,
+        otherLots: occupancy.lots.filter((item) => item.id !== lotId),
+      };
+    }
+  }
+
+  const placements: LotPlacementRow[] = state.lotPlacements
+    .filter((placement) => placement.lotId === lotId)
+    .sort((a, b) => compareDate(b.startedOn, a.startedOn) || a.id.localeCompare(b.id))
+    .map((placement) => ({
+      placement,
+      invernada: invernadaById.get(placement.invernadaId) ?? null,
+      days: daysBetween(placement.startedOn, placement.endedOn ?? todayIso),
+    }));
+
+  const health = { healthy: 0, attention: 0, overdue: 0 };
+  for (const item of withStatus(animals, state.treatments, todayIso)) {
+    health[item.status] += 1;
+  }
+
+  const earTags = new Set(animals.map((animal) => animal.earTag));
+  const scheduled = state.treatments
+    .filter(
+      (treatment) =>
+        earTags.has(treatment.animalEarTag) &&
+        deriveTreatmentStatus(treatment, todayIso) === "scheduled"
+    )
+    .sort(
+      (a, b) =>
+        compareDate(a.date, b.date) || a.type.localeCompare(b.type) || a.name.localeCompare(b.name)
+    );
+  const first = scheduled[0];
+  const nextActivity: LotNextActivity | null = first
+    ? {
+        date: first.date,
+        type: first.type,
+        name: first.name,
+        heads: scheduled.filter(
+          (treatment) =>
+            treatment.date === first.date &&
+            treatment.type === first.type &&
+            treatment.name === first.name
+        ).length,
+      }
+    : null;
+
+  return {
+    lot,
+    animals,
+    heads,
+    byCategory: countByCategory(animals),
+    weighedHeads,
+    totalWeightKg: totalKg,
+    totalArrobas: kgToArroba(totalKg),
+    totalAu: totalAu(animals),
+    lastWeighingDate,
+    avgWeightKg,
+    avgLiveArrobas: avgWeightKg === null ? null : kgToArroba(avgWeightKg),
+    avgAgeMonths,
+    adg,
+    adgHeads: adgSamples.length,
+    currentPlacement,
+    currentInvernada,
+    daysInInvernada: currentPlacement ? daysBetween(currentPlacement.startedOn, todayIso) : null,
+    stocking,
+    placements,
+    health,
+    nextActivity,
+  };
 }
 
 /**

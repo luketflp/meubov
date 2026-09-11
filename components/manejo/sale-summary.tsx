@@ -17,20 +17,12 @@ import {
 } from "@/lib/domain/format";
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/ui/section-card";
+import { SummaryRow } from "@/components/ui/summary-row";
 
 interface SaleSummaryCardProps {
   session: ManejoSession;
   /** Opens the rendimento modal again — only offered while the venda is open. */
   onEditYield?: () => void;
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-xs text-ink-soft">{label}</dt>
-      <dd className="font-mono text-sm text-ink">{value}</dd>
-    </div>
-  );
 }
 
 export function SaleSummaryCard({ session, onEditYield }: SaleSummaryCardProps) {
@@ -81,28 +73,28 @@ export function SaleSummaryCard({ session, onEditYield }: SaleSummaryCardProps) 
         <dl className="space-y-1.5">
           <p className="text-xs font-medium uppercase tracking-wide text-ink-soft">Lote</p>
           {summary.totalWeightKg !== null ? (
-            <Row label="Peso bruto" value={formatKg(summary.totalWeightKg)} />
+            <SummaryRow label="Peso bruto" value={formatKg(summary.totalWeightKg)} />
           ) : null}
           {summary.totalCarcassKg !== null ? (
-            <Row
+            <SummaryRow
               label="Peso de carcaça"
               value={`${formatNumber(summary.totalCarcassKg)} kg`}
             />
           ) : null}
           {summary.totalCarcassArrobas !== null ? (
-            <Row label="@ de carcaça" value={formatArroba(summary.totalCarcassArrobas)} />
+            <SummaryRow label="@ de carcaça" value={formatArroba(summary.totalCarcassArrobas)} />
           ) : null}
           {summary.grossBrl !== null ? (
-            <Row label="Total bruto" value={formatCurrency(summary.grossBrl)} />
+            <SummaryRow label="Total bruto" value={formatCurrency(summary.grossBrl)} />
           ) : null}
           {summary.funruralBrl !== null ? (
-            <Row
+            <SummaryRow
               label={`FUNRURAL (${formatPercent(FUNRURAL_RATE * 100)})`}
               value={`− ${formatCurrency(summary.funruralBrl)}`}
             />
           ) : null}
           {summary.netBrl !== null ? (
-            <Row label="Total líquido" value={formatCurrency(summary.netBrl)} />
+            <SummaryRow label="Total líquido" value={formatCurrency(summary.netBrl)} />
           ) : null}
         </dl>
 
@@ -111,19 +103,19 @@ export function SaleSummaryCard({ session, onEditYield }: SaleSummaryCardProps) 
             Média por cabeça
           </p>
           {summary.avgWeightKg !== null ? (
-            <Row label="Peso vivo" value={formatKg(summary.avgWeightKg)} />
+            <SummaryRow label="Peso vivo" value={formatKg(summary.avgWeightKg)} />
           ) : null}
           {summary.avgLiveArrobas !== null ? (
-            <Row label="@ viva (÷30)" value={formatArroba(summary.avgLiveArrobas)} />
+            <SummaryRow label="@ viva (÷30)" value={formatArroba(summary.avgLiveArrobas)} />
           ) : null}
           {summary.avgCarcassArrobas !== null ? (
-            <Row label="@ de carcaça (÷15)" value={formatArroba(summary.avgCarcassArrobas)} />
+            <SummaryRow label="@ de carcaça (÷15)" value={formatArroba(summary.avgCarcassArrobas)} />
           ) : null}
           {summary.grossPerHeadBrl !== null ? (
-            <Row label="R$/cabeça" value={formatCurrency(summary.grossPerHeadBrl)} />
+            <SummaryRow label="R$/cabeça" value={formatCurrency(summary.grossPerHeadBrl)} />
           ) : null}
           {summary.netPerHeadBrl !== null ? (
-            <Row label="R$/cabeça líquido" value={formatCurrency(summary.netPerHeadBrl)} />
+            <SummaryRow label="R$/cabeça líquido" value={formatCurrency(summary.netPerHeadBrl)} />
           ) : null}
         </dl>
       </div>

@@ -83,15 +83,15 @@ export function monthlyAdg(
 }
 
 /**
- * Herd average ADG (kg/day) in the lookback window ending today:
- * mean of the ADGs of the ACTIVE animals with 2+ weighings within the window of `days`
- * (120 by default) up to todayIso, or null if no animal has a computable ADG.
+ * ADG (kg/day) of every ACTIVE animal with 2+ weighings within the window of
+ * `days` (120 by default) up to todayIso, in the animals' order. Animals
+ * without a computable ADG are left out, so the length is the sample size.
  */
-export function herdAverageAdg(
+export function herdAdgSamples(
   animals: Animal[],
   todayIso: string,
   days: number = ADG_WINDOW_DAYS
-): number | null {
+): number[] {
   const adgs: number[] = [];
   for (const animal of animals) {
     if (!animal.active) continue;
@@ -101,6 +101,19 @@ export function herdAverageAdg(
     const adg = calculateAdg(inWindow);
     if (adg !== null) adgs.push(adg);
   }
+  return adgs;
+}
+
+/**
+ * Herd average ADG (kg/day) in the lookback window ending today: the mean of
+ * herdAdgSamples, or null if no animal has a computable ADG.
+ */
+export function herdAverageAdg(
+  animals: Animal[],
+  todayIso: string,
+  days: number = ADG_WINDOW_DAYS
+): number | null {
+  const adgs = herdAdgSamples(animals, todayIso, days);
   if (adgs.length === 0) return null;
   return adgs.reduce((sum, g) => sum + g, 0) / adgs.length;
 }

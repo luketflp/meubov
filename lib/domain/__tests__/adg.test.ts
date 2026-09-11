@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateAdg, monthlyAdg } from "@/lib/domain/adg";
+import { calculateAdg, herdAdgSamples, herdAverageAdg, monthlyAdg } from "@/lib/domain/adg";
 import { makeAnimal } from "./fixtures";
 
 describe("calculateAdg", () => {
@@ -73,5 +73,54 @@ describe("monthlyAdg", () => {
     const inactive = makeAnimal({ active: false, weighings: adg1Weighings });
     const series = monthlyAdg([inactive], 1, "2026-07-24");
     expect(series[0].averageAdg).toBeNull();
+  });
+});
+
+describe("herdAdgSamples / herdAverageAdg", () => {
+  const today = "2026-09-10";
+  const animals = [
+    makeAnimal({
+      id: "a1",
+      weighings: [
+        { date: "2026-05-15", weightKg: 300 },
+        { date: "2026-08-28", weightKg: 360 },
+      ],
+    }),
+    makeAnimal({
+      id: "a2",
+      weighings: [
+        { date: "2026-06-01", weightKg: 200 },
+        { date: "2026-07-01", weightKg: 230 },
+      ],
+    }),
+    makeAnimal({ id: "a3", weighings: [{ date: "2026-08-01", weightKg: 250 }] }),
+    makeAnimal({
+      id: "a4",
+      active: false,
+      weighings: [
+        { date: "2026-06-01", weightKg: 200 },
+        { date: "2026-07-01", weightKg: 300 },
+      ],
+    }),
+    makeAnimal({
+      id: "a5",
+      weighings: [
+        { date: "2026-01-01", weightKg: 200 },
+        { date: "2026-08-01", weightKg: 300 },
+      ],
+    }),
+  ];
+
+  it("lists one ADG per active animal with two weighings inside the window", () => {
+    const samples = herdAdgSamples(animals, today);
+    expect(samples).toHaveLength(2);
+    expect(samples[0]).toBeCloseTo(60 / 105, 6);
+    expect(samples[1]).toBe(1);
+  });
+
+  it("is what herdAverageAdg averages", () => {
+    expect(herdAverageAdg(animals, today)).toBeCloseTo((60 / 105 + 1) / 2, 6);
+    expect(herdAverageAdg([animals[2]], today)).toBeNull();
+    expect(herdAdgSamples([animals[2]], today)).toEqual([]);
   });
 });

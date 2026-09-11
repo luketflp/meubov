@@ -22,7 +22,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function EditLotDialog({ lot }: { lot: Lot }) {
+interface EditLotDialogProps {
+  lot: Lot;
+  /** "icon" (the card's pencil) or "button" (outline "Editar" on the ficha). */
+  trigger?: "icon" | "button";
+}
+
+export function EditLotDialog({ lot, trigger = "icon" }: EditLotDialogProps) {
   const updateLot = useHerdStore((s) => s.updateLot);
 
   const [open, setOpen] = useState(false);
@@ -73,15 +79,22 @@ export function EditLotDialog({ lot }: { lot: Lot }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={`Editar lote ${lot.name}`}
-          className="min-h-11 min-w-11 text-ink-soft hover:text-ink md:min-h-7 md:min-w-7"
-        >
-          <Pencil aria-hidden />
-        </Button>
+        {trigger === "button" ? (
+          <Button type="button" variant="outline" size="sm" className="min-h-11 md:min-h-9">
+            <Pencil aria-hidden />
+            Editar
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Editar lote ${lot.name}`}
+            className="min-h-11 min-w-11 text-ink-soft hover:text-ink md:min-h-7 md:min-w-7"
+          >
+            <Pencil aria-hidden />
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>

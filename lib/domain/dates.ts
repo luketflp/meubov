@@ -83,17 +83,21 @@ export function ageInMonths(birthIso: string, refIso: string = todayISO()): numb
   return months;
 }
 
-/**
- * Formats the animal age as "2a 4m", "8m" or "3a" from the birth date
- * (against refIso, default today).
- */
-export function formatAge(birthIso: string, refIso: string = todayISO()): string {
-  const months = ageInMonths(birthIso, refIso);
+/** Formats a count of months as "2a 4m", "8m" or "3a". */
+export function formatMonths(months: number): string {
   const years = Math.floor(months / 12);
   const rest = months % 12;
   if (years === 0) return `${rest}m`;
   if (rest === 0) return `${years}a`;
   return `${years}a ${rest}m`;
+}
+
+/**
+ * Formats the animal age as "2a 4m", "8m" or "3a" from the birth date
+ * (against refIso, default today).
+ */
+export function formatAge(birthIso: string, refIso: string = todayISO()): string {
+  return formatMonths(ageInMonths(birthIso, refIso));
 }
 
 /** Formats an ISO date as "dd/mm/aaaa". */
