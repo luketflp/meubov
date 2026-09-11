@@ -283,7 +283,7 @@ export function treatmentsInMonth(treatments: Treatment[], year: number, month: 
 }
 
 /** Treatments booked together: the batch, or the same treatment on the same day. */
-export function treatmentBatch(treatments: Treatment[], treatment: Treatment): Treatment[] {
+function treatmentBatch(treatments: Treatment[], treatment: Treatment): Treatment[] {
   if (treatment.batchId !== undefined) {
     return treatments.filter((t) => t.batchId === treatment.batchId);
   }

@@ -198,7 +198,7 @@ export const BreedBody = t.Object({ name: t.String({ minLength: 1 }) });
  * couple of dozen points; anything near this came from an import and must be
  * simplified before it bloats the jsonb column and the request payload.
  */
-export const MAX_BOUNDARY_VERTICES = 2000;
+const MAX_BOUNDARY_VERTICES = 2000;
 
 /**
  * Pasture outline: open ring of [lng, lat] pairs (GeoJSON axis order, first

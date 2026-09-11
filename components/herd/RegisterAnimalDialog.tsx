@@ -73,7 +73,7 @@ export type AnimalErrors = Partial<
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Pure form validation; returns pt-BR messages per field. */
-export function validateAnimal(
+function validateAnimal(
   fields: AnimalFields,
   existingEarTags: string[],
   todayIso: string

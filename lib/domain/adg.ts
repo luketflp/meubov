@@ -13,7 +13,7 @@ import {
 } from "@/lib/domain/dates";
 
 /** Default lookback window (days) of the herd average ADG. */
-export const ADG_WINDOW_DAYS = 120;
+const ADG_WINDOW_DAYS = 120;
 
 /** Point of the monthly ADG series. */
 export interface MonthlyAdgPoint {

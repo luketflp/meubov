@@ -66,7 +66,7 @@ const WEEKDAY_NAMES = [
 export const WEEK_HEADER = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"] as const;
 
 /** Short name of the type for the grid chips. */
-export const TYPE_SHORT_NAME: Record<TreatmentType, string> = {
+const TYPE_SHORT_NAME: Record<TreatmentType, string> = {
   vaccine: "Vacina",
   deworming: "Vermíf.",
   medication: "Medic.",

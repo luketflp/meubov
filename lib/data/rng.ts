@@ -11,7 +11,7 @@ export type Rng = () => number;
  * mulberry32 implementation: a 32-bit PRNG, fast and with good distribution
  * for synthetic data. Returns a function that advances the state on each call.
  */
-export function mulberry32(seed: number): Rng {
+function mulberry32(seed: number): Rng {
   let state = seed >>> 0;
   return () => {
     state = (state + 0x6d2b79f5) | 0;
@@ -34,9 +34,4 @@ export function intBetween(rng: Rng, min: number, max: number): number {
 /** Picks a uniform element from the array (which must not be empty). */
 export function pick<T>(rng: Rng, array: readonly T[]): T {
   return array[intBetween(rng, 0, array.length - 1)];
-}
-
-/** Returns true with probability p (0 to 1). */
-export function chance(rng: Rng, p: number): boolean {
-  return rng() < p;
 }

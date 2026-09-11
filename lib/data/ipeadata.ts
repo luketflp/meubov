@@ -12,7 +12,7 @@
  */
 import type { ArrobaQuote } from "@/lib/data/market";
 
-export const IPEADATA_SERIES_CODE = "DERAL12_PRBGO12";
+const IPEADATA_SERIES_CODE = "DERAL12_PRBGO12";
 
 /** OData endpoint with every point of the series (ascending by date). */
 export const IPEADATA_SERIES_URL = `http://www.ipeadata.gov.br/api/odata4/ValoresSerie(SERCODIGO='${IPEADATA_SERIES_CODE}')`;

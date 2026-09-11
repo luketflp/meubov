@@ -10,7 +10,7 @@
 import { createContext, useCallback, useContext } from "react";
 import { toast } from "sonner";
 
-export type MessageTypes = "info" | "warning" | "error" | "success" | "neutral";
+type MessageTypes = "info" | "warning" | "error" | "success" | "neutral";
 
 export interface ToastMessage {
   id: string;

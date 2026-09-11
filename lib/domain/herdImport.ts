@@ -580,7 +580,7 @@ export function importablePayloads(result: ImportParseResult): ImportAnimalPaylo
 /* -------------------------------------------------------------------------- */
 
 /** Header row of the downloadable model, in pt-BR. */
-export const TEMPLATE_HEADERS = [
+const TEMPLATE_HEADERS = [
   "brinco",
   "categoria",
   "raça",

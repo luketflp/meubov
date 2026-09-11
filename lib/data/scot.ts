@@ -15,7 +15,7 @@ import type { ArrobaQuote } from "@/lib/data/market";
 export const SCOT_QUOTE_URL = "https://www.scotconsultoria.com.br/cotacoes/boi-gordo/";
 
 /** Praça row read from the Mercado Físico table. */
-export const SCOT_PRACA = "MS C. Grande";
+const SCOT_PRACA = "MS C. Grande";
 
 /** User-visible label of where the quote comes from. */
 export const SCOT_SOURCE_LABEL = "boi gordo à vista C. Grande-MS · Scot Consultoria";

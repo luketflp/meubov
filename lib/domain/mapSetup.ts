@@ -24,7 +24,7 @@ export type MapSetupStep =
 export const MAP_ROUTE = "/map";
 export const SETUP_ROUTE = `${MAP_ROUTE}/setup`;
 /** Path segment that stands for "an invernada that does not exist yet". */
-export const NEW_INVERNADA_SEGMENT = "nova";
+const NEW_INVERNADA_SEGMENT = "nova";
 
 /** How many of the farm's invernadas have an outline. */
 export interface BoundaryProgress {

@@ -11,7 +11,7 @@
  * parsing (server-safe, unit-testable).
  */
 
-export const NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search";
+const NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search";
 
 /** Identifies MeuBov to Nominatim, as their usage policy demands. */
 export const NOMINATIM_USER_AGENT =

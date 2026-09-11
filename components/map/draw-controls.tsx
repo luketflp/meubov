@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { MapPanelActions } from "@/components/map/map-panel";
 
 /** Says how the trace is doing, in the farmer's terms. */
-export function traceStatus(draft: Ring): { text: string; canClose: boolean } {
+function traceStatus(draft: Ring): { text: string; canClose: boolean } {
   const normalized = normalizeRing(draft);
   const enoughUniquePoints = normalized.length >= MIN_RING_VERTICES;
   const selfIntersects = enoughUniquePoints && isSelfIntersecting(normalized);

@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-export interface GroupBar {
+interface GroupBar {
   key: string;
   value: number;
   colorClass: string;

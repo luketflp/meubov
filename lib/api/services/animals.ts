@@ -3,7 +3,7 @@
  * addressed by stable id while ear tags remain editable identifiers.
  */
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   animals,
@@ -648,12 +648,3 @@ export async function deactivateAnimal(
   return rows.length > 0;
 }
 
-/** All weighings of one animal, sorted asc by date (for response payloads). */
-export async function listWeighings(animalId: string): Promise<Weighing[]> {
-  const rows = await db
-    .select()
-    .from(weighings)
-    .where(and(eq(weighings.animalId, animalId), isNull(weighings.deletedAt)))
-    .orderBy(asc(weighings.date), asc(weighings.id));
-  return rows.map(toWeighing);
-}

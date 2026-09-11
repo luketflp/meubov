@@ -9,7 +9,7 @@ import { useState } from "react";
 import type { Lot } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 
-export const LOT_DELETE_REFUSED =
+const LOT_DELETE_REFUSED =
   "Este lote ainda tem animais ou um manejo em aberto e não pode ser excluído.";
 
 export function useDeleteLot(lot: Lot, onDeleted?: () => void) {

@@ -148,7 +148,7 @@ export function movementSubtitle(
 }
 
 /** Route of the venda screen of a closed sale session. */
-export function saleHref(sessionId: string): string {
+function saleHref(sessionId: string): string {
   return `/manejo/venda/${sessionId}`;
 }
 

@@ -47,7 +47,7 @@ type EntryErrors = Partial<Record<keyof EntryFields, string>>;
  * Pure validation of one arrival. The herd's ear tags are checked here so the
  * operator sees the clash before the round trip; the server checks it again.
  */
-export function validateEntryAnimal(
+function validateEntryAnimal(
   fields: EntryFields,
   existingEarTags: string[],
   todayIso: string
