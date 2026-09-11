@@ -21,6 +21,8 @@ const TITLES: Record<AuthMode, string> = {
 interface AuthDialogProps {
   /** Form shown when the dialog opens; the footer links switch in place. */
   initialMode: AuthMode;
+  /** Where the login lands afterwards (e.g. "/checkout?plan=fazenda&interval=month"). */
+  next?: string;
   /** The trigger element, e.g. a Button — rendered via DialogTrigger asChild. */
   children: ReactNode;
 }
@@ -31,7 +33,7 @@ interface AuthDialogProps {
  * centered dialog over a blurred backdrop. Mobile: bottom sheet sliding up
  * from the edge (same pattern as bonitour/photos-front).
  */
-export function AuthDialog({ initialMode, children }: AuthDialogProps) {
+export function AuthDialog({ initialMode, next, children }: AuthDialogProps) {
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -65,7 +67,7 @@ export function AuthDialog({ initialMode, children }: AuthDialogProps) {
         ) : null}
 
         {mode === "login" ? (
-          <LoginForm onSwitchToSignup={() => switchTo("signup")} />
+          <LoginForm onSwitchToSignup={() => switchTo("signup")} next={next} />
         ) : (
           <SignupForm
             onSwitchToLogin={() => switchTo("login")}

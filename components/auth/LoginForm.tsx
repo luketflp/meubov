@@ -13,10 +13,19 @@ import { Label } from "@/components/ui/label";
 interface LoginFormProps {
   /** Switches the AuthDialog to the signup form ("Criar conta" footer link). */
   onSwitchToSignup: () => void;
+  /** Where to land after signing in; a relative path, "/dashboard" by default. */
+  next?: string;
+}
+
+/** Only same-origin paths are honored; anything else falls back to the dashboard. */
+function safeNext(next: string | undefined): string {
+  return next !== undefined && next.startsWith("/") && !next.startsWith("//")
+    ? next
+    : "/dashboard";
 }
 
 /** E-mail/password sign-in form, rendered inside the AuthDialog. */
-export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
+export function LoginForm({ onSwitchToSignup, next }: LoginFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -39,7 +48,7 @@ export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
       return;
     }
 
-    navigateAfterAuth(router, "/dashboard");
+    navigateAfterAuth(router, safeNext(next));
   }
 
   return (
