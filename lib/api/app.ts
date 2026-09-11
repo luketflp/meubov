@@ -36,6 +36,7 @@ import {
   NewManejoSessionBody,
   NewProtocolBody,
   SaleYieldBody,
+  ScheduleTreatmentsBody,
   WeighingBody,
 } from "@/lib/api/models";
 import * as settings from "@/lib/api/services/settings";
@@ -289,6 +290,16 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
       return weighing;
     },
     { farm: true, body: WeighingBody }
+  )
+  .post(
+    "/treatments/schedule",
+    async ({ farmId, body, status }) => {
+      const result = await settings.scheduleTreatments(farmId, body);
+      if (result === "protocol_not_found") return status(404, { error: result });
+      if (result === "animals_not_found") return status(404, { error: result });
+      return result;
+    },
+    { farm: true, body: ScheduleTreatmentsBody }
   )
   .post(
     "/treatments/complete",

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { use, useMemo, useState } from "react";
+import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
@@ -14,6 +15,8 @@ import { DayDialog } from "@/components/calendar/DayDialog";
 import { MonthlyGrid } from "@/components/calendar/MonthlyGrid";
 import { MonthList } from "@/components/calendar/MonthList";
 import { OverdueSection } from "@/components/calendar/OverdueSection";
+import { HealthProtocols } from "@/components/calendar/HealthProtocols";
+import { cn } from "@/lib/utils";
 import {
   yearMonthOf,
   previousMonth,
@@ -23,7 +26,13 @@ import {
   type YearMonth,
 } from "@/components/calendar/helpers";
 
-export default function CalendarPage() {
+interface CalendarPageProps {
+  searchParams: Promise<{ tab?: string | string[] }>;
+}
+
+export default function CalendarPage({ searchParams }: CalendarPageProps) {
+  const query = use(searchParams);
+  const activeTab = query.tab === "protocolos" ? "protocolos" : "agenda";
   const treatments = useHerdStore((s) => s.treatments);
   const protocols = useHerdStore((s) => s.protocols);
   const markTreatmentDone = useHerdStore((s) => s.markTreatmentDone);
@@ -68,60 +77,104 @@ export default function CalendarPage() {
     <div className="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-6 md:px-8">
       <PageHeader
         title="Calendário Sanitário"
-        subtitle="Vacinas, vermifugações e manejos do rebanho"
+        subtitle={
+          activeTab === "agenda"
+            ? "Vacinas, vermifugações e manejos do rebanho"
+            : "Regras sanitárias usadas para organizar os agendamentos"
+        }
         actions={
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Mês anterior"
-              className="size-11 md:size-8"
-              onClick={() => navigateTo(previousMonth(yearMonth))}
-            >
-              <ChevronLeft />
-            </Button>
-            <span className="min-w-40 text-center font-heading text-base font-semibold text-ink">
-              {monthLabel(yearMonth)}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Próximo mês"
-              className="size-11 md:size-8"
-              onClick={() => navigateTo(nextMonth(yearMonth))}
-            >
-              <ChevronRight />
-            </Button>
-            <Button
-              variant="outline"
-              className="ml-1 min-h-11 md:min-h-0"
-              onClick={() => navigateTo(yearMonthOf(todayISO()))}
-            >
-              Hoje
-            </Button>
-          </div>
+          activeTab === "agenda" ? (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Mês anterior"
+                className="size-11 md:size-8"
+                onClick={() => navigateTo(previousMonth(yearMonth))}
+              >
+                <ChevronLeft />
+              </Button>
+              <span className="min-w-40 text-center font-heading text-base font-semibold text-ink">
+                {monthLabel(yearMonth)}
+              </span>
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Próximo mês"
+                className="size-11 md:size-8"
+                onClick={() => navigateTo(nextMonth(yearMonth))}
+              >
+                <ChevronRight />
+              </Button>
+              <Button
+                variant="outline"
+                className="ml-1 min-h-11 md:min-h-0"
+                onClick={() => navigateTo(yearMonthOf(todayISO()))}
+              >
+                Hoje
+              </Button>
+            </div>
+          ) : undefined
         }
       />
 
-      <OverdueSection overdue={overdue} onMarkDone={onMarkDone} />
+      <nav
+        aria-label="Seções do calendário sanitário"
+        className="flex gap-1 border-b border-hairline"
+      >
+        <Link
+          href="/calendar"
+          scroll={false}
+          aria-current={activeTab === "agenda" ? "page" : undefined}
+          className={cn(
+            "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+            activeTab === "agenda"
+              ? "border-brand text-brand"
+              : "border-transparent text-ink-soft hover:text-ink"
+          )}
+        >
+          Agenda
+        </Link>
+        <Link
+          href="/calendar?tab=protocolos"
+          scroll={false}
+          aria-current={activeTab === "protocolos" ? "page" : undefined}
+          className={cn(
+            "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+            activeTab === "protocolos"
+              ? "border-brand text-brand"
+              : "border-transparent text-ink-soft hover:text-ink"
+          )}
+        >
+          Protocolos
+        </Link>
+      </nav>
 
-      {showBanner ? <FootAndMouthBanner /> : null}
+      {activeTab === "agenda" ? (
+        <>
+          <OverdueSection overdue={overdue} onMarkDone={onMarkDone} />
 
-      <MonthlyGrid
-        yearMonth={yearMonth}
-        monthTreatments={ofMonth}
-        todayIso={todayISO()}
-        onOpenDay={setOpenDay}
-      />
+          {showBanner ? <FootAndMouthBanner /> : null}
 
-      <MonthList yearMonth={yearMonth} treatments={ofMonth} onMarkDone={onMarkDone} />
+          <MonthlyGrid
+            yearMonth={yearMonth}
+            monthTreatments={ofMonth}
+            todayIso={todayISO()}
+            onOpenDay={setOpenDay}
+          />
 
-      <DayDialog
-        iso={openDay}
-        treatments={ofOpenDay}
-        onClose={() => setOpenDay(null)}
-        onMarkDone={onMarkDone}
-      />
+          <MonthList yearMonth={yearMonth} treatments={ofMonth} onMarkDone={onMarkDone} />
+
+          <DayDialog
+            iso={openDay}
+            treatments={ofOpenDay}
+            onClose={() => setOpenDay(null)}
+            onMarkDone={onMarkDone}
+          />
+        </>
+      ) : (
+        <HealthProtocols />
+      )}
     </div>
   );
 }

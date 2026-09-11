@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { Plus } from "lucide-react";
 import type { Treatment } from "@/lib/types";
 import { formatDate } from "@/lib/domain/dates";
 import { cn } from "@/lib/utils";
@@ -65,18 +66,19 @@ function DayCell({ day, treatments, todayIso, onOpenDay }: DayCellProps) {
     isToday && "ring-2 ring-brand ring-inset"
   );
 
-  if (treatments.length === 0) {
-    return <div className={cellClasses}>{number}</div>;
-  }
-
   return (
     <button
       type="button"
       onClick={() => onOpenDay(day.iso)}
-      aria-label={`Ver tratamentos de ${formatDate(day.iso)}`}
+      aria-label={`Abrir agenda de ${formatDate(day.iso)}`}
       className={cn(cellClasses, "w-full cursor-pointer transition-colors hover:bg-surface")}
     >
-      {number}
+      <span className="flex w-full items-center justify-between">
+        {number}
+        {treatments.length === 0 ? (
+          <Plus className="size-3.5 text-ink-soft/50" aria-hidden />
+        ) : null}
+      </span>
       <span className="hidden w-full flex-col gap-1 md:flex">
         {visible.map((chip) => (
           <span

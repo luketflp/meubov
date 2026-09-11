@@ -119,6 +119,23 @@ export interface Treatment {
   notes?: string;
 }
 
+/** Template or one-off details used to create scheduled calendar treatments. */
+export type TreatmentScheduleSource =
+  | { kind: "protocol"; protocolId: string }
+  | {
+      kind: "standalone";
+      name: string;
+      type: TreatmentType;
+      withdrawalDays: number;
+    };
+
+/** One calendar action can schedule the same treatment for several animals. */
+export interface ScheduleTreatmentsInput {
+  date: string;
+  animalIds: string[];
+  source: TreatmentScheduleSource;
+}
+
 /** Outcome of one animal inside a manejo session. */
 export type ManejoOutcome = "pending" | "done" | "skipped";
 

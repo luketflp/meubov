@@ -23,6 +23,7 @@ import type {
   Invernada,
   Lot,
   LotPlacement,
+  ScheduleTreatmentsInput,
   Treatment,
 } from "@/lib/types";
 import { addDays, todayISO } from "@/lib/domain/dates";
@@ -782,6 +783,77 @@ export async function removeProtocol(farmId: number, id: string): Promise<void> 
   await db
     .delete(healthProtocols)
     .where(and(eq(healthProtocols.farmId, farmId), eq(healthProtocols.id, id)));
+}
+
+/**
+ * Creates one scheduled calendar entry per selected active animal. Protocol
+ * details are resolved on the server so another farm's protocol cannot be
+ * used and stale client-side template values are never persisted.
+ */
+export async function scheduleTreatments(
+  farmId: number,
+  input: ScheduleTreatmentsInput
+): Promise<{ treatments: Treatment[] } | "protocol_not_found" | "animals_not_found"> {
+  const animalIds = [...new Set(input.animalIds)];
+
+  return db.transaction(async (tx) => {
+    const selectedAnimals = await tx
+      .select({ id: animals.id, earTag: animals.earTag })
+      .from(animals)
+      .where(
+        and(
+          eq(animals.farmId, farmId),
+          eq(animals.active, true),
+          inArray(animals.id, animalIds)
+        )
+      );
+
+    if (selectedAnimals.length !== animalIds.length) return "animals_not_found";
+
+    let details: Pick<HealthProtocol, "name" | "type" | "withdrawalDays">;
+    if (input.source.kind === "protocol") {
+      const [protocol] = await tx
+        .select()
+        .from(healthProtocols)
+        .where(
+          and(
+            eq(healthProtocols.farmId, farmId),
+            eq(healthProtocols.id, input.source.protocolId)
+          )
+        )
+        .limit(1);
+      if (!protocol) return "protocol_not_found";
+      details = protocol;
+    } else {
+      details = {
+        name: input.source.name.trim(),
+        type: input.source.type,
+        withdrawalDays: input.source.withdrawalDays,
+      };
+    }
+
+    const rows = await tx
+      .insert(treatments)
+      .values(
+        selectedAnimals.map((animal) => ({
+          id: randomUUID(),
+          animalId: animal.id,
+          type: details.type,
+          name: details.name,
+          date: input.date,
+          status: "scheduled" as const,
+          withdrawalDays: details.withdrawalDays,
+        }))
+      )
+      .returning();
+    const earTagByAnimalId = new Map(
+      selectedAnimals.map((animal) => [animal.id, animal.earTag])
+    );
+
+    return {
+      treatments: rows.map((row) => toTreatment(row, earTagByAnimalId.get(row.animalId)!)),
+    };
+  });
 }
 
 /** Marks farm-scoped treatments as done; returns the ids actually updated. */

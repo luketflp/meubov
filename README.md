@@ -33,12 +33,12 @@ Ferramenta de **gestão de rebanho bovino de corte** para o produtor ou gerente 
 - **Painel** — total de cabeças, quebra por categoria, animais que precisam de atenção, tendência de GMD e calendário sanitário dos próximos dias.
 - **Rebanho** — lista com busca, filtros (categoria, lote, status) e ordenação por qualquer coluna.
 - **Ficha do animal** — identificação, evolução de peso com registro de pesagem, linha do tempo, histórico sanitário e ficha reprodutiva das fêmeas (registro de cobertura, diagnóstico de gestação e parto — o bezerro entra no rebanho junto).
-- **Calendário Sanitário** — visão mensal de tratamentos agendados e atrasados, com destaque para a campanha de aftosa.
+- **Calendário Sanitário** — visão mensal de tratamentos agendados e atrasados, criação de agendamentos por data e gestão dos protocolos sanitários, com destaque para a campanha de aftosa.
 - **Manejo** — sessões de curral: vacina, vermifugação, medicação, exame, pesagem e também **troca de lote, venda e entrada (compra)**. Os animais passam um a um no brete, a sessão fica salva e pode ser retomada, e cada passagem pode ser desfeita.
 - **Lotes** — grupos lógicos de animais, com a invernada atual, movimentação do lote inteiro e histórico das invernadas ocupadas.
 - **Mapa** — invernadas físicas fixas, com código, contorno, lotes ocupantes e taxa de lotação combinada (UA/ha).
 - **Financeiro** — indicadores da pecuária de corte (preço da @, valor do rebanho, margens, relação de troca) com gráficos. Receitas vêm das vendas com valor, custos das despesas lançadas + tratamentos com custo; a cotação da arroba é real (Scot Consultoria + histórico IPEADATA).
-- **Configurações** — dados da fazenda, categorias, raças, invernadas e protocolos sanitários (que geram a agenda).
+- **Configurações** — dados da fazenda, categorias, raças e invernadas.
 
 ## Stack
 

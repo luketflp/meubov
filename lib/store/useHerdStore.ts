@@ -22,6 +22,7 @@ import type {
   ManejoTreatmentPlan,
   PregnancyDiagnosis,
   ReproductionRecord,
+  ScheduleTreatmentsInput,
   Sex,
   Weighing,
   HealthProtocol,
@@ -166,6 +167,8 @@ export interface HerdStore extends HerdData {
   importHerd: (rows: ImportAnimalPayload[]) => Promise<ImportSummary>;
   markTreatmentDone: (id: string) => Promise<void>;
   completeTreatments: (ids: string[]) => Promise<void>;
+  /** Schedules one treatment for every selected active animal. */
+  scheduleTreatments: (input: ScheduleTreatmentsInput) => Promise<number>;
   /** Opens a manejo session and returns its id (for the run screen). */
   startManejoSession: (input: NewManejoSession) => Promise<string>;
   /** Applies the session's effects to one animal and marks it done. */
@@ -431,6 +434,14 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
         idSet.has(t.id) ? { ...t, status: "done" as const } : t
       ),
     }));
+  },
+
+  scheduleTreatments: async (input) => {
+    const { data, error } = await api.treatments.schedule.post(input);
+    if (error) apiFail("agendar os tratamentos", error.status);
+    const created = data.treatments as Treatment[];
+    set((s) => ({ treatments: [...s.treatments, ...created] }));
+    return created.length;
   },
 
   startManejoSession: async (input) => {
