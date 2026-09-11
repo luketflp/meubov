@@ -65,13 +65,17 @@ pnpm lint     # ESLint
 
 ## Banco de dados local (Docker)
 
-Para o desenvolvimento o projeto sobe um **PostgreSQL** local via Docker.
-Requer o **Docker Desktop** em execução.
+O Compose pode subir a aplicação e o **PostgreSQL** juntos. A aplicação usa um
+build de produção do Next.js e fica disponível em `http://localhost:3000`.
+Requer o **Docker Desktop** em execução e um `.env.local` criado a partir do
+`.env.example`.
 
 ```bash
-pnpm db:up      # sobe o Postgres em background (docker compose up -d)
+pnpm app:up     # constrói e sobe a aplicação + Postgres em background
+pnpm app:logs   # acompanha os logs da aplicação
+pnpm db:up      # sobe somente o Postgres (para executar pnpm dev no host)
 pnpm db:logs    # acompanha os logs do banco
-pnpm db:down    # para o banco
+pnpm db:down    # para a aplicação e o banco
 pnpm db:reset   # apaga o volume e recria o banco do zero
 
 pnpm migration:run                    # aplica as migrations (Drizzle)

@@ -1,7 +1,27 @@
-# Local development database for MeuBov.
-# Postgres is the target for Drizzle (and the Supabase path), so we run it locally
-# via Docker. Start it with `pnpm db:up`. Drizzle wiring comes in a later step.
+# Local MeuBov stack. Run everything with `docker compose up --build`, or start
+# only PostgreSQL with `pnpm db:up` when running the Next.js app on the host.
 services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: meubov-app
+    restart: unless-stopped
+    env_file:
+      - path: .env.local
+        required: true
+    environment:
+      # Containers reach Postgres by its Compose service name and internal port.
+      DATABASE_URL: postgresql://meubov:meubov@db:5432/meubov
+      BETTER_AUTH_URL: http://localhost:3000
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
   db:
     image: postgres:17-alpine
     container_name: meubov
@@ -11,9 +31,9 @@ services:
       POSTGRES_PASSWORD: meubov
       POSTGRES_DB: meubov
     ports:
-      # Host port 5432: the native PostgreSQL 18 service on this machine listens
-      # on 5433, so publishing there is shadowed by it.
-      - "5432:5432"
+      # Publish PostgreSQL on host port 5433 to avoid services using the default
+      # PostgreSQL port 5432. The container still listens on its standard port.
+      - "5433:5432"
     volumes:
       - meubov-db-data:/var/lib/postgresql/data
     healthcheck:
