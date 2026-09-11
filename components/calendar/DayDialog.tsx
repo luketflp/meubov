@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { CalendarPlus, Plus } from "lucide-react";
 import type { Treatment } from "@/lib/types";
-import { todayISO, formatDate } from "@/lib/domain/dates";
-import { deriveTreatmentStatus } from "@/lib/domain/status";
+import { formatDate } from "@/lib/domain/dates";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { TreatmentRow } from "@/components/calendar/TreatmentRow";
+import { TreatmentGroupList } from "@/components/calendar/TreatmentGroupList";
 import { ScheduleTreatmentForm } from "@/components/calendar/ScheduleTreatmentForm";
 import { weekdayName } from "@/components/calendar/helpers";
 import { Button } from "@/components/ui/button";
@@ -25,6 +24,7 @@ interface DayDialogProps {
   onClose: () => void;
   onMarkDone: (id: string) => void;
   onDelete: (treatment: Treatment) => void;
+  onDeleteGroup: (treatment: Treatment) => void;
 }
 
 /** Dialog with the full list of treatments of the day clicked on the grid. */
@@ -34,6 +34,7 @@ export function DayDialog({
   onClose,
   onMarkDone,
   onDelete,
+  onDeleteGroup,
 }: DayDialogProps) {
   const [scheduling, setScheduling] = useState(false);
   const { addToast } = useToast();
@@ -96,17 +97,13 @@ export function DayDialog({
                     className="py-7"
                   />
                 ) : (
-                  <ul className="max-h-80 divide-y divide-hairline overflow-y-auto">
-                    {treatments.map((t) => (
-                      <TreatmentRow
-                        key={t.id}
-                        treatment={t}
-                        status={deriveTreatmentStatus(t, todayISO())}
-                        onMarkDone={onMarkDone}
-                        onDelete={onDelete}
-                      />
-                    ))}
-                  </ul>
+                  <TreatmentGroupList
+                    className="max-h-80 overflow-y-auto"
+                    treatments={treatments}
+                    onMarkDone={onMarkDone}
+                    onDelete={onDelete}
+                    onDeleteGroup={onDeleteGroup}
+                  />
                 )}
                 <Button
                   type="button"

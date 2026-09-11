@@ -70,12 +70,33 @@ describe("deleteTreatments", () => {
     expect(state.updates[0].deletedAt).toBeInstanceOf(Date);
   });
 
-  it("soft-deletes a treatment without a batch alone", async () => {
-    state.selectResults = [[{ id: "t-9", batchId: null }]];
+  it("groups a treatment without a batch by its day, name and status", async () => {
+    state.selectResults = [
+      [
+        {
+          id: "t-9",
+          batchId: null,
+          date: "2026-05-14",
+          name: "Vacina aftosa",
+          type: "vaccine",
+          status: "scheduled",
+        },
+      ],
+      [{ id: "t-9" }, { id: "t-10" }],
+    ];
 
     const result = await deleteTreatments(7, "t-9");
 
-    expect(result).toEqual({ ids: ["t-9"] });
+    expect(result).toEqual({ ids: ["t-9", "t-10"] });
+    expect(state.updates).toHaveLength(1);
+  });
+
+  it("removes a single row when the caller asks for one animal", async () => {
+    state.selectResults = [[{ id: "t-1", batchId: "batch-1" }]];
+
+    const result = await deleteTreatments(7, "t-1", "one");
+
+    expect(result).toEqual({ ids: ["t-1"] });
     expect(state.updates).toHaveLength(1);
   });
 

@@ -17,6 +17,7 @@ import {
   BreedBody,
   CompleteTreatmentsBody,
   DeactivateAnimalBody,
+  DeleteTreatmentQuery,
   EntryAnimalBody,
   FarmDataBody,
   ImportAnimalsBody,
@@ -310,12 +311,12 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
   )
   .delete(
     "/treatments/:id",
-    async ({ farmId, params, status }) => {
-      const result = await settings.deleteTreatments(farmId, params.id);
+    async ({ farmId, params, query, status }) => {
+      const result = await settings.deleteTreatments(farmId, params.id, query.scope ?? "batch");
       if (result === "treatment_not_found") return status(404, { error: result });
       return result;
     },
-    { farm: true }
+    { farm: true, query: DeleteTreatmentQuery }
   )
 
   /* ---- Reproduction (females) -------------------------------------------- */

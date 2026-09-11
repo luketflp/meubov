@@ -2,11 +2,10 @@
 
 import { CalendarDays } from "lucide-react";
 import type { Treatment } from "@/lib/types";
-import { todayISO, formatDate } from "@/lib/domain/dates";
-import { deriveTreatmentStatus } from "@/lib/domain/status";
+import { formatDate } from "@/lib/domain/dates";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
-import { TreatmentRow } from "@/components/calendar/TreatmentRow";
+import { TreatmentGroupList } from "@/components/calendar/TreatmentGroupList";
 import {
   groupByDay,
   weekdayName,
@@ -19,6 +18,7 @@ interface MonthListProps {
   treatments: Treatment[];
   onMarkDone: (id: string) => void;
   onDelete: (treatment: Treatment) => void;
+  onDeleteGroup: (treatment: Treatment) => void;
 }
 
 /** List of the shown month's treatments, grouped by day. */
@@ -27,6 +27,7 @@ export function MonthList({
   treatments,
   onMarkDone,
   onDelete,
+  onDeleteGroup,
 }: MonthListProps) {
   const groups = groupByDay(treatments);
 
@@ -48,17 +49,12 @@ export function MonthList({
                 </span>
                 <span className="text-xs text-ink-soft">{weekdayName(date)}</span>
               </h3>
-              <ul className="divide-y divide-hairline">
-                {ofDay.map((t) => (
-                  <TreatmentRow
-                    key={t.id}
-                    treatment={t}
-                    status={deriveTreatmentStatus(t, todayISO())}
-                    onMarkDone={onMarkDone}
-                    onDelete={onDelete}
-                  />
-                ))}
-              </ul>
+              <TreatmentGroupList
+                treatments={ofDay}
+                onMarkDone={onMarkDone}
+                onDelete={onDelete}
+                onDeleteGroup={onDeleteGroup}
+              />
             </div>
           ))}
         </div>

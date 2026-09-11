@@ -169,8 +169,8 @@ export interface HerdStore extends HerdData {
   completeTreatments: (ids: string[]) => Promise<void>;
   /** Schedules one treatment for every selected active animal. */
   scheduleTreatments: (input: ScheduleTreatmentsInput) => Promise<number>;
-  /** Deletes a treatment and every animal booked with it; returns how many fell. */
-  deleteTreatment: (id: string) => Promise<number>;
+  /** Deletes a treatment — the whole booking or one animal's row; returns how many fell. */
+  deleteTreatment: (id: string, scope?: "one" | "batch") => Promise<number>;
   /** Opens a manejo session and returns its id (for the run screen). */
   startManejoSession: (input: NewManejoSession) => Promise<string>;
   /** Applies the session's effects to one animal and marks it done. */
@@ -446,8 +446,8 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     return created.length;
   },
 
-  deleteTreatment: async (id) => {
-    const { data, error } = await api.treatments({ id }).delete();
+  deleteTreatment: async (id, scope = "batch") => {
+    const { data, error } = await api.treatments({ id }).delete(undefined, { query: { scope } });
     if (error) apiFail("excluir o tratamento", error.status);
     const removed = new Set((data as { ids: string[] }).ids);
     set((s) => ({ treatments: s.treatments.filter((t) => !removed.has(t.id)) }));

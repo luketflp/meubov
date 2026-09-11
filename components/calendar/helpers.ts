@@ -137,6 +137,32 @@ export function groupByDay(treatments: Treatment[]): [string, Treatment[]][] {
   return [...map.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
+/** Treatments booked by one action, as the agenda lists and deletes them. */
+export interface TreatmentGroup {
+  key: string;
+  treatments: Treatment[];
+}
+
+/**
+ * Groups the treatments a single delete would take: the batch of one
+ * scheduling action, or — for agendas made before batches existed and for
+ * treatments born in a manejo — the same treatment, on the same day, in the
+ * same state. Order of first appearance is kept.
+ */
+export function groupTreatments(treatments: Treatment[]): TreatmentGroup[] {
+  const map = new Map<string, Treatment[]>();
+  for (const t of treatments) {
+    const key =
+      t.batchId === undefined
+        ? `day:${t.date}|${t.type}|${t.status}|${t.name}`
+        : `batch:${t.batchId}`;
+    const list = map.get(key);
+    if (list) list.push(t);
+    else map.set(key, [t]);
+  }
+  return [...map.entries()].map(([key, list]) => ({ key, treatments: list }));
+}
+
 /** Aggregated chips of a day: count by type (foot-and-mouth apart) and derived status. */
 export function dayChips(treatments: Treatment[], todayIso: string): DayChip[] {
   const map = new Map<string, DayChip>();

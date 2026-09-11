@@ -282,14 +282,26 @@ export function treatmentsInMonth(treatments: Treatment[], year: number, month: 
     .sort((a, b) => compareDate(a.date, b.date));
 }
 
-/**
- * How many treatments one delete would remove: the whole batch created by a
- * single scheduling action, or just this row when it has no batch (treatments
- * born in a manejo or scheduled before batches existed).
- */
+/** Treatments booked together: the batch, or the same treatment on the same day. */
+export function treatmentBatch(treatments: Treatment[], treatment: Treatment): Treatment[] {
+  if (treatment.batchId !== undefined) {
+    return treatments.filter((t) => t.batchId === treatment.batchId);
+  }
+  // Agendas made before batches existed, and treatments born in a manejo, carry
+  // no batch: what they share is the day, the treatment and where they stand.
+  return treatments.filter(
+    (t) =>
+      t.batchId === undefined &&
+      t.date === treatment.date &&
+      t.name === treatment.name &&
+      t.type === treatment.type &&
+      t.status === treatment.status
+  );
+}
+
+/** How many treatments a batch delete would remove, this one included. */
 export function treatmentBatchSize(treatments: Treatment[], treatment: Treatment): number {
-  if (treatment.batchId === undefined) return 1;
-  return treatments.filter((t) => t.batchId === treatment.batchId).length;
+  return treatmentBatch(treatments, treatment).length;
 }
 
 /**

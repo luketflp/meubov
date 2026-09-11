@@ -877,18 +877,28 @@ export async function completeTreatments(
 }
 
 /**
- * Soft-deletes a treatment and everything scheduled with it: one calendar
- * action books the same treatment for many animals, and the farmer undoes it
- * as one. Treatments born outside the calendar (manejo, older schedules) carry
- * no batch, so they fall alone. The rows stay in the table for audit.
+ * Soft-deletes a treatment. "batch" takes everything booked with it — one
+ * calendar action schedules the same treatment for many animals and the farmer
+ * undoes it as one; agendas made before batches existed, and treatments born in
+ * a manejo, carry no batch, so what groups them is the day, the treatment and
+ * the state they stand in. "one" takes the single animal's row. Nothing is
+ * erased: the rows stay in the table for audit.
  */
 export async function deleteTreatments(
   farmId: number,
-  id: string
+  id: string,
+  scope: "one" | "batch" = "batch"
 ): Promise<{ ids: string[] } | "treatment_not_found"> {
   return db.transaction(async (tx) => {
     const [target] = await tx
-      .select({ id: treatments.id, batchId: treatments.batchId })
+      .select({
+        id: treatments.id,
+        batchId: treatments.batchId,
+        date: treatments.date,
+        name: treatments.name,
+        type: treatments.type,
+        status: treatments.status,
+      })
       .from(treatments)
       .innerJoin(animals, eq(treatments.animalId, animals.id))
       .where(
@@ -902,21 +912,26 @@ export async function deleteTreatments(
 
     if (!target) return "treatment_not_found";
 
-    const ids =
+    const sameBatch =
       target.batchId === null
+        ? and(
+            isNull(treatments.batchId),
+            eq(treatments.date, target.date),
+            eq(treatments.name, target.name),
+            eq(treatments.type, target.type),
+            eq(treatments.status, target.status)
+          )
+        : eq(treatments.batchId, target.batchId);
+
+    const ids =
+      scope === "one"
         ? [target.id]
         : (
             await tx
               .select({ id: treatments.id })
               .from(treatments)
               .innerJoin(animals, eq(treatments.animalId, animals.id))
-              .where(
-                and(
-                  eq(animals.farmId, farmId),
-                  eq(treatments.batchId, target.batchId),
-                  isNull(treatments.deletedAt)
-                )
-              )
+              .where(and(eq(animals.farmId, farmId), sameBatch, isNull(treatments.deletedAt)))
           ).map((row) => row.id);
 
     await tx

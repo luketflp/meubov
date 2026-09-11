@@ -749,13 +749,26 @@ describe("treatmentBatchSize", () => {
     expect(treatmentBatchSize(treatments, treatments[0])).toBe(2);
   });
 
-  it("counts a treatment without a batch alone", () => {
-    const manejoTreatment = makeTreatment({ id: "t-9", status: "done" });
+  it("falls back to the same treatment, day and status when there is no batch", () => {
+    const target = makeTreatment({ id: "t-9", animalEarTag: "BR-001" });
     const treatments: Treatment[] = [
-      manejoTreatment,
-      makeTreatment({ id: "t-10", status: "done" }),
+      target,
+      makeTreatment({ id: "t-10", animalEarTag: "BR-002" }),
+      makeTreatment({ id: "t-11", animalEarTag: "BR-003", date: "2026-08-02" }),
+      makeTreatment({ id: "t-12", animalEarTag: "BR-004", name: "Vermifugação" }),
+      makeTreatment({ id: "t-13", animalEarTag: "BR-005", status: "done" }),
     ];
 
-    expect(treatmentBatchSize(treatments, manejoTreatment)).toBe(1);
+    expect(treatmentBatchSize(treatments, target)).toBe(2);
+  });
+
+  it("keeps a batched treatment out of the fallback group", () => {
+    const target = makeTreatment({ id: "t-9" });
+    const treatments: Treatment[] = [
+      target,
+      makeTreatment({ id: "t-10", batchId: "batch-1" }),
+    ];
+
+    expect(treatmentBatchSize(treatments, target)).toBe(1);
   });
 });

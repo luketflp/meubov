@@ -31,6 +31,13 @@ interface CalendarPageProps {
   searchParams: Promise<{ tab?: string | string[] }>;
 }
 
+/** Warns that a delete also erases an application already on the record. */
+function alreadyAppliedWarning(treatment: Treatment): string {
+  return deriveTreatmentStatus(treatment, todayISO()) === "done"
+    ? " Ele já foi aplicado: o histórico dos animais perde esse registro."
+    : "";
+}
+
 export default function CalendarPage({ searchParams }: CalendarPageProps) {
   const query = use(searchParams);
   const activeTab = query.tab === "protocolos" ? "protocolos" : "agenda";
@@ -46,24 +53,29 @@ export default function CalendarPage({ searchParams }: CalendarPageProps) {
     addToast({ messageType: "success", text: "Tratamento concluído" });
   }
 
-  /**
-   * Deletes a treatment after confirming. One agendamento books the same
-   * treatment for many animals, so the confirmation says how many fall with it.
-   */
+  /** Deletes one animal's treatment, leaving the rest of the agendamento. */
   async function onDelete(treatment: Treatment) {
+    const question = `Excluir ${treatment.name} de ${formatDate(treatment.date)} do animal ${treatment.animalEarTag}?`;
+    if (!window.confirm(`${question}${alreadyAppliedWarning(treatment)}`)) return;
+
+    await deleteTreatment(treatment.id, "one");
+    addToast({ messageType: "success", text: "Tratamento excluído" });
+  }
+
+  /**
+   * Deletes the whole agendamento. One action books the same treatment for many
+   * animals, so the confirmation says how many fall with it.
+   */
+  async function onDeleteGroup(treatment: Treatment) {
     const heads = treatmentBatchSize(treatments, treatment);
+    const question = `Excluir ${treatment.name} de ${formatDate(treatment.date)}?`;
     const scope =
       heads === 1
-        ? "Isso remove o tratamento de 1 animal."
-        : `Isso remove o tratamento de ${heads} animais.`;
-    const applied =
-      deriveTreatmentStatus(treatment, todayISO()) === "done"
-        ? " Ele já foi aplicado: o histórico dos animais perde esse registro."
-        : "";
-    const question = `Excluir ${treatment.name} de ${formatDate(treatment.date)}?`;
-    if (!window.confirm(`${question} ${scope}${applied}`)) return;
+        ? " Isso remove o tratamento de 1 animal."
+        : ` Isso remove o tratamento de ${heads} animais.`;
+    if (!window.confirm(`${question}${scope}${alreadyAppliedWarning(treatment)}`)) return;
 
-    const removed = await deleteTreatment(treatment.id);
+    const removed = await deleteTreatment(treatment.id, "batch");
     addToast({
       messageType: "success",
       text:
@@ -181,7 +193,12 @@ export default function CalendarPage({ searchParams }: CalendarPageProps) {
 
       {activeTab === "agenda" ? (
         <>
-          <OverdueSection overdue={overdue} onMarkDone={onMarkDone} onDelete={onDelete} />
+          <OverdueSection
+            overdue={overdue}
+            onMarkDone={onMarkDone}
+            onDelete={onDelete}
+            onDeleteGroup={onDeleteGroup}
+          />
 
           {showBanner ? <FootAndMouthBanner /> : null}
 
@@ -197,6 +214,7 @@ export default function CalendarPage({ searchParams }: CalendarPageProps) {
             treatments={ofMonth}
             onMarkDone={onMarkDone}
             onDelete={onDelete}
+            onDeleteGroup={onDeleteGroup}
           />
 
           <DayDialog
@@ -205,6 +223,7 @@ export default function CalendarPage({ searchParams }: CalendarPageProps) {
             onClose={() => setOpenDay(null)}
             onMarkDone={onMarkDone}
             onDelete={onDelete}
+            onDeleteGroup={onDeleteGroup}
           />
         </>
       ) : (
