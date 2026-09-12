@@ -5,10 +5,11 @@
  * redirects signed-in users to /dashboard). A marketing page with one primary
  * action repeated down the page — "Criar conta grátis" — and WhatsApp as the
  * second door: hero, the farms that use the platform, three steps, six
- * features, the four plans with prices on the table, a testimonial once
- * there is a real one, the questions people ask before signing up, a final
- * call and the footer. Server component; the AuthDialog islands are the only
- * client code, NeloreMark and the marquee animate via CSS.
+ * features, a testimonial once there is a real one, the questions people ask
+ * before signing up, a final call and the footer. The plans are written
+ * (components/landing/pricing.tsx) but stay off the page until billing exists.
+ * Server component; the AuthDialog islands are the only client code,
+ * NeloreMark and the marquee animate via CSS.
  */
 import type { Metadata } from "next";
 import { LandingHeader } from "@/components/landing/landing-header";
@@ -16,7 +17,6 @@ import { Hero } from "@/components/landing/hero";
 import { FarmsMarquee } from "@/components/landing/farms-marquee";
 import { HowItWorks } from "@/components/landing/how-it-works";
 import { Features } from "@/components/landing/features";
-import { Pricing } from "@/components/landing/pricing";
 import { Testimonial } from "@/components/landing/testimonial";
 import { Faq } from "@/components/landing/faq";
 import { FinalCta } from "@/components/landing/final-cta";
@@ -45,7 +45,6 @@ export default function LandingPage() {
         <FarmsMarquee />
         <HowItWorks />
         <Features />
-        <Pricing />
         <Testimonial />
         <Faq />
         <FinalCta />

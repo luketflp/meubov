@@ -5,7 +5,6 @@ import { Container } from "@/components/landing/section";
 
 const ANCHORS = [
   { label: "Como funciona", href: "#como-funciona" },
-  { label: "Planos", href: "#planos" },
   { label: "Perguntas", href: "#perguntas" },
 ] as const;
 

@@ -18,11 +18,6 @@ const FAQ: readonly { question: string; answer: string }[] = [
       "Consegue. A importação lê a planilha que você já usa: brinco, categoria, raça, nascimento, lote e última pesagem. Se faltar algo, o sistema avisa antes de gravar.",
   },
   {
-    question: "Como eu pago?",
-    answer:
-      "Cartão de crédito no plano mensal. No anual, Pix, boleto ou cartão, com dois meses de desconto. A cobrança é feita pela Stripe.",
-  },
-  {
     question: "E se eu passar do limite de cabeças?",
     answer:
       "Nada some. Você continua vendo e manejando o rebanho inteiro; para cadastrar animais além do limite é só subir de plano, na hora.",

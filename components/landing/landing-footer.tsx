@@ -11,9 +11,6 @@ export function LandingFooter() {
       <Container className="flex flex-col items-center gap-3 py-5 text-xs text-ink-soft md:flex-row md:justify-between">
         <span>© 2026 MeuBov · Gestão de rebanho de corte</span>
         <nav className="flex flex-wrap justify-center gap-4">
-          <a href="#planos" className={LINK_CLASS}>
-            Planos
-          </a>
           <a href="#perguntas" className={LINK_CLASS}>
             Perguntas
           </a>
