@@ -575,6 +575,48 @@ export function lotSummary(
   };
 }
 
+/** The animals of a lote split by raça, as the ficha's Animais card reads them. */
+export interface BreedGroup {
+  breed: string;
+  /** The group's animals, in the order they came in (the page sorts by ear tag). */
+  items: AnimalWithDerived[];
+  heads: number;
+  /** Animals with at least one weighing (currentWeightKg !== null). */
+  weighedHeads: number;
+  /** Mean currentWeightKg over the weighed animals; null when nobody was weighed. */
+  avgWeightKg: number | null;
+}
+
+/**
+ * The lote's animals split by raça: most heads first, then the name, each
+ * group keeping the order the animals came in. The peso médio counts only the
+ * animals with a weighing, the same rule as lotSummary's avgWeightKg.
+ */
+export function animalsByBreed(items: AnimalWithDerived[]): BreedGroup[] {
+  const itemsByBreed = new Map<string, AnimalWithDerived[]>();
+  for (const item of items) {
+    const group = itemsByBreed.get(item.animal.breed);
+    if (group) group.push(item);
+    else itemsByBreed.set(item.animal.breed, [item]);
+  }
+
+  return [...itemsByBreed]
+    .map(([breed, groupItems]) => {
+      const weights = groupItems.flatMap((item) =>
+        item.currentWeightKg === null ? [] : [item.currentWeightKg]
+      );
+      return {
+        breed,
+        items: groupItems,
+        heads: groupItems.length,
+        weighedHeads: weights.length,
+        avgWeightKg:
+          weights.length === 0 ? null : weights.reduce((sum, kg) => sum + kg, 0) / weights.length,
+      };
+    })
+    .sort((a, b) => b.heads - a.heads || a.breed.localeCompare(b.breed, "pt-BR"));
+}
+
 /**
  * The /lots index read by pasture: the invernadas that hold a lote today, each
  * with its grazing pressure and the cards of the lotes on it, then the free

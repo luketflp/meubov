@@ -112,7 +112,7 @@ export default function LotRecordPage() {
 
       <LotSummaryCard summary={summary} />
 
-      <LotAnimalsCard items={rows} />
+      <LotAnimalsCard key={lot.id} items={rows} />
     </div>
   );
 }

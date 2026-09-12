@@ -13,6 +13,7 @@ import type {
 import { makeAnimal, makeTreatment } from "@/lib/domain/__tests__/fixtures";
 import {
   animalById,
+  animalsByBreed,
   canDeleteLot,
   currentlyPlacedLots,
   filterBreedings,
@@ -24,6 +25,7 @@ import {
   recentBirths,
   recentBreedings,
   treatmentBatchSize,
+  withStatus,
 } from "@/lib/store/selectors";
 
 describe("animalById", () => {
@@ -632,6 +634,88 @@ describe("lotSummary", () => {
       name: "Vermífugo",
       heads: 2,
     });
+  });
+});
+
+describe("animalsByBreed", () => {
+  const today = "2026-09-12";
+  const derived = (animals: Animal[]) => withStatus(animals, [], today);
+  const weighedAt = (weightKg: number) => [{ date: "2026-08-28", weightKg }];
+
+  it("returns no groups for a lote with no animals", () => {
+    expect(animalsByBreed([])).toEqual([]);
+  });
+
+  it("puts the raça with the most heads first, then orders by name", () => {
+    const groups = animalsByBreed(
+      derived([
+        makeAnimal({ id: "a1", earTag: "01", breed: "Tabapuã" }),
+        makeAnimal({ id: "a2", earTag: "02", breed: "Nelore" }),
+        makeAnimal({ id: "a3", earTag: "03", breed: "Guzerá" }),
+        makeAnimal({ id: "a4", earTag: "04", breed: "Nelore" }),
+        makeAnimal({ id: "a5", earTag: "05", breed: "Angus" }),
+      ])
+    );
+
+    expect(groups.map((group) => [group.breed, group.heads])).toEqual([
+      ["Nelore", 2],
+      ["Angus", 1],
+      ["Guzerá", 1],
+      ["Tabapuã", 1],
+    ]);
+  });
+
+  it("keeps each raça's animals in the order they came in", () => {
+    const [nelore] = animalsByBreed(
+      derived([
+        makeAnimal({ id: "a3", earTag: "03", breed: "Nelore" }),
+        makeAnimal({ id: "a1", earTag: "01", breed: "Nelore" }),
+        makeAnimal({ id: "a2", earTag: "02", breed: "Nelore" }),
+      ])
+    );
+
+    expect(nelore.items.map((item) => item.animal.id)).toEqual(["a3", "a1", "a2"]);
+  });
+
+  it("averages the weight over the weighed animals only", () => {
+    const [nelore] = animalsByBreed(
+      derived([
+        makeAnimal({ id: "a1", earTag: "01", breed: "Nelore", weighings: weighedAt(300) }),
+        makeAnimal({ id: "a2", earTag: "02", breed: "Nelore", weighings: weighedAt(360) }),
+        makeAnimal({ id: "a3", earTag: "03", breed: "Nelore", weighings: [] }),
+      ])
+    );
+
+    expect(nelore).toMatchObject({ heads: 3, weighedHeads: 2, avgWeightKg: 330 });
+  });
+
+  it("uses the newest weighing of each animal", () => {
+    const [nelore] = animalsByBreed(
+      derived([
+        makeAnimal({
+          id: "a1",
+          earTag: "01",
+          breed: "Nelore",
+          weighings: [
+            { date: "2026-05-15", weightKg: 280 },
+            { date: "2026-08-28", weightKg: 340 },
+          ],
+        }),
+      ])
+    );
+
+    expect(nelore.avgWeightKg).toBe(340);
+  });
+
+  it("has no average when nobody in the raça was weighed", () => {
+    const [senepol] = animalsByBreed(
+      derived([
+        makeAnimal({ id: "a1", earTag: "01", breed: "Senepol" }),
+        makeAnimal({ id: "a2", earTag: "02", breed: "Senepol" }),
+      ])
+    );
+
+    expect(senepol).toMatchObject({ heads: 2, weighedHeads: 0, avgWeightKg: null });
   });
 });
 
