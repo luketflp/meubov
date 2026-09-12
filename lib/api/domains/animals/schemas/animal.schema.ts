@@ -21,6 +21,11 @@ export const NewAnimalBody = t.Object({
   initialWeightKg: t.Optional(t.Number({ exclusiveMinimum: 0 })),
 });
 
+/** Body of POST /animals/batch ("Cadastrar vários animais"). */
+export const NewAnimalsBody = t.Object({
+  animals: t.Array(NewAnimalBody, { minItems: 1, maxItems: 500 }),
+});
+
 /**
  * One row of POST /animals/import. Mirrors NewAnimalBody but carries the lot
  * as a NAME (`lot`) instead of a lot id. `invernada` is the fixed code where

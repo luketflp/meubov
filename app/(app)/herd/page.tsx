@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/herd/FilterBar";
 import { HerdTable } from "@/components/herd/HerdTable";
 import { AnimalCard } from "@/components/herd/AnimalCard";
-import { RegisterAnimalDialog } from "@/components/herd/RegisterAnimalDialog";
+import { AddAnimalsButton } from "@/components/herd/AddAnimalsButton";
 import { ImportHerdDialog } from "@/components/herd/ImportHerdDialog";
 import {
   INITIAL_FILTERS,
@@ -83,7 +83,7 @@ export default function HerdPage() {
         actions={
           <div className="flex flex-wrap gap-2">
             <ImportHerdDialog />
-            <RegisterAnimalDialog />
+            <AddAnimalsButton />
           </div>
         }
       />

@@ -111,6 +111,9 @@ export interface NewCalving {
   calfWeightKg?: number;
 }
 
+/** Outcome of a batch registration: how many went in, or the brincos that refused it. */
+export type AddAnimalsResult = { added: number } | { duplicates: string[] };
+
 /** Summary of a bulk import, shown on the dialog's final screen. */
 export interface ImportSummary {
   imported: number;
@@ -165,6 +168,8 @@ export interface HerdStore extends HerdData {
   switchFarm: (farmId: number) => Promise<void>;
   /** Registers the animal via the API; false when the ear tag is taken. */
   addAnimal: (a: NewAnimal) => Promise<boolean>;
+  /** Registers a batch all or nothing; lists the brincos taken when refused. */
+  addAnimals: (animals: NewAnimal[]) => Promise<AddAnimalsResult>;
   /** Bulk-imports parsed rows, refreshes the herd, and returns a summary. */
   importHerd: (rows: ImportAnimalPayload[]) => Promise<ImportSummary>;
   markTreatmentDone: (id: string) => Promise<void>;
@@ -383,6 +388,22 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const animal = data as Animal;
     set((s) => ({ animals: [...s.animals, animal] }));
     return true;
+  },
+
+  addAnimals: async (list) => {
+    const { data, error } = await api.animals.batch.post({
+      animals: list.map((animal) => ({ ...animal, earTag: animal.earTag.trim() })),
+    });
+    if (error) {
+      if (error.status === 409) {
+        const detail = error.value as { earTags?: string[] };
+        return { duplicates: detail.earTags ?? [] };
+      }
+      apiFail("cadastrar os animais", error.status);
+    }
+    const created = data as Animal[];
+    set((s) => ({ animals: [...s.animals, ...created] }));
+    return { added: created.length };
   },
 
   importHerd: async (rows) => {

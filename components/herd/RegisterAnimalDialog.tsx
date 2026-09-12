@@ -1,13 +1,13 @@
 "use client";
 
 /**
- * "Cadastrar animal" dialog: trigger button + form to register a new animal
- * in the herd (ear tag, category, sex, breed, birth, lot and optional initial
- * weight). Sex is locked when the category implies it (novilha/vaca female,
+ * "Cadastrar animal" dialog: form to register one new animal in the herd (ear
+ * tag, category, sex, breed, birth, lot and optional initial weight). It opens
+ * from the "Um animal" choice of AddAnimalsButton, which remounts it on every
+ * open so each form starts empty. Sex is locked when the category implies it (novilha/vaca female,
  * boi/touro male). Validation is a local pure function (validateAnimal).
  */
 import { useMemo, useState, type FormEvent } from "react";
-import { Plus } from "lucide-react";
 import { useHerdStore, type NewAnimal } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
 import type { Category, Sex } from "@/lib/types";
@@ -31,7 +31,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -129,7 +128,12 @@ function ErrorMessage({ message }: { message?: string }) {
   return <p className="text-xs text-overdue">{message}</p>;
 }
 
-export function RegisterAnimalDialog() {
+interface RegisterAnimalDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function RegisterAnimalDialog({ open, onOpenChange }: RegisterAnimalDialogProps) {
   const animals = useHerdStore((s) => s.animals);
   const breeds = useHerdStore((s) => s.breeds);
   const lots = useHerdStore((s) => s.lots);
@@ -139,7 +143,6 @@ export function RegisterAnimalDialog() {
   const addAnimal = useHerdStore((s) => s.addAnimal);
   const { addToast } = useToast();
 
-  const [open, setOpen] = useState(false);
   const [fields, setFields] = useState<AnimalFields>(createInitialFields);
   const [errors, setErrors] = useState<AnimalErrors>({});
 
@@ -165,14 +168,6 @@ export function RegisterAnimalDialog() {
     [breeds, lots, availableLots]
   );
   const blocked = blocksRegistration(prerequisites);
-
-  function onOpenChange(next: boolean) {
-    if (next) {
-      setFields(createInitialFields());
-      setErrors({});
-    }
-    setOpen(next);
-  }
 
   /** Handles both canonical ("base:x") and custom ("custom:id") options. */
   function onChangeCategory(value: string) {
@@ -223,17 +218,11 @@ export function RegisterAnimalDialog() {
       return;
     }
     addToast({ messageType: "success", text: `Animal ${animal.earTag} cadastrado` });
-    setOpen(false);
+    onOpenChange(false);
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button className="min-h-11">
-          <Plus aria-hidden />
-          Cadastrar animal
-        </Button>
-      </DialogTrigger>
       <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Cadastrar animal</DialogTitle>

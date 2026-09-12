@@ -1,5 +1,5 @@
 /**
- * Animals — registration, bulk import, edits and the baixa.
+ * Animals — registration (one or a batch), bulk import, edits and the baixa.
  *
  * Every route is farm-scoped and addresses an existing animal by its stable
  * id, never by ear tag: the tag is an editable identifier.
@@ -10,6 +10,7 @@ import { farmPlugin } from "@/lib/api/plugins/farm";
 import { todayISO } from "@/lib/domain/dates";
 
 import { AddAnimalUseCase } from "./useCases/Add.useCase";
+import { AddAnimalsUseCase } from "./useCases/AddBatch.useCase";
 import { DeactivateAnimalUseCase } from "./useCases/Deactivate.useCase";
 import { ImportAnimalsUseCase } from "./useCases/Import.useCase";
 import { RecordWeighingUseCase } from "./useCases/RecordWeighing.useCase";
@@ -19,6 +20,7 @@ import {
   DeactivateAnimalBody,
   ImportAnimalsBody,
   NewAnimalBody,
+  NewAnimalsBody,
   WeighingBody,
 } from "./schemas/animal.schema";
 
@@ -33,6 +35,16 @@ export const animalsController = new Elysia({ prefix: "/animals" })
       return animal;
     },
     { farm: true, body: NewAnimalBody }
+  )
+  .post(
+    "/batch",
+    async ({ farmId, body, status }) => {
+      const result = await new AddAnimalsUseCase().run({ farmId, inputs: body.animals });
+      if (result === "lot_not_found") return status(404, { error: result });
+      if ("error" in result) return status(409, result);
+      return result;
+    },
+    { farm: true, body: NewAnimalsBody }
   )
   .post(
     "/import",
