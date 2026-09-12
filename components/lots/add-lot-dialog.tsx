@@ -75,7 +75,7 @@ export function AddLotDialog() {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="min-h-11">
+        <Button className="min-h-11">
           <Plus aria-hidden />
           Novo lote
         </Button>
