@@ -22,6 +22,7 @@ import { invernadasController } from "@/lib/api/domains/invernadas/invernadas.co
 import { lotsController } from "@/lib/api/domains/lots/lots.controller";
 import { manejoController } from "@/lib/api/domains/manejo/manejo.controller";
 import { protocolsController } from "@/lib/api/domains/protocols/protocols.controller";
+import { birthsController } from "@/lib/api/domains/reproduction/births.controller";
 import { reproductionController } from "@/lib/api/domains/reproduction/reproduction.controller";
 import { treatmentsController } from "@/lib/api/domains/treatments/treatments.controller";
 
@@ -68,6 +69,7 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
 
   /* ---- Reproduction (females) ------------------------------------------- */
   .use(reproductionController)
+  .use(birthsController)
 
   /* ---- Custom herd categories, expenses ---------------------------------- */
   .use(categoriesController)

@@ -34,6 +34,7 @@ import { ApiHerdRepository } from "@/lib/repository/ApiHerdRepository";
 import { api } from "@/lib/api/client";
 import { setActiveFarmId } from "@/lib/api/activeFarm";
 import type { ImportAnimalPayload } from "@/lib/domain/herdImport";
+import type { ImportBirthPayload } from "@/lib/domain/birthImport";
 import type { BlockedAnimal } from "@/lib/domain/manejoRevert";
 import type { DeletedManejo } from "@/lib/api/domains/manejo/useCases/Delete.useCase";
 
@@ -123,6 +124,20 @@ export interface ImportSummary {
   createdLots: string[];
 }
 
+/**
+ * What "Importar nascimentos" wrote, by calf brinco: the calves, how many
+ * partos landed on a dam, the calves without one, the dead ones, the brincos
+ * skipped because they already existed and the raças created.
+ */
+export interface ImportBirthsSummary {
+  imported: string[];
+  calvings: number;
+  withoutDam: string[];
+  deaths: string[];
+  skipped: string[];
+  createdBreeds: string[];
+}
+
 /** Logical cattle group plus the physical invernada where it starts. */
 export interface NewLot {
   name: string;
@@ -172,6 +187,8 @@ export interface HerdStore extends HerdData {
   addAnimals: (animals: NewAnimal[]) => Promise<AddAnimalsResult>;
   /** Bulk-imports parsed rows, refreshes the herd, and returns a summary. */
   importHerd: (rows: ImportAnimalPayload[]) => Promise<ImportSummary>;
+  /** Imports a maternidade caderno, refreshes the herd, and returns what it wrote. */
+  importBirths: (rows: ImportBirthPayload[]) => Promise<ImportBirthsSummary>;
   markTreatmentDone: (id: string) => Promise<void>;
   completeTreatments: (ids: string[]) => Promise<void>;
   /** Schedules one treatment for every selected active animal. */
@@ -444,6 +461,28 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     // animals plus any new raças/lots/placements stay consistent, but never let a refresh
     // failure mask a successful import — return the server-reported summary
     // regardless; the store refreshes on the next successful load.
+    try {
+      const fresh = await repository.load();
+      set({ ...fresh, loaded: true });
+    } catch {
+      // best-effort: keep the committed import's summary
+    }
+    return summary;
+  },
+
+  importBirths: async (rows) => {
+    const { data, error } = await api.births.import.post({ births: rows });
+    if (error) {
+      const detail = error.value as { error?: string };
+      if (detail.error === "lot_not_found") {
+        toast.error("Um dos lotes escolhidos não está mais numa invernada. Escolha de novo.");
+        throw new Error("importar os nascimentos failed: lot_not_found");
+      }
+      apiFail("importar os nascimentos", error.status);
+    }
+    const summary = data as ImportBirthsSummary;
+    // Same as importHerd: the write already committed, so a failed refresh must
+    // not hide the summary.
     try {
       const fresh = await repository.load();
       set({ ...fresh, loaded: true });

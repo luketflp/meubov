@@ -4,6 +4,7 @@ import { t } from "elysia";
 
 import {
   DateString,
+  NonBlankString,
   SexModel,
 } from "@/lib/api/schemas/shared.schema";
 
@@ -50,4 +51,25 @@ export const NewCalvingBody = t.Object({
   calfBreed: t.Optional(t.String({ minLength: 1 })),
   calfLotId: t.Optional(t.String({ minLength: 1 })),
   calfWeightKg: t.Optional(t.Number({ exclusiveMinimum: 0 })),
+});
+
+/**
+ * One line of POST /births/import, as the preview matched it: the dam by id
+ * (absent when the caderno's brinco found no female), the lot by id and the
+ * raça by name. `deathNotes` marks a calf that died, with the caderno's text.
+ */
+export const ImportBirthRow = t.Object({
+  calfEarTag: NonBlankString,
+  calfSex: SexModel,
+  breed: NonBlankString,
+  lotId: t.String({ minLength: 1 }),
+  date: DateString,
+  damId: t.Optional(t.String({ minLength: 1 })),
+  weightKg: t.Optional(t.Number({ exclusiveMinimum: 0 })),
+  deathNotes: t.Optional(t.String()),
+});
+
+/** Body of POST /births/import ("Importar nascimentos"). */
+export const ImportBirthsBody = t.Object({
+  births: t.Array(ImportBirthRow, { minItems: 1, maxItems: 2000 }),
 });
