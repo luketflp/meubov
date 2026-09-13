@@ -6,11 +6,11 @@
 import type { Breeding, SemenBull } from "@/lib/types";
 
 /** The Touros tab of Reprodução. */
-export const TOUROS_TAB = "/nascimentos/reproducao?tab=touros";
+export const TOUROS_TAB = "/reproducao?tab=touros";
 
 /** Page of one semen bull. */
 export function semenBullHref(bullId: string): string {
-  return `/nascimentos/reproducao/touros/${bullId}`;
+  return `/reproducao/touros/${bullId}`;
 }
 
 /** How a cobertura names its bull. */

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Página do touro (/nascimentos/reproducao/touros/[id]): a semen bull's stock,
+ * Página do touro (/reproducao/touros/[id]): a semen bull's stock,
  * cost and pregnancy rate, its purchases and the coberturas that used its
  * doses. Opened from the bull's name on the Reprodução screen.
  */

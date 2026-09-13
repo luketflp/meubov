@@ -1,13 +1,13 @@
-import { Baby, Dna, Fence } from "lucide-react";
+import { Dna, Fence, Settings } from "lucide-react";
 import { describe, expect, it } from "vitest";
 import { FULL_PERMISSIONS, PRESETS } from "@/lib/domain/permissions";
 import { NAV_ITEMS, type NavItem, activeChild, isActiveRoute, visibleNav } from "@/lib/nav";
 
-const nascimentos: NavItem = {
-  label: "Nascimentos",
-  href: "/nascimentos",
-  icon: Baby,
-  children: [{ label: "Reprodução", href: "/nascimentos/reproducao", icon: Dna }],
+const settings: NavItem = {
+  label: "Configurações",
+  href: "/settings",
+  icon: Settings,
+  children: [{ label: "Equipe", href: "/settings/equipe", area: "team" }],
 };
 
 const lots: NavItem = { label: "Lotes", href: "/lots", icon: Fence };
@@ -32,21 +32,19 @@ describe("isActiveRoute", () => {
 
 describe("activeChild", () => {
   it("returns the child whose route matches", () => {
-    expect(activeChild("/nascimentos/reproducao", nascimentos)).toEqual({
-      label: "Reprodução",
-      href: "/nascimentos/reproducao",
-      icon: Dna,
+    expect(activeChild("/settings/equipe", settings)).toEqual({
+      label: "Equipe",
+      href: "/settings/equipe",
+      area: "team",
     });
   });
 
   it("matches a sub-route of the child", () => {
-    expect(activeChild("/nascimentos/reproducao/nova", nascimentos)?.href).toBe(
-      "/nascimentos/reproducao"
-    );
+    expect(activeChild("/settings/equipe/convite", settings)?.href).toBe("/settings/equipe");
   });
 
   it("returns null on the parent's own route", () => {
-    expect(activeChild("/nascimentos", nascimentos)).toBeNull();
+    expect(activeChild("/settings", settings)).toBeNull();
   });
 
   it("returns null for an item without children", () => {
@@ -54,16 +52,15 @@ describe("activeChild", () => {
   });
 
   it("returns null when neither the parent nor a child matches", () => {
-    expect(activeChild("/herd", nascimentos)).toBeNull();
+    expect(activeChild("/herd", settings)).toBeNull();
   });
 });
 
 describe("NAV_ITEMS", () => {
-  it("lists Reprodução under Nascimentos, with its own icon", () => {
-    const item = NAV_ITEMS.find((i) => i.href === "/nascimentos");
-    expect(item?.children).toEqual([
-      { label: "Reprodução", href: "/nascimentos/reproducao", icon: Dna },
-    ]);
+  it("lists Reprodução as an item of its own, right after Nascimentos", () => {
+    const index = NAV_ITEMS.findIndex((i) => i.href === "/nascimentos");
+    expect(NAV_ITEMS[index]?.children).toBeUndefined();
+    expect(NAV_ITEMS[index + 1]).toEqual({ label: "Reprodução", href: "/reproducao", icon: Dna });
   });
 });
 
@@ -86,9 +83,7 @@ describe("visibleNav", () => {
     expect(visibleNav(NAV_ITEMS, PRESETS.consultor).map((item) => item.href)).toContain("/finance");
   });
 
-  it("leaves children of an open area alone", () => {
-    expect(
-      visibleNav(NAV_ITEMS, PRESETS.consultor).find((item) => item.href === "/nascimentos")?.children
-    ).toEqual([{ label: "Reprodução", href: "/nascimentos/reproducao", icon: Dna }]);
+  it("leaves an item without an area alone", () => {
+    expect(visibleNav(NAV_ITEMS, PRESETS.vaqueiro).map((item) => item.href)).toContain("/reproducao");
   });
 });

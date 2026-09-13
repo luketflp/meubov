@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Página do touro (/nascimentos/reproducao/touros/[id]): one semen bull with
+ * Página do touro (/reproducao/touros/[id]): one semen bull with
  * its stock, what a dose costs and how often it took, every purchase of doses
  * and every cobertura that used one. Opened from the bull's name on the Touros
  * tab and on the Coberturas list.

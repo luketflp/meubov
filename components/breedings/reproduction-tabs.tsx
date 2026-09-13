@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 export type ReproductionTab = "coberturas" | "touros" | "ultrassom";
 
-const BASE_PATH = "/nascimentos/reproducao";
+const BASE_PATH = "/reproducao";
 
 const TABS: { tab: ReproductionTab; label: string; href: string }[] = [
   { tab: "coberturas", label: "Coberturas", href: BASE_PATH },
