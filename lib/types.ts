@@ -32,6 +32,11 @@ export type StockingRateClass = "high" | "good" | "light";
 
 /** Weighing record of an animal. */
 export interface Weighing {
+  /**
+   * Database id; tells a weighing a manejo pass wrote (its `weighingId`) from one
+   * saved elsewhere. Optional so a weighing can be described before it is stored.
+   */
+  id?: number;
   date: string;
   weightKg: number;
 }

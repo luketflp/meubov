@@ -147,9 +147,19 @@ export function movementSubtitle(
   return `Compra \u00b7 ${total}${lotName ? ` \u00b7 entra em ${lotName}` : ""}${who}`;
 }
 
-/** Route of the venda screen of a closed sale session. */
-function saleHref(sessionId: string): string {
-  return `/manejo/venda/${sessionId}`;
+/** Details page of a session: the chute while it runs, its record once closed. */
+export function manejoDetailHref(sessionId: string): string {
+  return `/manejo/${sessionId}`;
+}
+
+/** Page of the weighings saved on a day outside any session. */
+export function looseWeighingsHref(dateIso: string): string {
+  return `/manejo/avulso/pesagem/${dateIso}`;
+}
+
+/** Page of a group of treatments marked feito outside any session. */
+export function calendarTreatmentsHref(treatmentId: string): string {
+  return `/manejo/avulso/tratamento/${treatmentId}`;
 }
 
 /**
@@ -174,34 +184,58 @@ export function visibleSaleRows(
   return inScope.filter((row) => row.earTag.toLowerCase().includes(term));
 }
 
-/** One history row: a batch of done treatments, a day's weighings, or a trade. */
+/**
+ * One history row: a manejo session of any kind, the treatments marked feito
+ * outside a session on one day, or the weighings saved outside a session on
+ * one day.
+ */
 export interface ManejoHistoryRow {
   key: string;
   date: string;
   kind: ManejoAction;
   name: string;
+  /** Soft line under the name, for the rows no session wrote. */
+  subtitle?: string;
   headCount: number;
   /** Person in charge, or the counterparty of a compra/venda. */
   responsible?: string;
   /**
-   * Money of the row: the sum of the per-animal sanitary costs, or the traded
+   * Money of the row: the sanitary cost of the animals treated, or the traded
    * value of a compra/venda. Null when the row has no value at all.
    */
   amountBrl: number | null;
-  /** Screen the row opens, when it has one of its own (a venda encerrada). */
-  href?: string;
+  /** The row's details page. */
+  href: string;
   /** Session behind the row, when a manejo at the chute wrote it. */
   sessionId?: string;
   /** A treatment of the group, enough to delete every one booked with it. */
   treatmentId?: string;
-  /** Animals of a pesagem row, whose readings of the day fall together. */
+  /** Animals of a pesagens avulsas row, whose readings of the day fall together. */
   earTags?: string[];
 }
 
+/** Money of a session row: a trade's value, or the plan's cost for each animal treated. */
+function sessionAmount(session: ManejoSession, done: number): number | null {
+  if (session.kind === "health") {
+    const cost = session.treatment?.costBrl;
+    return cost === undefined ? null : cost * done;
+  }
+  if (!isMovementAction(session.kind as ManejoAction)) return null;
+  if (session.totalAmountBrl !== undefined) return session.totalAmountBrl;
+  let value: number | null = null;
+  for (const animal of session.animals) {
+    if (animal.outcome === "done" && animal.amountBrl !== undefined) {
+      value = (value ?? 0) + animal.amountBrl;
+    }
+  }
+  return value;
+}
+
 /**
- * History of executed manejos, one row per batch: done treatments grouped by
- * (date, type, name), the weighings grouped by date, and one row per session
- * that moved the herd (transferência, venda, entrada), sorted by date desc.
+ * History of executed manejos, sorted by date desc: one row per session with an
+ * animal done, whatever its kind; then what no session wrote — done treatments
+ * grouped by (date, type, name) and weighings grouped by date. A pass records
+ * the treatment and the weighing it wrote, which is how the two are told apart.
  */
 export function manejoHistory(
   treatments: Treatment[],
@@ -209,9 +243,33 @@ export function manejoHistory(
   sessions: ManejoSession[] = []
 ): ManejoHistoryRow[] {
   const map = new Map<string, ManejoHistoryRow>();
+  const sessionTreatments = new Set<string>();
+  const sessionWeighings = new Set<number>();
+
+  for (const session of sessions) {
+    let done = 0;
+    for (const animal of session.animals) {
+      if (animal.treatmentId !== undefined) sessionTreatments.add(animal.treatmentId);
+      if (animal.weighingId !== undefined) sessionWeighings.add(animal.weighingId);
+      if (animal.outcome === "done") done += 1;
+    }
+    if (done === 0) continue;
+    map.set(session.id, {
+      key: session.id,
+      date: session.date,
+      kind: sessionKind(session),
+      name: session.name,
+      headCount: done,
+      responsible:
+        session.kind === "health" ? session.treatment?.responsible : session.counterparty,
+      amountBrl: sessionAmount(session, done),
+      href: manejoDetailHref(session.id),
+      sessionId: session.id,
+    });
+  }
 
   for (const t of treatments) {
-    if (t.status !== "done") continue;
+    if (t.status !== "done" || sessionTreatments.has(t.id)) continue;
     const key = `${t.date}|${t.type}|${t.name}`;
     const existing = map.get(key);
     if (existing) {
@@ -225,9 +283,11 @@ export function manejoHistory(
         date: t.date,
         kind: t.type,
         name: t.name,
+        subtitle: "Calendário sanitário",
         headCount: 1,
         responsible: t.responsible,
         amountBrl: t.costBrl ?? null,
+        href: calendarTreatmentsHref(t.id),
         treatmentId: t.id,
       });
     }
@@ -235,6 +295,7 @@ export function manejoHistory(
 
   for (const animal of animals) {
     for (const w of animal.weighings) {
+      if (w.id !== undefined && sessionWeighings.has(w.id)) continue;
       const key = `${w.date}|weighing`;
       const existing = map.get(key);
       if (existing) {
@@ -245,41 +306,15 @@ export function manejoHistory(
           key,
           date: w.date,
           kind: "weighing",
-          name: "Pesagem",
+          name: "Pesagens avulsas",
+          subtitle: "fora do brete",
           headCount: 1,
           amountBrl: null,
+          href: looseWeighingsHref(w.date),
           earTags: [animal.earTag],
         });
       }
     }
-  }
-
-  for (const session of sessions) {
-    if (!isMovementAction(session.kind as ManejoAction)) continue;
-    const handled = session.animals.filter((a) => a.outcome === "done");
-    if (handled.length === 0) continue;
-    let value = session.totalAmountBrl ?? null;
-    if (value === null) {
-      for (const animal of handled) {
-        if (animal.amountBrl !== undefined) value = (value ?? 0) + animal.amountBrl;
-      }
-    }
-    map.set(session.id, {
-      key: session.id,
-      date: session.date,
-      kind: session.kind as ManejoAction,
-      name: session.name,
-      headCount: handled.length,
-      responsible: session.counterparty,
-      amountBrl: value,
-      sessionId: session.id,
-      // A venda that ended has a record of its own; while it runs, the chute
-      // screen at /manejo/[id] is still the place to open it.
-      href:
-        session.kind === "sale" && session.status === "closed"
-          ? saleHref(session.id)
-          : undefined,
-    });
   }
 
   return [...map.values()].sort((a, b) =>

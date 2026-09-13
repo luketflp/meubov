@@ -49,7 +49,7 @@ const orNothing = <T>(value: T | null): T | undefined =>
   value === null ? undefined : value;
 
 export function toWeighing(row: WeighingRow): Weighing {
-  return { date: row.date, weightKg: row.weightKg };
+  return { id: row.id, date: row.date, weightKg: row.weightKg };
 }
 
 export function toTreatment(row: TreatmentRow, earTag: string): Treatment {

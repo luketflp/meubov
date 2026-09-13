@@ -1,9 +1,10 @@
 "use client";
 
 /**
- * "Manejo history" section: executed batches (one row per day/type/name),
- * filterable by action; table on desktop and stacked cards on mobile,
- * always in descending order of date.
+ * "Manejo history" section: one row per manejo session, plus what no session
+ * wrote (treatments marked feito on the calendar, weighings saved outside the
+ * chute), filterable by action; table on desktop and stacked cards on mobile,
+ * always in descending order of date. Every row opens its details page.
  */
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
@@ -45,20 +46,36 @@ function headsLabel(session: ManejoHistoryRow): string {
   return session.headCount === 1 ? "animal" : "animais";
 }
 
-/**
- * Mobile card body: a link to the row's own screen when it has one (a venda
- * encerrada), otherwise the plain block.
- */
-function Wrapper({ href, children }: { href?: string; children: ReactNode }) {
-  if (!href) return <div className="p-4">{children}</div>;
+/** Mobile card body: the whole card opens the row's page. */
+function Wrapper({
+  href,
+  running,
+  children,
+}: {
+  href: string;
+  running: boolean;
+  children: ReactNode;
+}) {
   return (
     <Link href={href} className="block p-4">
       {children}
       <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-brand">
-        Ver a venda
+        {running ? "Continuar no brete" : "Ver detalhes"}
         <ChevronRight className="size-3.5" aria-hidden />
       </span>
     </Link>
+  );
+}
+
+/** The manejo's name, the soft line under it for the rows no session wrote. */
+function RowName({ row, className }: { row: ManejoHistoryRow; className?: string }) {
+  return (
+    <>
+      <span className={className}>{row.name}</span>
+      {row.subtitle ? (
+        <span className="block text-xs font-normal text-ink-soft">{row.subtitle}</span>
+      ) : null}
+    </>
   );
 }
 
@@ -73,6 +90,10 @@ export function ManejoHistory() {
     [treatments, animals, manejoSessions]
   );
   const filtered = filter === ALL ? sessions : sessions.filter((s) => s.kind === filter);
+  const running = useMemo(
+    () => new Set(manejoSessions.filter((m) => m.status === "open").map((m) => m.id)),
+    [manejoSessions]
+  );
 
   return (
     <SectionCard
@@ -112,7 +133,7 @@ export function ManejoHistory() {
                   <TableHead className="text-right">Animais</TableHead>
                   <TableHead>Responsável</TableHead>
                   <TableHead className="text-right">Custo / Valor</TableHead>
-                  <TableHead className="w-10">
+                  <TableHead className="w-16">
                     <span className="sr-only">Ações</span>
                   </TableHead>
                 </TableRow>
@@ -127,16 +148,9 @@ export function ManejoHistory() {
                       <ManejoTypePill action={session.kind} />
                     </TableCell>
                     <TableCell className="text-ink">
-                      {session.href ? (
-                        <Link
-                          href={session.href}
-                          className="font-medium text-brand hover:underline"
-                        >
-                          {session.name}
-                        </Link>
-                      ) : (
-                        session.name
-                      )}
+                      <Link href={session.href} className="font-medium text-brand hover:underline">
+                        <RowName row={session} className="block" />
+                      </Link>
                     </TableCell>
                     <TableCell className="text-right font-mono text-ink">
                       {formatNumber(session.headCount)}
@@ -146,7 +160,16 @@ export function ManejoHistory() {
                       {session.amountBrl === null ? "—" : formatCurrency(session.amountBrl)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <ManejoRowMenu row={session} />
+                      <span className="inline-flex items-center justify-end gap-0.5">
+                        <ManejoRowMenu row={session} />
+                        <Link
+                          href={session.href}
+                          aria-label={`Abrir ${session.name}`}
+                          className="inline-flex size-7 items-center justify-center rounded-md text-ink-soft hover:bg-muted hover:text-ink"
+                        >
+                          <ChevronRight className="size-4" aria-hidden />
+                        </Link>
+                      </span>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -158,7 +181,10 @@ export function ManejoHistory() {
           <ul className="space-y-3 md:hidden">
             {filtered.map((session) => (
               <li key={session.key} className="rounded-lg border border-hairline bg-surface">
-                <Wrapper href={session.href}>
+                <Wrapper
+                  href={session.href}
+                  running={session.sessionId !== undefined && running.has(session.sessionId)}
+                >
                   <div className="flex items-center justify-between gap-2">
                     <ManejoTypePill action={session.kind} />
                     <span className="flex items-center gap-1">
@@ -168,7 +194,9 @@ export function ManejoHistory() {
                       <ManejoRowMenu row={session} />
                     </span>
                   </div>
-                  <p className="mt-2 text-sm font-medium text-ink">{session.name}</p>
+                  <p className="mt-2 text-sm font-medium text-ink">
+                    <RowName row={session} />
+                  </p>
                   <p className="mt-1 text-xs text-ink-soft">
                     <span className="font-mono text-ink">{formatNumber(session.headCount)}</span>{" "}
                     {headsLabel(session)}

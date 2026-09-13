@@ -4,12 +4,12 @@
  * Venda record: the read-only romaneio of a sale already closed at the chute.
  * The summary card holds the batch arithmetic; below it, one line per animal
  * with the weight read on the scale, its carcass arrobas and what it was worth.
- * A venda still running belongs to the chute screen, which keeps the actions.
+ * A venda still running belongs to the chute screen, which keeps the actions;
+ * `ManejoScreen` only renders this record once the venda is closed.
  */
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { ArrowLeft, ClipboardX, Search } from "lucide-react";
-import { useHerdStore } from "@/lib/store/useHerdStore";
+import { Search } from "lucide-react";
+import type { ManejoSession } from "@/lib/types";
 import { formatDate } from "@/lib/domain/dates";
 import { formatArroba, formatCurrency, formatKg } from "@/lib/domain/format";
 import { saleRows, type SaleRow } from "@/lib/domain/movements";
@@ -19,8 +19,7 @@ import {
   type SaleRowScope,
 } from "@/components/manejo/helpers";
 import { SaleSummaryCard } from "@/components/manejo/sale-summary";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { EmptyState } from "@/components/ui/empty-state";
+import { DetailHeader } from "@/components/manejo/detail-shell";
 import { Input } from "@/components/ui/input";
 import { SectionCard } from "@/components/ui/section-card";
 import {
@@ -40,90 +39,17 @@ import {
 } from "@/components/ui/table";
 
 interface SaleDetailProps {
-  sessionId: string;
+  /** A closed session of kind "sale". */
+  session: ManejoSession;
 }
 
-/** Link back to the Manejo screen, in the page header and on the dead ends. */
-function BackLink({ className }: { className?: string }) {
-  return (
-    <Link
-      href="/manejo"
-      className={
-        className ??
-        "inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand hover:underline md:min-h-0"
-      }
-    >
-      <ArrowLeft className="size-4" aria-hidden />
-      Voltar ao manejo
-    </Link>
-  );
-}
-
-export function SaleDetail({ sessionId }: SaleDetailProps) {
-  const session = useHerdStore((s) => s.manejoSessions.find((m) => m.id === sessionId));
+export function SaleDetail({ session }: SaleDetailProps) {
   const [search, setSearch] = useState("");
   // Opens on the animals actually sold — the romaneio the frigorífico paid.
   // The whole lot, skipped animals included, is one switch away.
   const [scope, setScope] = useState<SaleRowScope>("sold");
 
-  const rows = useMemo(() => (session ? saleRows(session) : []), [session]);
-
-  if (!session) {
-    return (
-      <SectionCard title="Venda não encontrada">
-        <EmptyState
-          icon={ClipboardX}
-          title="Venda inexistente"
-          description="Esta venda não existe ou ainda não foi carregada."
-        />
-        <div className="mt-3">
-          <BackLink />
-        </div>
-      </SectionCard>
-    );
-  }
-
-  if (session.kind !== "sale") {
-    return (
-      <SectionCard title="Este manejo não é uma venda">
-        <EmptyState
-          icon={ClipboardX}
-          title="Manejo de outro tipo"
-          description="Só uma venda tem romaneio. Abra este manejo pela tela do brete."
-        />
-        <div className="mt-3 flex flex-wrap gap-4">
-          <Link
-            href={`/manejo/${session.id}`}
-            className="inline-flex min-h-11 items-center text-sm font-medium text-brand hover:underline md:min-h-0"
-          >
-            Abrir o manejo
-          </Link>
-          <BackLink />
-        </div>
-      </SectionCard>
-    );
-  }
-
-  if (session.status === "open") {
-    return (
-      <SectionCard title="Venda em andamento">
-        <EmptyState
-          icon={ClipboardX}
-          title="A venda ainda está no brete"
-          description="O romaneio fica pronto quando a venda for encerrada. Continue passando os animais para fechá-la."
-        />
-        <div className="mt-3 flex flex-wrap gap-4">
-          <Link
-            href={`/manejo/${session.id}`}
-            className="inline-flex min-h-11 items-center text-sm font-medium text-brand hover:underline md:min-h-0"
-          >
-            Continuar no brete
-          </Link>
-          <BackLink />
-        </div>
-      </SectionCard>
-    );
-  }
+  const rows = useMemo(() => saleRows(session), [session]);
 
   const perArroba = session.pricePerArroba !== undefined;
   // A venda closed at one price has no per-head money: the column would be a
@@ -139,10 +65,11 @@ export function SaleDetail({ sessionId }: SaleDetailProps) {
 
   return (
     <div className="space-y-6">
-      <PageHeader
+      <DetailHeader
         title={session.name}
+        action="sale"
         subtitle={`${formatDate(session.date)} · ${movementSubtitle(session, undefined)}`}
-        actions={<BackLink />}
+        session={session}
       />
 
       <SaleSummaryCard session={session} />

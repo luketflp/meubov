@@ -10,6 +10,12 @@ const nextConfig: NextConfig = {
         destination: "/nascimentos/reproducao",
         permanent: true,
       },
+      // A venda's record moved to its session's own page with every other manejo.
+      {
+        source: "/manejo/venda/:id",
+        destination: "/manejo/:id",
+        permanent: true,
+      },
     ];
   },
 };
