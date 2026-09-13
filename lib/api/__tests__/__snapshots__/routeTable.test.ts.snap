@@ -3,6 +3,7 @@
 exports[`herd API route table > exposes exactly the documented routes 1`] = `
 [
   "DELETE /api/herd/animals/:id/diagnoses/:breedingId",
+  "DELETE /api/herd/animals/:id/weighings/:weighingId",
   "DELETE /api/herd/breeds/:name",
   "DELETE /api/herd/categories/:id",
   "DELETE /api/herd/expenses/:id",
@@ -21,6 +22,7 @@ exports[`herd API route table > exposes exactly the documented routes 1`] = `
   "GET /api/herd/health",
   "GET /api/herd/invites",
   "PATCH /api/herd/animals/:id",
+  "PATCH /api/herd/animals/:id/weighings/:weighingId",
   "PATCH /api/herd/farm/members/:userId",
   "PATCH /api/herd/invernadas/:id",
   "PATCH /api/herd/lots/:id",

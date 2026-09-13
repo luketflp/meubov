@@ -25,6 +25,8 @@ export const ROUTE_REQUIREMENTS: Readonly<Record<string, RouteRequirement>> = {
   "PATCH /api/herd/animals/:id": edit("herd"),
   "POST /api/herd/animals/:id/deactivate": edit("herd"),
   "POST /api/herd/animals/:id/weighings": edit("herd"),
+  "PATCH /api/herd/animals/:id/weighings/:weighingId": edit("herd"),
+  "DELETE /api/herd/animals/:id/weighings/:weighingId": edit("herd"),
   "DELETE /api/herd/weighings": edit("herd"),
   "POST /api/herd/breeds": edit("herd"),
   "DELETE /api/herd/breeds/:name": edit("herd"),

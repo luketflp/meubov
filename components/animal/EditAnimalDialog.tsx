@@ -2,8 +2,9 @@
 
 /**
  * "Editar animal" dialog: ear tag, category (canonical or custom, filtered by
- * the animal's sex), breed, birth date and lot — plus the danger zone that
- * deactivates the animal with a reason (a sale goes through a manejo de venda).
+ * the animal's sex), breed, birth date and lot, the weighings to correct — plus
+ * the danger zone that deactivates the animal with a reason (a sale goes through
+ * a manejo de venda).
  */
 import { useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
@@ -39,6 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { WeighingHistory } from "@/components/animal/WeighingHistory";
 
 /** Base categories compatible with each sex. */
 const BASE_BY_SEX: Record<Animal["sex"], Category[]> = {
@@ -205,8 +207,8 @@ export function EditAnimalDialog({ animal }: { animal: Animal }) {
         <DialogHeader>
           <DialogTitle>Editar animal {animal.earTag}</DialogTitle>
           <DialogDescription>
-            Brinco, categoria, raça, nascimento e lote. Vendas são registradas
-            em um manejo de venda.
+            Brinco, categoria, raça, nascimento, lote e pesagens. Vendas são
+            registradas em um manejo de venda.
           </DialogDescription>
         </DialogHeader>
 
@@ -301,6 +303,8 @@ export function EditAnimalDialog({ animal }: { animal: Animal }) {
             </Button>
           </DialogFooter>
         </form>
+
+        <WeighingHistory animal={animal} />
 
         <div className="mt-2 border-t border-hairline pt-4">
           <p className="text-sm font-medium text-ink">Dar baixa</p>

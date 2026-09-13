@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { KG_PER_ARROBA, kgToArroba, currentWeight, totalWeightKg } from "@/lib/domain/weights";
+import {
+  KG_PER_ARROBA,
+  kgToArroba,
+  currentWeight,
+  totalWeightKg,
+  weighingError,
+} from "@/lib/domain/weights";
 import { makeAnimal } from "./fixtures";
 
 describe("kgToArroba", () => {
@@ -38,5 +44,43 @@ describe("totalWeightKg", () => {
 
   it("counts 0 for an active animal without weighings", () => {
     expect(totalWeightKg([makeAnimal()])).toBe(0);
+  });
+});
+
+describe("weighingError", () => {
+  const bounds = { birthDate: "2025-03-10", todayIso: "2026-09-13" };
+
+  it("accepts a weight above zero dated between birth and today", () => {
+    expect(weighingError({ date: "2026-05-01", weightKg: 312.5 }, bounds)).toBeNull();
+    expect(weighingError({ date: "2025-03-10", weightKg: 31 }, bounds)).toBeNull();
+    expect(weighingError({ date: "2026-09-13", weightKg: 420 }, bounds)).toBeNull();
+  });
+
+  it("refuses a weight of zero or less, or not a number", () => {
+    expect(weighingError({ date: "2026-05-01", weightKg: 0 }, bounds)).toBe(
+      "Informe um peso maior que zero."
+    );
+    expect(weighingError({ date: "2026-05-01", weightKg: Number.NaN }, bounds)).toBe(
+      "Informe um peso maior que zero."
+    );
+  });
+
+  it("refuses a date that is missing or malformed", () => {
+    expect(weighingError({ date: "", weightKg: 300 }, bounds)).toBe("Informe uma data válida.");
+    expect(weighingError({ date: "13/09/2026", weightKg: 300 }, bounds)).toBe(
+      "Informe uma data válida."
+    );
+  });
+
+  it("refuses a date in the future", () => {
+    expect(weighingError({ date: "2026-09-14", weightKg: 300 }, bounds)).toBe(
+      "A pesagem não pode ser no futuro."
+    );
+  });
+
+  it("refuses a date before the animal was born", () => {
+    expect(weighingError({ date: "2025-03-09", weightKg: 30 }, bounds)).toBe(
+      "A pesagem não pode ser anterior ao nascimento do animal."
+    );
   });
 });

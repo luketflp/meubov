@@ -160,18 +160,27 @@ export function sessionWeighingLines(session: ManejoSession, animals: Animal[]):
   );
 }
 
+/**
+ * The session that wrote each weighing, by weighing id. A weighing missing from
+ * the map was saved elsewhere (ficha, cadastro, nascimento, import).
+ */
+export function weighingSessions(sessions: ManejoSession[]): Map<number, ManejoSession> {
+  const bySession = new Map<number, ManejoSession>();
+  for (const session of sessions) {
+    for (const entry of session.animals) {
+      if (entry.weighingId !== undefined) bySession.set(entry.weighingId, session);
+    }
+  }
+  return bySession;
+}
+
 /** The weighings saved on a day that no session wrote (ficha, cadastro, nascimento). */
 export function looseWeighingLines(
   dateIso: string,
   animals: Animal[],
   sessions: ManejoSession[]
 ): WeighingLine[] {
-  const sessionWeighings = new Set<number>();
-  for (const session of sessions) {
-    for (const entry of session.animals) {
-      if (entry.weighingId !== undefined) sessionWeighings.add(entry.weighingId);
-    }
-  }
+  const sessionWeighings = weighingSessions(sessions);
   return animals.flatMap((animal) =>
     animal.weighings
       .filter((w) => w.date === dateIso && (w.id === undefined || !sessionWeighings.has(w.id)))

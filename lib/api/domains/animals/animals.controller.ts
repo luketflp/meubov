@@ -1,5 +1,6 @@
 /**
- * Animals — registration (one or a batch), bulk import, edits and the baixa.
+ * Animals — registration (one or a batch), bulk import, edits and the baixa,
+ * plus recording, correcting and removing the weighings of one animal.
  *
  * Every route is farm-scoped and addresses an existing animal by its stable
  * id, never by ear tag: the tag is an editable identifier.
@@ -12,8 +13,10 @@ import { todayISO } from "@/lib/domain/dates";
 import { AddAnimalUseCase } from "./useCases/Add.useCase";
 import { AddAnimalsUseCase } from "./useCases/AddBatch.useCase";
 import { DeactivateAnimalUseCase } from "./useCases/Deactivate.useCase";
+import { EditWeighingUseCase } from "./useCases/EditWeighing.useCase";
 import { ImportAnimalsUseCase } from "./useCases/Import.useCase";
 import { RecordWeighingUseCase } from "./useCases/RecordWeighing.useCase";
+import { RemoveWeighingUseCase } from "./useCases/RemoveWeighing.useCase";
 import { UpdateAnimalUseCase } from "./useCases/Edit.useCase";
 import {
   AnimalPatchBody,
@@ -106,4 +109,36 @@ export const animalsController = new Elysia({ prefix: "/animals" })
       return weighing;
     },
     { farm: true, body: WeighingBody }
+  )
+  .patch(
+    "/:id/weighings/:weighingId",
+    async ({ farmId, params, body, status }) => {
+      if (body.date > todayISO()) return status(422, { error: "future_date" });
+      const weighingId = Number(params.weighingId);
+      const result = Number.isInteger(weighingId)
+        ? await new EditWeighingUseCase().run({
+            farmId,
+            animalId: params.id,
+            weighingId,
+            input: body,
+          })
+        : null;
+      if (result === null) return status(404, { error: "weighing_not_found" });
+      if (result === "weighing_from_manejo") return status(409, { error: result });
+      return result;
+    },
+    { farm: true, body: WeighingBody }
+  )
+  .delete(
+    "/:id/weighings/:weighingId",
+    async ({ farmId, params, status }) => {
+      const weighingId = Number(params.weighingId);
+      const result = Number.isInteger(weighingId)
+        ? await new RemoveWeighingUseCase().run({ farmId, animalId: params.id, weighingId })
+        : null;
+      if (result === null) return status(404, { error: "weighing_not_found" });
+      if (result === "weighing_from_manejo") return status(409, { error: result });
+      return result;
+    },
+    { farm: true }
   );

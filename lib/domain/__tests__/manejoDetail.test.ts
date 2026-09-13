@@ -15,6 +15,7 @@ import {
   treatmentLines,
   treatmentTotals,
   visibleLines,
+  weighingSessions,
   weighingTotals,
   type DetailLine,
 } from "@/lib/domain/manejoDetail";
@@ -303,5 +304,40 @@ describe("passedLabel", () => {
     expect(passedLabel(session({ kind: "entry" }))).toBe("recebidas");
     expect(passedLabel(session({ kind: "sale" }))).toBe("vendidas");
     expect(passedLabel(session({ kind: "insemination" }))).toBe("inseminadas");
+  });
+});
+
+describe("weighingSessions", () => {
+  it("maps each weighing a pass wrote to its session", () => {
+    const venda = session({
+      id: "s-venda",
+      kind: "sale",
+      animals: [
+        { earTag: "BR-0700", outcome: "done", weightKg: 500, weighingId: 8 },
+        { earTag: "BR-0701", outcome: "done", weightKg: 480, weighingId: 9 },
+      ],
+    });
+    const pesagem = session({
+      id: "s-pesagem",
+      animals: [{ earTag: "BR-0588", outcome: "done", weightKg: 341, weighingId: 7 }],
+    });
+
+    const bySession = weighingSessions([venda, pesagem]);
+    expect(bySession.get(8)?.id).toBe("s-venda");
+    expect(bySession.get(9)?.id).toBe("s-venda");
+    expect(bySession.get(7)?.id).toBe("s-pesagem");
+  });
+
+  it("leaves out the passes that weighed nothing", () => {
+    const vacina = session({
+      kind: "health",
+      weighing: false,
+      animals: [
+        { earTag: "BR-0700", outcome: "done" },
+        { earTag: "BR-0701", outcome: "skipped" },
+      ],
+    });
+
+    expect(weighingSessions([vacina]).size).toBe(0);
   });
 });

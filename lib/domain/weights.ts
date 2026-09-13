@@ -1,7 +1,7 @@
 /**
  * Herd weight calculations.
  */
-import type { Animal } from "@/lib/types";
+import type { Animal, Weighing } from "@/lib/types";
 import { formatArroba, formatKg } from "@/lib/domain/format";
 
 /** Kilograms per arroba (Brazilian beef cattle standard). */
@@ -56,4 +56,22 @@ export function totalWeightKg(animals: Animal[]): number {
   return animals
     .filter((a) => a.active)
     .reduce((total, a) => total + (currentWeight(a) ?? 0), 0);
+}
+
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * What is wrong with a weighing typed for an animal, or null when it can be
+ * saved: a weight above zero, dated no earlier than the birth and no later than
+ * today.
+ */
+export function weighingError(
+  { date, weightKg }: Weighing,
+  { birthDate, todayIso }: { birthDate: string; todayIso: string }
+): string | null {
+  if (!ISO_DATE_PATTERN.test(date)) return "Informe uma data válida.";
+  if (!Number.isFinite(weightKg) || weightKg <= 0) return "Informe um peso maior que zero.";
+  if (date > todayIso) return "A pesagem não pode ser no futuro.";
+  if (date < birthDate) return "A pesagem não pode ser anterior ao nascimento do animal.";
+  return null;
 }

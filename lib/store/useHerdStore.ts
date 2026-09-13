@@ -280,6 +280,14 @@ export interface HerdStore extends HerdData {
   recordWeighing: (earTag: string, w: Weighing) => Promise<void>;
   /** Deletes the weight readings of one day (a "Pesagem" row of the history). */
   deleteWeighingGroup: (date: string, earTags: string[]) => Promise<number>;
+  /**
+   * Corrects one weighing of an animal. A weighing a manejo wrote keeps the
+   * session's day; its kg, and the value of a venda priced by the arroba, reach
+   * that session's entry too.
+   */
+  editWeighing: (earTag: string, weighingId: number, w: Weighing) => Promise<void>;
+  /** Removes one weighing no manejo wrote (a manejo's goes by reopening the animal). */
+  removeWeighing: (earTag: string, weighingId: number) => Promise<void>;
   addBreed: (name: string) => Promise<void>;
   /** Removes the breed via the API; false when an active animal uses it. */
   removeBreed: (name: string) => Promise<boolean>;
@@ -988,6 +996,64 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       ),
     }));
     return (data as { count: number }).count;
+  },
+
+  editWeighing: async (earTag, weighingId, w) => {
+    const id = animalIdByEarTag(get().animals, earTag);
+    const { data, error } = await api.animals({ id }).weighings({ weighingId }).patch(w);
+    if (error) apiFail("corrigir a pesagem", error);
+    const result = data as {
+      weighing: Weighing;
+      manejo: { sessionId: string; weightKg: number; amountBrl?: number } | null;
+    };
+    const manejo = result.manejo;
+    set((s) => ({
+      animals: s.animals.map((a) =>
+        a.earTag === earTag
+          ? {
+              ...a,
+              weighings: a.weighings
+                .map((existing) => (existing.id === weighingId ? result.weighing : existing))
+                .sort(compareByDate),
+            }
+          : a
+      ),
+      ...(manejo
+        ? {
+            manejoSessions: s.manejoSessions.map((m) =>
+              m.id === manejo.sessionId
+                ? {
+                    ...m,
+                    animals: m.animals.map((entry) =>
+                      entry.weighingId === weighingId
+                        ? {
+                            ...entry,
+                            weightKg: manejo.weightKg,
+                            ...(manejo.amountBrl !== undefined
+                              ? { amountBrl: manejo.amountBrl }
+                              : {}),
+                          }
+                        : entry
+                    ),
+                  }
+                : m
+            ),
+          }
+        : {}),
+    }));
+  },
+
+  removeWeighing: async (earTag, weighingId) => {
+    const id = animalIdByEarTag(get().animals, earTag);
+    const { error } = await api.animals({ id }).weighings({ weighingId }).delete();
+    if (error) apiFail("excluir a pesagem", error);
+    set((s) => ({
+      animals: s.animals.map((a) =>
+        a.earTag === earTag
+          ? { ...a, weighings: a.weighings.filter((w) => w.id !== weighingId) }
+          : a
+      ),
+    }));
   },
 
   addBreed: async (name) => {
