@@ -10,11 +10,16 @@
  * The stock is derived from the store on every render (lib/domain/semen.ts),
  * never read from a counter: a cobertura recorded anywhere in the app shows up
  * here at once.
+ *
+ * "Novo touro" needs Reprodução edit; "Registrar compra" writes an expense, so
+ * it needs Financeiro edit on top, and the cost per dose shows only to whoever
+ * sees Financeiro.
  */
 import { useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import { Dna } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { formatDate } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
 import { bullStock } from "@/lib/domain/semen";
@@ -53,6 +58,10 @@ function identityLine(code?: string, breed?: string, central?: string): ReactNod
 export function SemenBullsList() {
   const semenBulls = useHerdStore((s) => s.semenBulls);
   const animals = useHerdStore((s) => s.animals);
+  const canEdit = useCan("reproduction", "edit");
+  const canEditFinance = useCan("finance", "edit");
+  const seeMoney = useCan("finance", "view");
+  const canBuy = canEdit && canEditFinance;
   // A bull registered here is appended unsorted; the list reads by name.
   const rows = useMemo(
     () =>
@@ -65,7 +74,7 @@ export function SemenBullsList() {
   return (
     <SectionCard
       title="Touros"
-      action={rows.length > 0 ? <SemenBullDialog /> : null}
+      action={rows.length > 0 && canEdit ? <SemenBullDialog /> : null}
     >
       {rows.length === 0 ? (
         <div className="pb-6">
@@ -74,9 +83,11 @@ export function SemenBullsList() {
             title="Nenhum touro cadastrado"
             description="Cadastre os touros de que você compra sêmen para controlar o estoque de doses."
           />
-          <div className="flex justify-center">
-            <SemenBullDialog />
-          </div>
+          {canEdit ? (
+            <div className="flex justify-center">
+              <SemenBullDialog />
+            </div>
+          ) : null}
         </div>
       ) : (
         <>
@@ -90,11 +101,15 @@ export function SemenBullsList() {
                   <TableHead>Central</TableHead>
                   <TableHead>Em estoque</TableHead>
                   <TableHead className="text-right">Usadas / compradas</TableHead>
-                  <TableHead className="text-right">Custo médio por dose</TableHead>
+                  {seeMoney ? (
+                    <TableHead className="text-right">Custo médio por dose</TableHead>
+                  ) : null}
                   <TableHead>Última compra</TableHead>
-                  <TableHead className="text-right">
-                    <span className="sr-only">Ações</span>
-                  </TableHead>
+                  {canBuy ? (
+                    <TableHead className="text-right">
+                      <span className="sr-only">Ações</span>
+                    </TableHead>
+                  ) : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -116,15 +131,19 @@ export function SemenBullsList() {
                     <TableCell className="text-right font-mono text-ink">
                       {formatNumber(stock.used)} de {formatNumber(stock.bought)}
                     </TableCell>
-                    <TableCell className="text-right font-mono text-ink">
-                      {stock.avgCostPerDose === null ? "—" : formatCurrency(stock.avgCostPerDose)}
-                    </TableCell>
+                    {seeMoney ? (
+                      <TableCell className="text-right font-mono text-ink">
+                        {stock.avgCostPerDose === null ? "—" : formatCurrency(stock.avgCostPerDose)}
+                      </TableCell>
+                    ) : null}
                     <TableCell className="font-mono text-ink">
                       {stock.lastPurchase === null ? "—" : formatDate(stock.lastPurchase)}
                     </TableCell>
-                    <TableCell className="text-right">
-                      <SemenPurchaseDialog bull={bull} variant="row" />
-                    </TableCell>
+                    {canBuy ? (
+                      <TableCell className="text-right">
+                        <SemenPurchaseDialog bull={bull} variant="row" />
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))}
               </TableBody>
@@ -151,7 +170,7 @@ export function SemenBullsList() {
                     <span className="font-mono text-ink">
                       {formatNumber(stock.used)} de {formatNumber(stock.bought)}
                     </span>
-                    {stock.avgCostPerDose === null ? null : (
+                    {!seeMoney || stock.avgCostPerDose === null ? null : (
                       <>
                         {" · "}
                         <span className="font-mono text-ink">
@@ -167,7 +186,7 @@ export function SemenBullsList() {
                       <span className="font-mono text-ink">{formatDate(stock.lastPurchase)}</span>
                     </p>
                   )}
-                  <SemenPurchaseDialog bull={bull} variant="card" />
+                  {canBuy ? <SemenPurchaseDialog bull={bull} variant="card" /> : null}
                 </li>
               );
             })}

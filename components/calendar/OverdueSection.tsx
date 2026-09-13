@@ -11,6 +11,7 @@ import { SectionCard } from "@/components/ui/section-card";
 import { StatusDot } from "@/components/ui/status-dot";
 import { daysAgoLabel, groupTreatments } from "@/components/calendar/helpers";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 
 interface OverdueSectionProps {
   overdue: Treatment[];
@@ -29,6 +30,7 @@ export function OverdueSection({
   onDeleteGroup,
 }: OverdueSectionProps) {
   const animals = useHerdStore((state) => state.animals);
+  const canEdit = useCan("sanitary", "edit");
   const animalIdsByEarTag = new Map(animals.map((animal) => [animal.earTag, animal.id]));
   const groups = groupTreatments(overdue);
 
@@ -88,23 +90,27 @@ export function OverdueSection({
                     </p>
                     {animalLink(first)}
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="min-h-11 md:min-h-0"
-                    onClick={() => onMarkDone(first.id)}
-                  >
-                    Marcar como feito
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Excluir tratamento"
-                    className="size-11 shrink-0 text-ink-soft hover:text-overdue md:size-9"
-                    onClick={() => onDelete(first)}
-                  >
-                    <Trash2 className="size-4" aria-hidden />
-                  </Button>
+                  {canEdit ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="min-h-11 md:min-h-0"
+                        onClick={() => onMarkDone(first.id)}
+                      >
+                        Marcar como feito
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Excluir tratamento"
+                        className="size-11 shrink-0 text-ink-soft hover:text-overdue md:size-9"
+                        onClick={() => onDelete(first)}
+                      >
+                        <Trash2 className="size-4" aria-hidden />
+                      </Button>
+                    </>
+                  ) : null}
                 </li>
               );
             }
@@ -119,37 +125,43 @@ export function OverdueSection({
                       {group.treatments.length} animais
                     </span>
                   </p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="min-h-11 text-ink-soft hover:text-overdue md:min-h-0"
-                    onClick={() => onDeleteGroup(first)}
-                  >
-                    <Trash2 data-icon="inline-start" aria-hidden />
-                    Excluir todos
-                  </Button>
+                  {canEdit ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="min-h-11 text-ink-soft hover:text-overdue md:min-h-0"
+                      onClick={() => onDeleteGroup(first)}
+                    >
+                      <Trash2 data-icon="inline-start" aria-hidden />
+                      Excluir todos
+                    </Button>
+                  ) : null}
                 </div>
                 <ul className="mt-1 divide-y divide-hairline border-l border-hairline pl-3">
                   {group.treatments.map((t) => (
                     <li key={t.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2">
                       <span className="min-w-0 flex-1">{animalLink(t)}</span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="min-h-11 md:min-h-0"
-                        onClick={() => onMarkDone(t.id)}
-                      >
-                        Marcar como feito
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Excluir tratamento deste animal"
-                        className="size-11 shrink-0 text-ink-soft hover:text-overdue md:size-9"
-                        onClick={() => onDelete(t)}
-                      >
-                        <Trash2 className="size-4" aria-hidden />
-                      </Button>
+                      {canEdit ? (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="min-h-11 md:min-h-0"
+                            onClick={() => onMarkDone(t.id)}
+                          >
+                            Marcar como feito
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Excluir tratamento deste animal"
+                            className="size-11 shrink-0 text-ink-soft hover:text-overdue md:size-9"
+                            onClick={() => onDelete(t)}
+                          >
+                            <Trash2 className="size-4" aria-hidden />
+                          </Button>
+                        </>
+                      ) : null}
                     </li>
                   ))}
                 </ul>

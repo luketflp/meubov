@@ -12,6 +12,8 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ClipboardX, Search, Trash2 } from "lucide-react";
 import type { Animal, ManejoSession } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useActivePermissions } from "@/lib/store/usePermissions";
+import { canDeleteSession } from "@/lib/domain/moneyRedaction";
 import { formatDate } from "@/lib/domain/dates";
 import { formatNumber } from "@/lib/domain/format";
 import { animalCategoryName } from "@/lib/domain/labels";
@@ -142,6 +144,8 @@ interface DetailHeaderProps {
 export function DetailHeader({ title, action, subtitle, session }: DetailHeaderProps) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
+  const permissions = useActivePermissions();
+  const deletable = session !== undefined && canDeleteSession(permissions, session);
   return (
     <>
       <PageHeader
@@ -150,7 +154,7 @@ export function DetailHeader({ title, action, subtitle, session }: DetailHeaderP
         subtitle={subtitle}
         actions={
           <div className="flex flex-wrap items-center gap-3">
-            {session ? (
+            {deletable ? (
               <Button
                 type="button"
                 variant="ghost"

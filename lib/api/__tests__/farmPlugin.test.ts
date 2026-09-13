@@ -1,17 +1,22 @@
 /**
- * farmPlugin resolution: membership scoping plus the SUPERUSER_EMAILS bypass.
+ * farmPlugin resolution: membership scoping, the SUPERUSER_EMAILS bypass, the
+ * route's permission requirement and the pending-convite stop.
  *
  * The db mock is a chainable select stub: `from()` captures the table, and
- * `limit()` resolves with the farm_users or farm fixture depending on which
- * table the query targeted (farm_users is recognized by its userId column).
+ * `limit()` resolves with the farm_invites, farm_users or farm fixture
+ * depending on which table the query targeted (recognized by a column only
+ * that table has). The test app mounts under /api/herd so its routes hit real
+ * keys of ROUTE_REQUIREMENTS.
  */
 import { Elysia } from "elysia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FULL_PERMISSIONS, PRESETS } from "@/lib/domain/permissions";
 
 const { state, getSession, ensureFarmForUser } = vi.hoisted(() => ({
   state: {
     farmUsersRows: [] as Record<string, unknown>[],
     farmRows: [] as Record<string, unknown>[],
+    inviteRows: [] as Record<string, unknown>[],
   },
   getSession: vi.fn(),
   ensureFarmForUser: vi.fn(),
@@ -39,9 +44,9 @@ vi.mock("@/lib/db", () => ({
           return builder;
         },
         limit() {
-          return Promise.resolve(
-            table && "userId" in table ? state.farmUsersRows : state.farmRows
-          );
+          if (table && "expiresAt" in table) return Promise.resolve(state.inviteRows);
+          if (table && "userId" in table) return Promise.resolve(state.farmUsersRows);
+          return Promise.resolve(state.farmRows);
         },
       };
       return builder;
@@ -52,10 +57,10 @@ vi.mock("@/lib/db", () => ({
 import { farmPlugin } from "@/lib/api/plugins/farm";
 
 const SUPER_EMAIL = "super@meubov.test";
-const app = new Elysia()
+const app = new Elysia({ prefix: "/api/herd" })
   .use(farmPlugin)
   .get(
-    "/whoami",
+    "/health",
     ({ user, farmId, farmRole, superuser }) => ({
       userId: user.id,
       farmId,
@@ -63,10 +68,15 @@ const app = new Elysia()
       superuser,
     }),
     { farm: true }
-  );
+  )
+  .get("/farms", ({ preset, permissions }) => ({ preset, permissions }), { farm: true })
+  .post("/animals", () => ({ ok: true }), { farm: true })
+  .get("/unlisted", () => ({ ok: true }), { farm: true });
 
-const whoami = (headers: Record<string, string> = {}) =>
-  app.handle(new Request("http://localhost/whoami", { headers }));
+const call = (path: string, init: RequestInit = {}) =>
+  app.handle(new Request(`http://localhost/api/herd${path}`, init));
+
+const whoami = (headers: Record<string, string> = {}) => call("/health", { headers });
 
 function signIn(email: string) {
   getSession.mockResolvedValue({ user: { id: "user-1", email } });
@@ -77,6 +87,7 @@ describe("farmPlugin", () => {
     vi.stubEnv("SUPERUSER_EMAILS", SUPER_EMAIL);
     state.farmUsersRows = [];
     state.farmRows = [];
+    state.inviteRows = [];
     getSession.mockReset();
     ensureFarmForUser.mockReset();
   });
@@ -100,7 +111,7 @@ describe("farmPlugin", () => {
 
   it("keeps membership access working with a header (regression)", async () => {
     signIn("user@meubov.test");
-    state.farmUsersRows = [{ role: "member" }];
+    state.farmUsersRows = [{ role: "member", preset: null, permissions: null }];
     const response = await whoami({ "x-farm-id": "7" });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
@@ -141,7 +152,7 @@ describe("farmPlugin", () => {
 
   it("prefers the superuser's own membership when no header is sent", async () => {
     signIn(SUPER_EMAIL);
-    state.farmUsersRows = [{ farmId: 7, role: "member" }];
+    state.farmUsersRows = [{ farmId: 7, role: "member", preset: null, permissions: null }];
     state.farmRows = [{ id: 1 }];
     const response = await whoami();
     expect(response.status).toBe(200);
@@ -180,5 +191,64 @@ describe("farmPlugin", () => {
       superuser: true,
     });
     expect(ensureFarmForUser).toHaveBeenCalledWith("user-1");
+  });
+
+  it("lazily creates a farm for a user with no membership and no convite", async () => {
+    signIn("user@meubov.test");
+    ensureFarmForUser.mockResolvedValue(12);
+    const response = await whoami();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      userId: "user-1",
+      farmId: 12,
+      farmRole: "owner",
+      superuser: false,
+    });
+  });
+
+  it("stops a user with a pending convite before any farm is created", async () => {
+    signIn("user@meubov.test");
+    state.inviteRows = [{ id: 5 }];
+    const response = await whoami();
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "pending_invites" });
+    expect(ensureFarmForUser).not.toHaveBeenCalled();
+  });
+
+  it("puts a member's stored preset and levels on the context", async () => {
+    signIn("user@meubov.test");
+    state.farmUsersRows = [{ role: "member", preset: "consultor", permissions: PRESETS.consultor }];
+    const response = await call("/farms", { headers: { "x-farm-id": "7" } });
+    expect(await response.json()).toEqual({ preset: "consultor", permissions: PRESETS.consultor });
+  });
+
+  it("gives the Dono every area", async () => {
+    signIn("user@meubov.test");
+    state.farmUsersRows = [{ role: "owner", preset: null, permissions: null }];
+    const response = await call("/farms", { headers: { "x-farm-id": "7" } });
+    expect(await response.json()).toEqual({ preset: null, permissions: FULL_PERMISSIONS });
+  });
+
+  it("refuses an edit route to a member below its level", async () => {
+    signIn("user@meubov.test");
+    state.farmUsersRows = [{ role: "member", preset: "consultor", permissions: PRESETS.consultor }];
+    const response = await call("/animals", { method: "POST", headers: { "x-farm-id": "7" } });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "forbidden", area: "herd" });
+  });
+
+  it("lets a member with the level through", async () => {
+    signIn("user@meubov.test");
+    state.farmUsersRows = [{ role: "member", preset: "vaqueiro", permissions: PRESETS.vaqueiro }];
+    const response = await call("/animals", { method: "POST", headers: { "x-farm-id": "7" } });
+    expect(response.status).toBe(200);
+  });
+
+  it("refuses a route missing from the requirements table", async () => {
+    signIn("user@meubov.test");
+    state.farmUsersRows = [{ role: "owner", preset: null, permissions: null }];
+    const response = await call("/unlisted", { headers: { "x-farm-id": "7" } });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "forbidden", area: null });
   });
 });

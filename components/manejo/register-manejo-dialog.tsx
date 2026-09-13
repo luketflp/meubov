@@ -14,6 +14,7 @@ import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Play, Search } from "lucide-react";
 import { useHerdStore, type NewManejoSession } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { useToast } from "@/components/providers/Toasts";
 import {
   activeAnimals,
@@ -221,6 +222,12 @@ export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoD
   const sanitary = isSanitaryAction(fields.action);
   const moves = isMovementAction(fields.action);
   const inseminates = fields.action === "insemination";
+  // A venda, an entrada and the plan's cost are money: without Financeiro edit
+  // the dialog offers none of them, since the server would refuse the start.
+  const canEditFinance = useCan("finance", "edit");
+  const actionList = canEditFinance
+    ? MANEJO_ACTION_LIST
+    : MANEJO_ACTION_LIST.filter((action) => action !== "sale" && action !== "entry");
   const destinationLots = useMemo(
     () => currentlyPlacedLots(lots, lotPlacements),
     [lots, lotPlacements]
@@ -383,13 +390,18 @@ export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoD
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {MANEJO_ACTION_LIST.map((action) => (
+                    {actionList.map((action) => (
                       <SelectItem key={action} value={action}>
                         {MANEJO_ACTION_LABEL[action]}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {canEditFinance ? null : (
+                  <p className="text-xs text-ink-soft">
+                    Venda e entrada (compra) ficam com quem cuida do financeiro.
+                  </p>
+                )}
               </div>
             ) : null}
 
@@ -633,7 +645,7 @@ export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoD
                 <ErrorMessage message={errors.withdrawalDays} />
               </div>
 
-              <div className="grid gap-1.5">
+              <div className={cn("grid gap-1.5", !canEditFinance && "sm:col-span-2")}>
                 <Label htmlFor="manejo-responsible">Responsável (opcional)</Label>
                 <Input
                   id="manejo-responsible"
@@ -644,21 +656,23 @@ export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoD
                 />
               </div>
 
-              <div className="grid gap-1.5">
-                <Label htmlFor="manejo-cost">Custo por animal (R$, opcional)</Label>
-                <Input
-                  id="manejo-cost"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  inputMode="decimal"
-                  value={fields.costBrl}
-                  onChange={(e) => setFields((f) => ({ ...f, costBrl: e.target.value }))}
-                  aria-invalid={errors.costBrl ? true : undefined}
-                  className="min-h-11 font-mono"
-                />
-                <ErrorMessage message={errors.costBrl} />
-              </div>
+              {canEditFinance ? (
+                <div className="grid gap-1.5">
+                  <Label htmlFor="manejo-cost">Custo por animal (R$, opcional)</Label>
+                  <Input
+                    id="manejo-cost"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    inputMode="decimal"
+                    value={fields.costBrl}
+                    onChange={(e) => setFields((f) => ({ ...f, costBrl: e.target.value }))}
+                    aria-invalid={errors.costBrl ? true : undefined}
+                    className="min-h-11 font-mono"
+                  />
+                  <ErrorMessage message={errors.costBrl} />
+                </div>
+              ) : null}
 
               <div className="grid gap-1.5 sm:col-span-2">
                 <Label htmlFor="manejo-next">Próxima aplicação (opcional)</Label>

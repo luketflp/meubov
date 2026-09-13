@@ -11,6 +11,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { invernadasWithSummary } from "@/lib/store/selectors";
 import type { StockingRateClass } from "@/lib/types";
 import {
@@ -36,6 +37,7 @@ export default function MapPage() {
   const animals = useHerdStore((s) => s.animals);
   const farm = useHerdStore((s) => s.farm);
   const updateInvernada = useHerdStore((s) => s.updateInvernada);
+  const canEditLots = useCan("lots", "edit");
   const { selectedId, setSelectedId, skipped, guideDismissed, dismissGuide } =
     useMapFlow();
   const [clearing, setClearing] = useState(false);
@@ -46,7 +48,9 @@ export default function MapPage() {
   );
   const selected = summaries.find((s) => s.invernada.id === selectedId) ?? null;
 
-  const step = nextStep(farm, invernadas, skipped);
+  // The guide only leads into the setup pages, which only write: a reader gets
+  // no step, so neither GuidePanel nor GuidePill renders.
+  const step = canEditLots ? nextStep(farm, invernadas, skipped) : null;
   const remaining = pendingSteps(farm, invernadas, skipped).filter(
     (pending) => pending.kind !== "headquarters"
   ).length;
@@ -97,10 +101,13 @@ export default function MapPage() {
         <InvernadaSheet
           summary={selected}
           busy={clearing}
-          onRedraw={() =>
-            router.push(stepHref({ kind: "invernada", invernadaId: selected.invernada.id }))
+          onRedraw={
+            canEditLots
+              ? () =>
+                  router.push(stepHref({ kind: "invernada", invernadaId: selected.invernada.id }))
+              : undefined
           }
-          onClearBoundary={onClearBoundary}
+          onClearBoundary={canEditLots ? onClearBoundary : undefined}
           onClose={() => setSelectedId(null)}
         />
       ) : step === null ? null : guideDismissed ? (

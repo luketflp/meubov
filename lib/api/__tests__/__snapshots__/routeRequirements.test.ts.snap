@@ -1,0 +1,270 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
+{
+  "DELETE /api/herd/animals/:id/diagnoses/:breedingId": {
+    "edit": [
+      "reproduction",
+    ],
+  },
+  "DELETE /api/herd/breeds/:name": {
+    "edit": [
+      "herd",
+    ],
+  },
+  "DELETE /api/herd/categories/:id": {
+    "edit": [
+      "herd",
+    ],
+  },
+  "DELETE /api/herd/expenses/:id": {
+    "edit": [
+      "finance",
+    ],
+  },
+  "DELETE /api/herd/farm/invites/:id": {
+    "edit": [
+      "team",
+    ],
+  },
+  "DELETE /api/herd/farm/members/:userId": {
+    "edit": [
+      "team",
+    ],
+  },
+  "DELETE /api/herd/invernadas/:id": {
+    "edit": [
+      "lots",
+    ],
+  },
+  "DELETE /api/herd/lots/:id": {
+    "edit": [
+      "lots",
+    ],
+  },
+  "DELETE /api/herd/manejo/:id": {
+    "edit": [
+      "manejo",
+    ],
+  },
+  "DELETE /api/herd/protocols/:id": {
+    "edit": [
+      "sanitary",
+    ],
+  },
+  "DELETE /api/herd/semen-bulls/:id/purchases/:purchaseId": {
+    "edit": [
+      "reproduction",
+      "finance",
+    ],
+  },
+  "DELETE /api/herd/treatments/:id": {
+    "edit": [
+      "sanitary",
+    ],
+  },
+  "DELETE /api/herd/weighings": {
+    "edit": [
+      "herd",
+    ],
+  },
+  "GET /api/herd": {
+    "read": true,
+  },
+  "GET /api/herd/farm/team": {
+    "view": "team",
+  },
+  "GET /api/herd/farms": {
+    "read": true,
+  },
+  "GET /api/herd/health": {
+    "read": true,
+  },
+  "PATCH /api/herd/animals/:id": {
+    "edit": [
+      "herd",
+    ],
+  },
+  "PATCH /api/herd/farm/members/:userId": {
+    "edit": [
+      "team",
+    ],
+  },
+  "PATCH /api/herd/invernadas/:id": {
+    "edit": [
+      "lots",
+    ],
+  },
+  "PATCH /api/herd/lots/:id": {
+    "edit": [
+      "lots",
+    ],
+  },
+  "PATCH /api/herd/semen-bulls/:id": {
+    "edit": [
+      "reproduction",
+    ],
+  },
+  "POST /api/herd/animals": {
+    "edit": [
+      "herd",
+    ],
+  },
+  "POST /api/herd/animals/:id/breedings": {
+    "edit": [
+      "reproduction",
+    ],
+  },
+  "POST /api/herd/animals/:id/calvings": {
+    "edit": [
+      "reproduction",
+    ],
+  },
+  "POST /api/herd/animals/:id/deactivate": {
+    "edit": [
+      "herd",
+    ],
+  },
+  "POST /api/herd/animals/:id/diagnoses": {
+    "edit": [
+      "reproduction",
+    ],
+  },
+  "POST /api/herd/animals/:id/weighings": {
+    "edit": [
+      "herd",
+    ],
+  },
+  "POST /api/herd/animals/batch": {
+    "edit": [
+      "herd",
+    ],
+  },
+  "POST /api/herd/animals/import": {
+    "edit": [
+      "herd",
+      "lots",
+    ],
+  },
+  "POST /api/herd/births/import": {
+    "edit": [
+      "reproduction",
+    ],
+  },
+  "POST /api/herd/breeds": {
+    "edit": [
+      "herd",
+    ],
+  },
+  "POST /api/herd/categories": {
+    "edit": [
+      "herd",
+    ],
+  },
+  "POST /api/herd/expenses": {
+    "edit": [
+      "finance",
+    ],
+  },
+  "POST /api/herd/farm/invites": {
+    "edit": [
+      "team",
+    ],
+  },
+  "POST /api/herd/farm/leave": {
+    "read": true,
+  },
+  "POST /api/herd/invernadas": {
+    "edit": [
+      "lots",
+    ],
+  },
+  "POST /api/herd/lots": {
+    "edit": [
+      "lots",
+    ],
+  },
+  "POST /api/herd/lots/:id/archive": {
+    "edit": [
+      "lots",
+    ],
+  },
+  "POST /api/herd/lots/:id/placements": {
+    "edit": [
+      "lots",
+    ],
+  },
+  "POST /api/herd/manejo": {
+    "edit": [
+      "manejo",
+    ],
+  },
+  "POST /api/herd/manejo/:id/animals": {
+    "edit": [
+      "manejo",
+    ],
+  },
+  "POST /api/herd/manejo/:id/animals/:animalId/complete": {
+    "edit": [
+      "manejo",
+    ],
+  },
+  "POST /api/herd/manejo/:id/animals/:animalId/reopen": {
+    "edit": [
+      "manejo",
+    ],
+  },
+  "POST /api/herd/manejo/:id/animals/:animalId/skip": {
+    "edit": [
+      "manejo",
+    ],
+  },
+  "POST /api/herd/manejo/:id/carcass-yield": {
+    "edit": [
+      "manejo",
+      "finance",
+    ],
+  },
+  "POST /api/herd/manejo/:id/close": {
+    "edit": [
+      "manejo",
+    ],
+  },
+  "POST /api/herd/protocols": {
+    "edit": [
+      "sanitary",
+    ],
+  },
+  "POST /api/herd/semen-bulls": {
+    "edit": [
+      "reproduction",
+    ],
+  },
+  "POST /api/herd/semen-bulls/:id/purchases": {
+    "edit": [
+      "reproduction",
+      "finance",
+    ],
+  },
+  "POST /api/herd/treatments/complete": {
+    "edit": [
+      "sanitary",
+    ],
+  },
+  "POST /api/herd/treatments/schedule": {
+    "edit": [
+      "sanitary",
+    ],
+  },
+  "PUT /api/herd/farm": {
+    "edit": [
+      "farm",
+    ],
+  },
+  "PUT /api/herd/farm/headquarters": {
+    "edit": [
+      "lots",
+    ],
+  },
+}
+`;

@@ -12,12 +12,14 @@ import { use } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
 import { BreedingsList } from "@/components/breedings/breedings-list";
 import { RegisterBreedingDialog } from "@/components/breedings/register-breeding-dialog";
 import { ReproductionTabs, reproductionTab } from "@/components/breedings/reproduction-tabs";
 import { StartInseminationButton } from "@/components/breedings/start-insemination-button";
 import { UltrasoundList } from "@/components/breedings/ultrasound-list";
 import { SemenBullsList } from "@/components/semen/semen-bulls-list";
+import { useCan } from "@/lib/store/usePermissions";
 
 interface ReproducaoPageProps {
   searchParams: Promise<{ tab?: string | string[] }>;
@@ -37,6 +39,9 @@ function BackLink() {
 
 export default function ReproducaoPage({ searchParams }: ReproducaoPageProps) {
   const activeTab = reproductionTab(use(searchParams).tab);
+  const canEdit = useCan("reproduction", "edit");
+  // The inseminação is a manejo: starting one is a Manejo write.
+  const canStartInsemination = useCan("manejo", "edit");
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 md:px-8">
@@ -44,11 +49,14 @@ export default function ReproducaoPage({ searchParams }: ReproducaoPageProps) {
       <PageHeader
         title="Reprodução"
         subtitle="Coberturas das matrizes, o sêmen em estoque e o diagnóstico de prenhez"
+        badges={canEdit ? undefined : <ReadOnlyPill />}
         actions={
-          <>
-            <RegisterBreedingDialog variant="outline" />
-            <StartInseminationButton />
-          </>
+          canEdit || canStartInsemination ? (
+            <>
+              {canEdit ? <RegisterBreedingDialog variant="outline" /> : null}
+              {canStartInsemination ? <StartInseminationButton /> : null}
+            </>
+          ) : undefined
         }
       />
       <ReproductionTabs active={activeTab} />

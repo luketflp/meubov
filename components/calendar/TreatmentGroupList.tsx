@@ -4,6 +4,7 @@ import { Trash2 } from "lucide-react";
 import type { Treatment } from "@/lib/types";
 import { todayISO } from "@/lib/domain/dates";
 import { deriveTreatmentStatus, isFootAndMouth } from "@/lib/domain/status";
+import { useCan } from "@/lib/store/usePermissions";
 import { Button } from "@/components/ui/button";
 import { StatusDot } from "@/components/ui/status-dot";
 import { TreatmentRow } from "@/components/calendar/TreatmentRow";
@@ -32,6 +33,7 @@ export function TreatmentGroupList({
   onDeleteGroup,
   className,
 }: TreatmentGroupListProps) {
+  const canEdit = useCan("sanitary", "edit");
   const groups = groupTreatments(treatments);
 
   return (
@@ -59,15 +61,17 @@ export function TreatmentGroupList({
                   {TYPE_LABEL[first.type]} · {group.treatments.length} animais
                 </span>
               </p>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="min-h-11 text-ink-soft hover:text-overdue md:min-h-0"
-                onClick={() => onDeleteGroup(first)}
-              >
-                <Trash2 data-icon="inline-start" aria-hidden />
-                Excluir todos
-              </Button>
+              {canEdit ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="min-h-11 text-ink-soft hover:text-overdue md:min-h-0"
+                  onClick={() => onDeleteGroup(first)}
+                >
+                  <Trash2 data-icon="inline-start" aria-hidden />
+                  Excluir todos
+                </Button>
+              ) : null}
             </div>
             <ul className="mt-1 divide-y divide-hairline border-l border-hairline pl-3">
               {group.treatments.map((t) => (

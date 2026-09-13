@@ -4,6 +4,17 @@ import { Fragment, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Ellipsis, LogOut } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { roleLabel } from "@/lib/domain/permissions";
+import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useActivePermissions } from "@/lib/store/usePermissions";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +24,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useSignOut } from "@/lib/auth/navigation";
-import { NAV_ITEMS, type NavItem, activeChild, isActiveRoute } from "@/lib/nav";
+import { NAV_ITEMS, type NavItem, activeChild, isActiveRoute, visibleNav } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
 /**
@@ -33,9 +44,6 @@ function tabLabel(item: NavItem): string {
   return SHORT_LABELS[item.href] ?? item.label;
 }
 
-const tabs = NAV_ITEMS.slice(0, PRIMARY_TAB_COUNT);
-const moreLinks = NAV_ITEMS.slice(PRIMARY_TAB_COUNT);
-
 const tabClass =
   "flex min-h-11 min-w-11 flex-1 flex-col items-center justify-center gap-0.5 py-1.5";
 
@@ -46,6 +54,13 @@ export function MobileTabBar() {
   const pathname = usePathname();
   const signOut = useSignOut();
   const [moreOpen, setMoreOpen] = useState(false);
+  const farms = useHerdStore((s) => s.farms);
+  const activeFarmId = useHerdStore((s) => s.activeFarmId);
+  const switchFarm = useHerdStore((s) => s.switchFarm);
+  const activeFarm = farms.find((farm) => farm.id === activeFarmId);
+  const items = visibleNav(NAV_ITEMS, useActivePermissions());
+  const tabs = items.slice(0, PRIMARY_TAB_COUNT);
+  const moreLinks = items.slice(PRIMARY_TAB_COUNT);
   const moreActive = moreLinks.some(
     (link) => isActiveRoute(pathname, link.href) || activeChild(pathname, link) !== null
   );
@@ -88,9 +103,38 @@ export function MobileTabBar() {
               <DialogTitle className="font-heading">Mais opções</DialogTitle>
               <DialogDescription>Outras áreas do MeuBov</DialogDescription>
             </DialogHeader>
+            {/* The sidebar's switcher, for the phone: a vaqueiro may belong to two farms. */}
+            {farms.length > 1 ? (
+              <div className="grid gap-1.5 border-b border-hairline pb-3">
+                <Label htmlFor="mobile-farm">Fazenda</Label>
+                <Select
+                  value={activeFarmId === null ? undefined : String(activeFarmId)}
+                  onValueChange={(value) => {
+                    setMoreOpen(false);
+                    void switchFarm(Number(value));
+                  }}
+                >
+                  <SelectTrigger id="mobile-farm" className="min-h-11 w-full">
+                    <SelectValue placeholder="Fazenda" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {farms.map((farm) => (
+                      <SelectItem key={farm.id} value={String(farm.id)}>
+                        {farm.name.trim() || `Fazenda #${farm.id}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {activeFarm ? (
+                  <p className="text-xs text-ink-soft">
+                    Você é {roleLabel(activeFarm.role, activeFarm.preset)} nesta fazenda
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="flex flex-col gap-1">
               {/* Primary tabs already sit in the bar, so only their children are listed here. */}
-              {NAV_ITEMS.map((item, index) => (
+              {items.map((item, index) => (
                 <Fragment key={item.href}>
                   {index >= PRIMARY_TAB_COUNT && (
                     <Link

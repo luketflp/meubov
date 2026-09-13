@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { useToast } from "@/components/providers/Toasts";
 import { useTemporaryMessage } from "./useTemporaryMessage";
 import { activeAnimals, countByCategory } from "@/lib/store/selectors";
@@ -57,6 +58,7 @@ export function HerdCategories() {
   const customCategories = useHerdStore((s) => s.customCategories);
   const addCustomCategory = useHerdStore((s) => s.addCustomCategory);
   const removeCustomCategory = useHerdStore((s) => s.removeCustomCategory);
+  const canEdit = useCan("herd", "edit");
   const { addToast } = useToast();
   const [error, showError] = useTemporaryMessage(3000);
 
@@ -133,15 +135,17 @@ export function HerdCategories() {
                 <span className="shrink-0 font-mono text-sm text-ink">
                   {formatNumber(customCount(c.id))}
                 </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`Remover categoria ${c.name}`}
-                  className="size-9 shrink-0 text-ink-soft hover:text-overdue"
-                  onClick={() => onRemove(c.id, c.name)}
-                >
-                  <Trash2 className="size-4" aria-hidden />
-                </Button>
+                {canEdit ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Remover categoria ${c.name}`}
+                    className="size-9 shrink-0 text-ink-soft hover:text-overdue"
+                    onClick={() => onRemove(c.id, c.name)}
+                  >
+                    <Trash2 className="size-4" aria-hidden />
+                  </Button>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -149,37 +153,39 @@ export function HerdCategories() {
           <p className="mt-3 text-xs text-ink-soft">Nenhuma categoria personalizada.</p>
         )}
 
-        <form onSubmit={onAdd} className="mt-3 flex flex-wrap items-end gap-2">
-          <div className="grid min-w-40 flex-1 gap-1.5">
-            <Label htmlFor="custom-category-name">Nome</Label>
-            <Input
-              id="custom-category-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ex.: Garrote"
-              className="min-h-11 md:min-h-9"
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="custom-category-base">Categoria base</Label>
-            <Select value={base} onValueChange={(v) => setBase(v as Category)}>
-              <SelectTrigger id="custom-category-base" className="min-h-11 w-40 md:min-h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CATEGORY_LIST.map((category) => (
-                  <SelectItem key={category} value={category}>
-                    {CATEGORY_LABEL[category]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Button type="submit" className="min-h-11 md:min-h-9">
-            <Plus data-icon="inline-start" aria-hidden />
-            Adicionar
-          </Button>
-        </form>
+        {canEdit ? (
+          <form onSubmit={onAdd} className="mt-3 flex flex-wrap items-end gap-2">
+            <div className="grid min-w-40 flex-1 gap-1.5">
+              <Label htmlFor="custom-category-name">Nome</Label>
+              <Input
+                id="custom-category-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ex.: Garrote"
+                className="min-h-11 md:min-h-9"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="custom-category-base">Categoria base</Label>
+              <Select value={base} onValueChange={(v) => setBase(v as Category)}>
+                <SelectTrigger id="custom-category-base" className="min-h-11 w-40 md:min-h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORY_LIST.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {CATEGORY_LABEL[category]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button type="submit" className="min-h-11 md:min-h-9">
+              <Plus data-icon="inline-start" aria-hidden />
+              Adicionar
+            </Button>
+          </form>
+        ) : null}
         {error ? <p className="mt-2 text-xs text-overdue">{error}</p> : null}
       </div>
     </SectionCard>

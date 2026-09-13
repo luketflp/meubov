@@ -18,6 +18,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { roundCoordinate, type Ring } from "@/lib/domain/geo";
 import { undrawnInvernadas } from "@/lib/domain/mapSetup";
 import { CoordinatesDialog } from "@/components/map/coordinates-dialog";
@@ -25,6 +26,7 @@ import { MapMenu } from "@/components/map/map-menu";
 import { PlaceSearch } from "@/components/map/place-search";
 import { SaveBoundaryDialog } from "@/components/map/save-boundary-dialog";
 import { useMapFlow } from "@/components/map/map-flow-provider";
+import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
 import { useToast } from "@/components/providers/Toasts";
 
 const MapCanvas = dynamic(
@@ -43,6 +45,7 @@ export function MapShell({ children }: { children: React.ReactNode }) {
   const farm = useHerdStore((s) => s.farm);
   const invernadas = useHerdStore((s) => s.invernadas);
   const saveHeadquarters = useHerdStore((s) => s.saveHeadquarters);
+  const canEditLots = useCan("lots", "edit");
   const { mapRef, searchInputRef, goToPlace } = useMapFlow();
   const { addToast } = useToast();
 
@@ -86,14 +89,21 @@ export function MapShell({ children }: { children: React.ReactNode }) {
           <div className="pointer-events-auto w-full max-w-sm rounded-lg bg-panel/95 shadow-md backdrop-blur-sm">
             <PlaceSearch onSelect={goToPlace} inputRef={searchInputRef} />
           </div>
-          <div className="pointer-events-auto ml-auto">
-            <MapMenu
-              hasHeadquarters={farm.headquarters !== undefined}
-              savingHeadquarters={savingHeadquarters}
-              onSaveHeadquarters={onSaveHeadquarters}
-              onTypeCoordinates={() => setTypingCoordinates(true)}
-            />
-          </div>
+          {/* Both menu items write (a typed outline, the sede): a reader gets the pill. */}
+          {canEditLots ? (
+            <div className="pointer-events-auto ml-auto">
+              <MapMenu
+                hasHeadquarters={farm.headquarters !== undefined}
+                savingHeadquarters={savingHeadquarters}
+                onSaveHeadquarters={onSaveHeadquarters}
+                onTypeCoordinates={() => setTypingCoordinates(true)}
+              />
+            </div>
+          ) : (
+            <div className="ml-auto shrink-0 self-center rounded-md shadow-md">
+              <ReadOnlyPill />
+            </div>
+          )}
         </div>
 
         {children}

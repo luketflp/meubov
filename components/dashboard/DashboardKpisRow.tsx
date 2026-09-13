@@ -11,6 +11,7 @@ import {
 import { KpiCard } from "@/components/ui/kpi-card";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
 import { formatCompactCurrency } from "@/components/finance/format";
+import { cn } from "@/lib/utils";
 
 interface DashboardKpisRowProps {
   /** REAL — active head count of the herd. */
@@ -29,13 +30,19 @@ interface DashboardKpisRowProps {
   stockingRate: number;
   /** Herd market value (R$), or null when the quote is unavailable. */
   herdValue: number | null;
+  /**
+   * False for a member without Financeiro: the arroba quote and the herd value
+   * leave the row, and the grid closes to the three cards left.
+   */
+  showMoney: boolean;
 }
 
 /**
  * KPI row of the panel (5 cards, responsive grid): the daily numbers of a beef
  * cattle operation — head count, arroba quote, GMD, stocking rate and herd
  * value. All derived from the herd except the quote (illustrative until a real
- * quote source is plugged), flagged in the note below the row.
+ * quote source is plugged), flagged in the note below the row. Without
+ * Financeiro only the three herd cards remain.
  */
 export function DashboardKpisRow({
   headCount,
@@ -46,9 +53,15 @@ export function DashboardKpisRow({
   averageAdg,
   stockingRate,
   herdValue,
+  showMoney,
 }: DashboardKpisRowProps) {
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+    <div
+      className={cn(
+        "grid grid-cols-2 gap-3 md:grid-cols-3",
+        showMoney ? "lg:grid-cols-5" : "lg:grid-cols-3"
+      )}
+    >
       <KpiCard
         label="Rebanho ativo"
         value={
@@ -60,29 +73,31 @@ export function DashboardKpisRow({
         sub={categorySummary}
         icon={Beef}
       />
-      <KpiCard
-        label="Cotação da arroba"
-        value={
-          arrobaPrice === null ? (
-            "—"
-          ) : (
-            <>
-              {formatNumber(arrobaPrice, 2)}
-              <span className="text-sm text-ink-soft"> R$/@</span>
-            </>
-          )
-        }
-        delta={
-          arrobaMonthlyChangePct === null
-            ? undefined
-            : {
-                text: `${formatNumber(Math.abs(arrobaMonthlyChangePct), 1)}% no mês`,
-                positive: arrobaMonthlyChangePct >= 0,
-              }
-        }
-        sub={arrobaQuoteSub ?? "cotação indisponível"}
-        icon={TrendingUp}
-      />
+      {showMoney ? (
+        <KpiCard
+          label="Cotação da arroba"
+          value={
+            arrobaPrice === null ? (
+              "—"
+            ) : (
+              <>
+                {formatNumber(arrobaPrice, 2)}
+                <span className="text-sm text-ink-soft"> R$/@</span>
+              </>
+            )
+          }
+          delta={
+            arrobaMonthlyChangePct === null
+              ? undefined
+              : {
+                  text: `${formatNumber(Math.abs(arrobaMonthlyChangePct), 1)}% no mês`,
+                  positive: arrobaMonthlyChangePct >= 0,
+                }
+          }
+          sub={arrobaQuoteSub ?? "cotação indisponível"}
+          icon={TrendingUp}
+        />
+      ) : null}
       <KpiCard
         label="GMD Global"
         value={
@@ -109,12 +124,14 @@ export function DashboardKpisRow({
         sub="rebanho ativo · invernadas"
         icon={Sprout}
       />
-      <KpiCard
-        label="Valor do rebanho"
-        value={herdValue === null ? "—" : formatCompactCurrency(herdValue)}
-        sub={herdValue === null ? "cotação indisponível" : formatCurrency(herdValue)}
-        icon={CircleDollarSign}
-      />
+      {showMoney ? (
+        <KpiCard
+          label="Valor do rebanho"
+          value={herdValue === null ? "—" : formatCompactCurrency(herdValue)}
+          sub={herdValue === null ? "cotação indisponível" : formatCurrency(herdValue)}
+          icon={CircleDollarSign}
+        />
+      ) : null}
     </div>
   );
 }

@@ -127,7 +127,9 @@ export function activityDueLabel(activity: ManejoActivity, todayIso: string): st
 
 /**
  * Subtitle line of a session that moves the herd: where to, for how much.
- * Shared by the chute screen and the venda record.
+ * Shared by the chute screen and the venda record. A session the server
+ * stripped of its values (a member without Financeiro) loses the money part
+ * instead of printing "sem pre\u00e7o", which would read as a price nobody set.
  */
 export function movementSubtitle(
   session: ManejoSession,
@@ -137,6 +139,11 @@ export function movementSubtitle(
     return lotName ? `Destino: ${lotName}` : "Troca de lote";
   }
   const who = session.counterparty ? ` \u00b7 ${session.counterparty}` : "";
+  if (session.valuesHidden) {
+    return session.kind === "sale"
+      ? `Venda${who}`
+      : `Compra${lotName ? ` \u00b7 entra em ${lotName}` : ""}${who}`;
+  }
   if (session.kind === "sale") {
     const price =
       session.pricePerArroba !== undefined

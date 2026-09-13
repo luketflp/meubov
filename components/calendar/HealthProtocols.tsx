@@ -32,6 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { useToast } from "@/components/providers/Toasts";
 import { formatNumber } from "@/lib/domain/format";
 import { TREATMENT_TYPE_LABEL } from "@/lib/domain/labels";
@@ -67,11 +68,12 @@ const INITIAL_FORM = {
   generateSchedule: true,
 };
 
-/** Table of health protocols with removal and a new-protocol dialog. */
+/** Table of health protocols with removal and a new-protocol dialog (both need Sanitário edit). */
 export function HealthProtocols() {
   const protocols = useHerdStore((s) => s.protocols);
   const addProtocol = useHerdStore((s) => s.addProtocol);
   const removeProtocol = useHerdStore((s) => s.removeProtocol);
+  const canEdit = useCan("sanitary", "edit");
   const { addToast } = useToast();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
@@ -124,7 +126,7 @@ export function HealthProtocols() {
   return (
     <SectionCard
       title="Protocolos sanitários"
-      action={
+      action={canEdit ? (
         <Dialog open={open} onOpenChange={onOpenChange}>
           <DialogTrigger asChild>
             <Button variant="outline" size="sm" className="min-h-11 md:min-h-0">
@@ -220,7 +222,7 @@ export function HealthProtocols() {
             </form>
           </DialogContent>
         </Dialog>
-      }
+      ) : undefined}
     >
       <Table>
         <TableHeader>
@@ -230,9 +232,11 @@ export function HealthProtocols() {
             <TableHead>Periodicidade</TableHead>
             <TableHead className="text-right">Carência</TableHead>
             <TableHead>Obrigatório</TableHead>
-            <TableHead className="w-10">
-              <span className="sr-only">Ações</span>
-            </TableHead>
+            {canEdit ? (
+              <TableHead className="w-10">
+                <span className="sr-only">Ações</span>
+              </TableHead>
+            ) : null}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -260,18 +264,20 @@ export function HealthProtocols() {
                   <span className="text-ink-soft">—</span>
                 )}
               </TableCell>
-              <TableCell className="text-right">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => removeProtocol(protocol.id)}
-                  aria-label={`Remover protocolo ${protocol.name}`}
-                  className="min-h-11 min-w-11 text-ink-soft hover:text-overdue md:min-h-7 md:min-w-7"
-                >
-                  <Trash2 aria-hidden />
-                </Button>
-              </TableCell>
+              {canEdit ? (
+                <TableCell className="text-right">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => removeProtocol(protocol.id)}
+                    aria-label={`Remover protocolo ${protocol.name}`}
+                    className="min-h-11 min-w-11 text-ink-soft hover:text-overdue md:min-h-7 md:min-w-7"
+                  >
+                    <Trash2 aria-hidden />
+                  </Button>
+                </TableCell>
+              ) : null}
             </TableRow>
           ))}
         </TableBody>

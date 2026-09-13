@@ -6,11 +6,13 @@
  * current average price per dose; below it, one line per cow with the bull she
  * took and what the ultrassom said since. The bull and the diagnosis are read
  * from the cobertura each pass recorded (`breedingId`), so a diagnosis made on
- * the Ultrassom tab shows here at once.
+ * the Ultrassom tab shows here at once. The semen cost shows only to whoever
+ * sees Financeiro.
  */
 import { useMemo } from "react";
 import type { DiagnosisResult, ManejoSession } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { formatDate } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
 import type { DetailLine } from "@/lib/domain/manejoDetail";
@@ -52,6 +54,7 @@ export function InseminationDetail({ session }: { session: ManejoSession }) {
   const animals = useHerdStore((s) => s.animals);
   const lots = useHerdStore((s) => s.lots);
   const bulls = useHerdStore((s) => s.semenBulls);
+  const seeMoney = useCan("finance", "view");
   const lookup = useHerdLookup();
 
   const lines = useMemo<InseminationLine[]>(() => {
@@ -92,7 +95,7 @@ export function InseminationDetail({ session }: { session: ManejoSession }) {
 
   // A bull with no purchase has no price per dose: its doses count, its money stays out.
   const costRows: ResumoRow[] = [];
-  if (cost.totalBrl !== null) {
+  if (seeMoney && cost.totalBrl !== null) {
     for (const line of cost.lines) {
       if (line.costBrl === null || line.avgCostPerDose === null) continue;
       costRows.push({

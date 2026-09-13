@@ -38,16 +38,24 @@ na barra do mapa salva o centro e o zoom atuais em `farm.headquarters`
 nessa vista. Sem sede, ele continua ajustando aos contornos desenhados e, sem
 nenhum, cai no centro padrão de Uberaba.
 
-`PUT /farm` trata `headquarters` como três valores — ausente mantém, objeto
-substitui, null limpa — para que salvar os dados cadastrais em Ajustes não
-apague a vista do mapa. Falta só um botão para limpar a sede pela UI.
+A sede tem rota própria, `PUT /farm/headquarters` (objeto substitui, null
+limpa), separada de `PUT /farm`: ela pertence a Lotes e Mapa e os dados
+cadastrais à Fazenda, e cada área é liberada à parte. Falta só um botão para
+limpar a sede pela UI.
 
-## 3. Multi-fazenda — só no backend
+## 3. ~~Multi-fazenda — só no backend~~ ✅ feito em 12/09/2026
 
-`farm_users`, os papéis `owner`/`member` e o cabeçalho `x-farm-id` funcionam no
-servidor (`lib/api/plugins/farm.ts`). Falta tudo na UI: seletor de fazenda,
-criar uma segunda fazenda, convidar membro, listar membros. O papel é gravado
-mas nunca usado para permissão — hoje `member` e `owner` podem o mesmo.
+O dono convida por e-mail em Configurações > Equipe — nada é enviado; a pessoa
+aceita ao entrar no MeuBov com aquele e-mail — e dá a cada membro um nível por
+área (Nada, Ver ou Editar) a partir dos papéis Gerente, Vaqueiro e Consultor.
+O servidor confere o nível em toda rota (`lib/api/permissions/routeRequirements.ts`)
+e tira os valores em R$ de quem não tem Financeiro. Conta nova com convite
+pendente cai em `/convites` sem ganhar fazenda vazia, e o celular ganhou a troca
+de fazenda no "Mais".
+
+Ficou de fora: limite de usuários por plano, envio e verificação de e-mail,
+transferência de dono, histórico de quem mudou o quê e criar uma segunda
+fazenda.
 
 ## 4. Autenticação incompleta
 

@@ -8,6 +8,7 @@
 import { Syringe } from "lucide-react";
 import type { TreatmentStatus, Treatment } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { todayISO, addDays, formatDate } from "@/lib/domain/dates";
 import { TREATMENT_TYPE_LABEL } from "@/lib/domain/labels";
 import { deriveTreatmentStatus } from "@/lib/domain/status";
@@ -47,6 +48,7 @@ interface HealthHistoryProps {
 
 export function HealthHistory({ treatments }: HealthHistoryProps) {
   const markTreatmentDone = useHerdStore((s) => s.markTreatmentDone);
+  const canEdit = useCan("sanitary", "edit");
 
   const rows: TreatmentRow[] = [...treatments]
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
@@ -80,7 +82,7 @@ export function HealthHistory({ treatments }: HealthHistoryProps) {
               <TableHead>Status</TableHead>
               <TableHead>Carência</TableHead>
               <TableHead>Obs.</TableHead>
-              <TableHead className="text-right">Ação</TableHead>
+              {canEdit ? <TableHead className="text-right">Ação</TableHead> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -102,17 +104,19 @@ export function HealthHistory({ treatments }: HealthHistoryProps) {
                 <TableCell className="max-w-48 truncate text-ink-soft">
                   {row.treatment.notes ?? "—"}
                 </TableCell>
-                <TableCell className="text-right">
-                  {row.status !== "done" ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => markTreatmentDone(row.treatment.id)}
-                    >
-                      Marcar como feito
-                    </Button>
-                  ) : null}
-                </TableCell>
+                {canEdit ? (
+                  <TableCell className="text-right">
+                    {row.status !== "done" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => markTreatmentDone(row.treatment.id)}
+                      >
+                        Marcar como feito
+                      </Button>
+                    ) : null}
+                  </TableCell>
+                ) : null}
               </TableRow>
             ))}
           </TableBody>
@@ -138,7 +142,7 @@ export function HealthHistory({ treatments }: HealthHistoryProps) {
             {row.treatment.notes ? (
               <p className="mt-1 text-xs text-ink-soft">{row.treatment.notes}</p>
             ) : null}
-            {row.status !== "done" ? (
+            {canEdit && row.status !== "done" ? (
               <Button
                 variant="outline"
                 className="mt-3 min-h-11 w-full"

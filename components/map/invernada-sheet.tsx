@@ -2,7 +2,8 @@
 
 /**
  * The summary that opens when an invernada is tapped: its numbers, the lots on
- * it right now, and the two things you can do to its outline.
+ * it right now, and the two things you can do to its outline. The page leaves
+ * both out for whoever may only read Lotes e Mapa, and their buttons go with them.
  *
  * It exists only while something is selected. That is the point of the redesign
  * — the old screen kept an empty "Selecione uma invernada" card on a farm that
@@ -30,8 +31,10 @@ export function InvernadaSheet({
   summary: InvernadaWithSummary;
   /** True while its outline is being erased. */
   busy?: boolean;
-  onRedraw: () => void;
-  onClearBoundary: () => void;
+  /** Omitted for a reader; the "Redesenhar" button renders only with it. */
+  onRedraw?: () => void;
+  /** Omitted for a reader; the "Apagar contorno" button renders only with it. */
+  onClearBoundary?: () => void;
   onClose: () => void;
 }) {
   const { invernada, lots, headCount, totalWeightKg, auPerHa, classification } = summary;
@@ -99,26 +102,30 @@ export function InvernadaSheet({
       </dl>
 
       <MapPanelActions>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onRedraw}
-          disabled={busy}
-          className="min-h-11"
-        >
-          <MapPin aria-hidden />
-          Redesenhar
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onClearBoundary}
-          disabled={busy}
-          className="min-h-11 text-ink-soft hover:text-overdue"
-        >
-          <Trash2 aria-hidden />
-          {busy ? "Apagando…" : "Apagar contorno"}
-        </Button>
+        {onRedraw ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onRedraw}
+            disabled={busy}
+            className="min-h-11"
+          >
+            <MapPin aria-hidden />
+            Redesenhar
+          </Button>
+        ) : null}
+        {onClearBoundary ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClearBoundary}
+            disabled={busy}
+            className="min-h-11 text-ink-soft hover:text-overdue"
+          >
+            <Trash2 aria-hidden />
+            {busy ? "Apagando…" : "Apagar contorno"}
+          </Button>
+        ) : null}
         <Button asChild variant="ghost" className="ml-auto min-h-11">
           <Link href="/lots">Ver lotes</Link>
         </Button>

@@ -22,7 +22,8 @@ const MAX_ROWS = 8;
 interface UpcomingTreatmentsProps {
   /** Pending treatments already sorted by date (overdue first). */
   items: PendingTreatmentItem[];
-  onComplete: (id: string) => void;
+  /** Absent when the user may not complete treatments: the rows have no "Concluir". */
+  onComplete?: (id: string) => void;
   compact?: boolean;
 }
 
@@ -63,15 +64,17 @@ export function UpcomingTreatments({
                 </span>
                 <span className="ml-auto flex items-center gap-2">
                   <StatusPill status={status} />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="min-h-11 text-brand md:min-h-0"
-                    onClick={() => onComplete(treatment.id)}
-                    aria-label={`Concluir ${treatment.name} do animal ${treatment.animalEarTag}`}
-                  >
-                    Concluir
-                  </Button>
+                  {onComplete ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="min-h-11 text-brand md:min-h-0"
+                      onClick={() => onComplete(treatment.id)}
+                      aria-label={`Concluir ${treatment.name} do animal ${treatment.animalEarTag}`}
+                    >
+                      Concluir
+                    </Button>
+                  ) : null}
                 </span>
               </li>
             ))}

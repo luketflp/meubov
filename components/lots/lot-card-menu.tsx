@@ -4,13 +4,15 @@
  * The ••• menu of a lot card. The card itself is a link, so the menu swallows
  * the clicks that reach it and each item opens one of the existing dialogs in
  * controlled mode. A refused deletion has no room for an inline line here, so
- * it goes to the toast.
+ * it goes to the toast. Whoever may only read Lotes e Mapa gets no menu: every
+ * item but "Ver histórico" writes, and the card itself already opens the ficha.
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Archive, ArrowRightLeft, Ellipsis, History, Pencil, Trash2 } from "lucide-react";
 import type { Invernada } from "@/lib/types";
 import type { LotCardRow } from "@/lib/store/selectors";
+import { useCan } from "@/lib/store/usePermissions";
 import { useToast } from "@/components/providers/Toasts";
 import { useDeleteLot } from "@/components/lots/use-delete-lot";
 import { ArchiveLotDialog } from "@/components/lots/archive-lot-dialog";
@@ -35,6 +37,7 @@ interface LotCardMenuProps {
 
 export function LotCardMenu({ row, invernada }: LotCardMenuProps) {
   const { lot, placement, heads, canDelete } = row;
+  const canEditLots = useCan("lots", "edit");
   const [dialog, setDialog] = useState<OpenDialog>(null);
   const { remove, removing, error } = useDeleteLot(lot);
   const { addToast } = useToast();
@@ -42,6 +45,8 @@ export function LotCardMenu({ row, invernada }: LotCardMenuProps) {
   useEffect(() => {
     if (error) addToast({ messageType: "error", text: error });
   }, [error, addToast]);
+
+  if (!canEditLots) return null;
 
   const openState = (name: Exclude<OpenDialog, null>) => ({
     open: dialog === name,

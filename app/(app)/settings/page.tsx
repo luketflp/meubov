@@ -5,6 +5,7 @@ import { FarmDataForm } from "@/components/settings/FarmDataForm";
 import { HerdCategories } from "@/components/settings/HerdCategories";
 import { RegisteredBreeds } from "@/components/settings/RegisteredBreeds";
 import { InvernadasSettings } from "@/components/settings/LotsPaddocks";
+import { MembershipCard } from "@/components/settings/MembershipCard";
 
 export default function SettingsPage() {
   return (
@@ -18,6 +19,7 @@ export default function SettingsPage() {
         <HerdCategories />
         <RegisteredBreeds />
         <InvernadasSettings />
+        <MembershipCard />
       </div>
     </div>
   );

@@ -11,6 +11,12 @@
 import { Elysia } from "elysia";
 
 import { farmPlugin } from "@/lib/api/plugins/farm";
+import { can } from "@/lib/domain/permissions";
+import {
+  redactManejoSession,
+  redactPass,
+  startNeedsFinance,
+} from "@/lib/domain/moneyRedaction";
 
 import { CloseSessionUseCase } from "./useCases/Close.useCase";
 import { CompleteAnimalUseCase } from "./useCases/CompleteAnimal.useCase";
@@ -32,7 +38,7 @@ export const manejoController = new Elysia({ prefix: "/manejo" })
   .use(farmPlugin)
   .post(
     "/",
-    async ({ farmId, body, status }) => {
+    async ({ farmId, permissions, body, status }) => {
       // Only an entry (compra) starts with no animals: they are registered as
       // they arrive. Transfers need somewhere to land.
       if (body.earTags.length === 0 && body.kind !== "entry") {
@@ -48,12 +54,16 @@ export const manejoController = new Elysia({ prefix: "/manejo" })
       if (body.kind === "insemination" && body.semenBullId === undefined) {
         return status(422, { error: "semen_bull_required" });
       }
+      // A venda or entrada is opened with its price by whoever holds the money.
+      if (startNeedsFinance(body) && !can(permissions, "finance", "edit")) {
+        return status(403, { error: "forbidden", area: "finance" });
+      }
       const session = await new StartSessionUseCase().run({ farmId, input: body });
       if (session === "lot_not_found") return status(404, { error: session });
       if (session === "bull_not_found") return status(404, { error: session });
       if (session === "not_female") return status(422, { error: session });
       if (session === null) return status(404, { error: "animal_not_found" });
-      return session;
+      return can(permissions, "finance", "view") ? session : redactManejoSession(session);
     },
     { farm: true, body: NewManejoSessionBody }
   )
@@ -75,7 +85,7 @@ export const manejoController = new Elysia({ prefix: "/manejo" })
   )
   .post(
     "/:id/animals/:animalId/complete",
-    async ({ farmId, params, body, status }) => {
+    async ({ farmId, permissions, params, body, status }) => {
       const result = await new CompleteAnimalUseCase().run({
         farmId,
         sessionId: params.id,
@@ -86,7 +96,7 @@ export const manejoController = new Elysia({ prefix: "/manejo" })
       if (result === "bull_not_found") return status(404, { error: result });
       if (result === null) return status(404, { error: "not_found" });
       if ("conflict" in result) return status(409, { error: result.conflict });
-      return result;
+      return can(permissions, "finance", "view") ? result : redactPass(result);
     },
     { farm: true, body: ManejoPassBody }
   )
@@ -153,9 +163,16 @@ export const manejoController = new Elysia({ prefix: "/manejo" })
   )
   .delete(
     "/:id",
-    async ({ farmId, params, status }) => {
-      const result = await new DeleteSessionUseCase().run({ farmId, id: params.id });
+    async ({ farmId, permissions, params, status }) => {
+      const result = await new DeleteSessionUseCase().run({
+        farmId,
+        id: params.id,
+        canEditFinance: can(permissions, "finance", "edit"),
+      });
       if (result === "session_not_found") return status(404, { error: result });
+      if (result === "finance_required") {
+        return status(403, { error: "forbidden", area: "finance" });
+      }
       if ("blocked" in result) return status(409, result);
       return result;
     },

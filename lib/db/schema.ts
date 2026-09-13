@@ -35,6 +35,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import type { Permissions } from "@/lib/domain/permissions";
 
 /* -------------------------------------------------------------------------- */
 /* Enums (stored unions only)                                                 */
@@ -89,6 +90,22 @@ export const movementTypeEnum = pgEnum("movement_type", [
 
 /** Role of a user inside a farm. */
 export const farmRoleEnum = pgEnum("farm_role", ["owner", "member"]);
+
+/** Preset a member's levels were picked from (lib/domain/permissions.ts). */
+export const farmMemberPresetEnum = pgEnum("farm_member_preset", [
+  "gerente",
+  "vaqueiro",
+  "consultor",
+  "personalizado",
+]);
+
+/** Lifecycle of a convite. Expired is derived from expires_at, never stored. */
+export const farmInviteStatusEnum = pgEnum("farm_invite_status", [
+  "pending",
+  "accepted",
+  "declined",
+  "canceled",
+]);
 
 /** Manejo session lifecycle. */
 export const manejoSessionStatusEnum = pgEnum("manejo_session_status", [
@@ -169,11 +186,47 @@ export const farmUsers = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     role: farmRoleEnum("role").notNull().default("member"),
+    /** Preset the levels came from; null on the Dono row. */
+    preset: farmMemberPresetEnum("preset"),
+    /** Level per area; null on the Dono row, who holds everything. */
+    permissions: jsonb("permissions").$type<Permissions>(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [
     primaryKey({ columns: [t.farmId, t.userId] }),
     index("farm_users_user_id_idx").on(t.userId),
+  ]
+);
+
+/**
+ * A convite to join a farm, claimed by signing in with its e-mail. Accepted,
+ * declined and canceled rows stay for history; at most one per e-mail is
+ * pending on a farm.
+ */
+export const farmInvites = pgTable(
+  "farm_invites",
+  {
+    id: serial("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farm.id, { onDelete: "cascade" }),
+    /** Trimmed and lowercased. */
+    email: text("email").notNull(),
+    preset: farmMemberPresetEnum("preset").notNull(),
+    permissions: jsonb("permissions").$type<Permissions>().notNull(),
+    status: farmInviteStatusEnum("status").notNull().default("pending"),
+    invitedByUserId: text("invited_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    expiresAt: timestamp("expires_at").notNull(),
+    respondedAt: timestamp("responded_at"),
+  },
+  (t) => [
+    uniqueIndex("farm_invites_one_pending_per_email_unique")
+      .on(t.farmId, t.email)
+      .where(sql`${t.status} = 'pending'`),
+    index("farm_invites_email_idx").on(t.email),
   ]
 );
 
@@ -604,6 +657,7 @@ export const manejoSessionAnimals = pgTable(
 
 export type FarmRow = typeof farm.$inferSelect;
 export type FarmUserRow = typeof farmUsers.$inferSelect;
+export type FarmInviteRow = typeof farmInvites.$inferSelect;
 export type LotRow = typeof lots.$inferSelect;
 export type InvernadaRow = typeof invernadas.$inferSelect;
 export type LotPlacementRow = typeof lotPlacements.$inferSelect;

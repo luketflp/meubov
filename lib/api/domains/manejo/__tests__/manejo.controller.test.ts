@@ -4,8 +4,8 @@
  * so the client can offer to clear that diagnosis; every other conflict keeps
  * its plain `{ error }`.
  *
- * The farm macro is stubbed to a fixed farm and the use cases to queued answers,
- * so only the controller's mapping runs.
+ * The farm macro is stubbed to a fixed farm with the Dono's levels and the use
+ * cases to queued answers, so only the controller's mapping runs.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,9 +14,10 @@ const { reopen, remove } = vi.hoisted(() => ({ reopen: vi.fn(), remove: vi.fn() 
 vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("@/lib/api/plugins/farm", async () => {
   const { Elysia } = await import("elysia");
+  const { FULL_PERMISSIONS } = await import("@/lib/domain/permissions");
   return {
     farmPlugin: new Elysia({ name: "farm" }).macro({
-      farm: { resolve: () => ({ farmId: 7 }) },
+      farm: { resolve: () => ({ farmId: 7, permissions: FULL_PERMISSIONS }) },
     }),
   };
 });

@@ -7,6 +7,7 @@
  */
 import { Trash2, Wallet } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { useToast } from "@/components/providers/Toasts";
 import { formatDate } from "@/lib/domain/dates";
 import { EXPENSE_CATEGORY_LABEL } from "@/lib/domain/labels";
@@ -22,6 +23,8 @@ const MAX_ROWS = 8;
 export function ExpensesList() {
   const expenses = useHerdStore((s) => s.expenses);
   const removeExpense = useHerdStore((s) => s.removeExpense);
+  // With Financeiro at view the values show and cannot be typed or removed.
+  const canEdit = useCan("finance", "edit");
   const { addToast } = useToast();
 
   const sorted = [...expenses].sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -33,7 +36,7 @@ export function ExpensesList() {
   }
 
   return (
-    <SectionCard title="Despesas" action={<RegisterExpenseDialog />}>
+    <SectionCard title="Despesas" action={canEdit ? <RegisterExpenseDialog /> : undefined}>
       {sorted.length === 0 ? (
         <EmptyState
           icon={Wallet}
@@ -59,15 +62,17 @@ export function ExpensesList() {
                 <span className="shrink-0 font-mono text-sm font-medium text-ink">
                   {formatCurrency(expense.amountBrl)}
                 </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Remover despesa"
-                  className="size-9 shrink-0 text-ink-soft hover:text-overdue"
-                  onClick={() => onRemove(expense.id)}
-                >
-                  <Trash2 className="size-4" aria-hidden />
-                </Button>
+                {canEdit ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Remover despesa"
+                    className="size-9 shrink-0 text-ink-soft hover:text-overdue"
+                    onClick={() => onRemove(expense.id)}
+                  >
+                    <Trash2 className="size-4" aria-hidden />
+                  </Button>
+                ) : null}
               </li>
             ))}
           </ul>

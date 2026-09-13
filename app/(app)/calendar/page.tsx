@@ -5,11 +5,13 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Treatment } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { useToast } from "@/components/providers/Toasts";
 import { treatmentsInMonth, pendingTreatments, treatmentBatchSize } from "@/lib/store/selectors";
 import { deriveTreatmentStatus, isFootAndMouth } from "@/lib/domain/status";
 import { todayISO, formatDate } from "@/lib/domain/dates";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
 import { Button } from "@/components/ui/button";
 import { FootAndMouthBanner } from "@/components/calendar/FootAndMouthBanner";
 import { DayDialog } from "@/components/calendar/DayDialog";
@@ -45,6 +47,7 @@ export default function CalendarPage({ searchParams }: CalendarPageProps) {
   const protocols = useHerdStore((s) => s.protocols);
   const markTreatmentDone = useHerdStore((s) => s.markTreatmentDone);
   const deleteTreatment = useHerdStore((s) => s.deleteTreatment);
+  const canEdit = useCan("sanitary", "edit");
   const { addToast } = useToast();
 
   /** Completes one treatment and confirms it with a toast. */
@@ -118,6 +121,7 @@ export default function CalendarPage({ searchParams }: CalendarPageProps) {
     <div className="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-6 md:px-8">
       <PageHeader
         title="Calendário Sanitário"
+        badges={canEdit ? undefined : <ReadOnlyPill />}
         subtitle={
           activeTab === "agenda"
             ? "Vacinas, vermifugações e manejos do rebanho"

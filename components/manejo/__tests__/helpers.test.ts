@@ -6,6 +6,7 @@ import {
   isMovementAction,
   isSanitaryAction,
   manejoHistory,
+  movementSubtitle,
   sessionWeighs,
   validateManejo,
   visibleSaleRows,
@@ -312,5 +313,39 @@ describe("visibleSaleRows", () => {
 
   it("has no rows when nothing was sold", () => {
     expect(visibleSaleRows([skipped, pending], "sold", "")).toEqual([]);
+  });
+});
+
+describe("movementSubtitle", () => {
+  it("drops the price of a venda whose values the server hid", () => {
+    const session = makeSession({
+      pricePerArroba: undefined,
+      carcassYieldPct: 52,
+      counterparty: "Frigorífico Boi Bom",
+      valuesHidden: true,
+    });
+    expect(movementSubtitle(session, undefined)).toBe("Venda · Frigorífico Boi Bom");
+    expect(movementSubtitle({ ...session, counterparty: undefined }, undefined)).toBe("Venda");
+  });
+
+  it("drops the total of a compra whose values the server hid", () => {
+    const session = makeSession({
+      kind: "entry",
+      pricePerArroba: undefined,
+      counterparty: "Fazenda Santa Luzia",
+      valuesHidden: true,
+    });
+    expect(movementSubtitle(session, "Recria 2")).toBe(
+      "Compra · entra em Recria 2 · Fazenda Santa Luzia"
+    );
+  });
+
+  it("still says sem preço and sem valor when nothing was hidden", () => {
+    expect(movementSubtitle(makeSession({ pricePerArroba: undefined }), undefined)).toBe(
+      "Venda · sem preço"
+    );
+    expect(
+      movementSubtitle(makeSession({ kind: "entry", pricePerArroba: undefined }), "Recria 2")
+    ).toBe("Compra · sem valor · entra em Recria 2");
   });
 });

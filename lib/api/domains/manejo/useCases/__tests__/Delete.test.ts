@@ -134,7 +134,7 @@ describe("deleteSession", () => {
       [{ id: "lot-3" }],
     ];
 
-    const result = await new DeleteSessionUseCase().run({ farmId: 7, id: "s-1" });
+    const result = await new DeleteSessionUseCase().run({ farmId: 7, id: "s-1", canEditFinance: true });
 
     expect(result).toEqual({
       id: "s-1",
@@ -171,7 +171,7 @@ describe("deleteSession", () => {
       [{ id: "lot-3" }],
     ];
 
-    const result = await new DeleteSessionUseCase().run({ farmId: 7, id: "s-1" });
+    const result = await new DeleteSessionUseCase().run({ farmId: 7, id: "s-1", canEditFinance: true });
 
     expect(result).toEqual({ blocked: [{ earTag: "B-001", reason: "not_sold" }] });
     expect(state.updates).toEqual([]);
@@ -181,7 +181,7 @@ describe("deleteSession", () => {
   it("does not touch a session of another farm", async () => {
     state.selectResults = [[]];
 
-    const result = await new DeleteSessionUseCase().run({ farmId: 7, id: "s-9" });
+    const result = await new DeleteSessionUseCase().run({ farmId: 7, id: "s-9", canEditFinance: true });
 
     expect(result).toBe("session_not_found");
     expect(state.updates).toEqual([]);
@@ -190,9 +190,38 @@ describe("deleteSession", () => {
   it("locks the session row first, so it waits for a pass in flight", async () => {
     state.selectResults = [[]];
 
-    await new DeleteSessionUseCase().run({ farmId: 7, id: "s-1" });
+    await new DeleteSessionUseCase().run({ farmId: 7, id: "s-1", canEditFinance: true });
 
     expect(state.selects[0]).toEqual({ table: "manejo_sessions", lock: "update" });
+  });
+
+  it("refuses a priced session to a member without Financeiro, before any write", async () => {
+    state.selectResults = [[SALE_ROW]];
+
+    const result = await new DeleteSessionUseCase().run({
+      farmId: 7,
+      id: "s-1",
+      canEditFinance: false,
+    });
+
+    expect(result).toBe("finance_required");
+    expect(state.updates).toEqual([]);
+    expect(state.deletes).toEqual([]);
+  });
+
+  it("lets a member without Financeiro delete a session with no values", async () => {
+    state.selectResults = [
+      [{ ...SALE_ROW, kind: "weighing", pricePerArroba: null, carcassYieldPct: null }],
+      [],
+    ];
+
+    const result = await new DeleteSessionUseCase().run({
+      farmId: 7,
+      id: "s-1",
+      canEditFinance: false,
+    });
+
+    expect(result).toMatchObject({ id: "s-1", removedEarTags: [] });
   });
 });
 
@@ -230,7 +259,7 @@ describe("deleteSession — inseminação", () => {
     // the session, its entries, their coberturas (locked), the diagnoses
     state.selectResults = [[INSEMINATION_ROW], entries, [{ id: "br-1" }, { id: "br-3" }], []];
 
-    const result = await new DeleteSessionUseCase().run({ farmId: 7, id: "s-1" });
+    const result = await new DeleteSessionUseCase().run({ farmId: 7, id: "s-1", canEditFinance: true });
 
     expect(result).toEqual({
       id: "s-1",
@@ -254,7 +283,7 @@ describe("deleteSession — inseminação", () => {
   it("locks the coberturas before it reads their diagnoses", async () => {
     state.selectResults = [[INSEMINATION_ROW], entries, [{ id: "br-1" }, { id: "br-3" }], []];
 
-    await new DeleteSessionUseCase().run({ farmId: 7, id: "s-1" });
+    await new DeleteSessionUseCase().run({ farmId: 7, id: "s-1", canEditFinance: true });
 
     // A diagnosis written meanwhile waits for the delete, then fails its
     // foreign key, instead of going down silently with the cobertura.
@@ -277,7 +306,7 @@ describe("deleteSession — inseminação", () => {
       ],
     ];
 
-    const result = await new DeleteSessionUseCase().run({ farmId: 7, id: "s-1" });
+    const result = await new DeleteSessionUseCase().run({ farmId: 7, id: "s-1", canEditFinance: true });
 
     // The cobertura names itself, so the client can offer to clear the diagnosis.
     expect(result).toEqual({
@@ -294,7 +323,7 @@ describe("deleteSession — inseminação", () => {
       [{ breedingId: "br-1", result: "pending" }],
     ];
 
-    const result = await new DeleteSessionUseCase().run({ farmId: 7, id: "s-1" });
+    const result = await new DeleteSessionUseCase().run({ farmId: 7, id: "s-1", canEditFinance: true });
 
     expect(result).toMatchObject({
       removedBreedings: [

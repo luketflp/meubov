@@ -10,7 +10,8 @@
  * list needs no request of its own; only the diagnosis goes to the server. The
  * exam date sits on the toolbar, not on each row: the vet examines the whole
  * lote on one morning, and every tap on the screen takes that date. A tap
- * confirms with a toast that can undo it.
+ * confirms with a toast that can undo it. Without Reprodução edit the list only
+ * reads: each cow shows her result, and the date and the buttons are gone.
  */
 import { Fragment, useMemo, useState } from "react";
 import Link from "next/link";
@@ -18,6 +19,7 @@ import { Check, Pencil, Search, Stethoscope, X } from "lucide-react";
 import { toast } from "sonner";
 import type { DiagnosisResult } from "@/lib/types";
 import { ACTION_TOAST_MS, useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { formatDate, todayISO } from "@/lib/domain/dates";
 import {
   pendingDiagnosisCount,
@@ -72,6 +74,8 @@ interface RowActionsProps {
   examDate: string | null;
   /** "row" sits in a table cell; "card" spans the mobile card. */
   variant: "row" | "card";
+  /** False without Reprodução edit: the result shows, nothing to tap. */
+  canEdit: boolean;
 }
 
 /**
@@ -80,7 +84,7 @@ interface RowActionsProps {
  * buttons stay disabled while the tap saves, and for a cobertura dated after
  * the exam.
  */
-function RowActions({ row, examDate, variant }: RowActionsProps) {
+function RowActions({ row, examDate, variant, canEdit }: RowActionsProps) {
   const recordDiagnosis = useHerdStore((s) => s.recordDiagnosis);
   const clearDiagnosis = useHerdStore((s) => s.clearDiagnosis);
   const [changing, setChanging] = useState(false);
@@ -114,6 +118,19 @@ function RowActions({ row, examDate, variant }: RowActionsProps) {
       duration: ACTION_TOAST_MS,
       action: { label: "Desfazer", onClick: () => void undo() },
     });
+  }
+
+  if (!canEdit) {
+    return (
+      <div
+        className={cn(
+          "flex min-h-11 items-center",
+          variant === "row" ? "ml-auto w-54 justify-end" : "mt-3"
+        )}
+      >
+        <ResultPill result={row.result} />
+      </div>
+    );
   }
 
   if (row.result !== "pending" && !changing) {
@@ -191,6 +208,7 @@ interface GroupCardProps {
   group: UltrasoundGroup;
   lotNames: Map<string, string>;
   examDate: string | null;
+  canEdit: boolean;
 }
 
 /**
@@ -198,7 +216,7 @@ interface GroupCardProps {
  * beside the title — the lote and how long ago — the way the invernada groups
  * on Lotes carry theirs.
  */
-function GroupCard({ group, lotNames, examDate }: GroupCardProps) {
+function GroupCard({ group, lotNames, examDate, canEdit }: GroupCardProps) {
   const title =
     group.date === null ? "Coberturas avulsas" : `Inseminação de ${formatDate(group.date)}`;
   const lotName = group.lotId === null ? undefined : lotNames.get(group.lotId);
@@ -248,7 +266,7 @@ function GroupCard({ group, lotNames, examDate }: GroupCardProps) {
                   </TableCell>
                   <TableCell className="text-right font-mono text-ink">{row.days}</TableCell>
                   <TableCell className="text-right">
-                    <RowActions row={row} examDate={examDate} variant="row" />
+                    <RowActions row={row} examDate={examDate} variant="row" canEdit={canEdit} />
                   </TableCell>
                 </TableRow>
               ))}
@@ -275,7 +293,7 @@ function GroupCard({ group, lotNames, examDate }: GroupCardProps) {
                   Touro <BullName row={row} className="font-medium" />
                 </span>
               </div>
-              <RowActions row={row} examDate={examDate} variant="card" />
+              <RowActions row={row} examDate={examDate} variant="card" canEdit={canEdit} />
             </li>
           ))}
         </ul>
@@ -289,6 +307,8 @@ export function UltrasoundList() {
   const sessions = useHerdStore((s) => s.manejoSessions);
   const semenBulls = useHerdStore((s) => s.semenBulls);
   const lots = useHerdStore((s) => s.lots);
+  const canEdit = useCan("reproduction", "edit");
+  const canStartInsemination = useCan("manejo", "edit");
   const today = todayISO();
   const [examDate, setExamDate] = useState(today);
   const [search, setSearch] = useState("");
@@ -311,9 +331,11 @@ export function UltrasoundList() {
           description="Depois de uma inseminação ou monta natural, as vacas aparecem aqui para o ultrassom."
           className="pb-4"
         />
-        <div className="flex justify-center px-4">
-          <StartInseminationButton variant="outline" />
-        </div>
+        {canStartInsemination ? (
+          <div className="flex justify-center px-4">
+            <StartInseminationButton variant="outline" />
+          </div>
+        ) : null}
       </section>
     );
   }
@@ -322,26 +344,30 @@ export function UltrasoundList() {
     <div className="space-y-6">
       {/* Toolbar */}
       <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
-        <div className="grid gap-1.5 md:flex md:items-center md:gap-2.5">
-          <Label htmlFor="ultrasound-exam-date">Data do exame</Label>
-          <Input
-            id="ultrasound-exam-date"
-            type="date"
-            max={today}
-            value={examDate}
-            onChange={(e) => setExamDate(e.target.value)}
-            aria-describedby="ultrasound-exam-date-hint"
-            aria-invalid={dateError !== null}
-            className="min-h-11 font-mono md:min-h-9 md:w-44"
-          />
-        </div>
-        <p
-          id="ultrasound-exam-date-hint"
-          className={cn("-mt-1.5 text-xs md:mt-0", dateError ? "text-overdue" : "text-ink-soft")}
-        >
-          {dateError ?? "Vale para todos os toques desta tela"}
-        </p>
-        <div className="relative md:ml-3 md:w-60">
+        {canEdit ? (
+          <>
+            <div className="grid gap-1.5 md:flex md:items-center md:gap-2.5">
+              <Label htmlFor="ultrasound-exam-date">Data do exame</Label>
+              <Input
+                id="ultrasound-exam-date"
+                type="date"
+                max={today}
+                value={examDate}
+                onChange={(e) => setExamDate(e.target.value)}
+                aria-describedby="ultrasound-exam-date-hint"
+                aria-invalid={dateError !== null}
+                className="min-h-11 font-mono md:min-h-9 md:w-44"
+              />
+            </div>
+            <p
+              id="ultrasound-exam-date-hint"
+              className={cn("-mt-1.5 text-xs md:mt-0", dateError ? "text-overdue" : "text-ink-soft")}
+            >
+              {dateError ?? "Vale para todos os toques desta tela"}
+            </p>
+          </>
+        ) : null}
+        <div className={cn("relative md:w-60", canEdit && "md:ml-3")}>
           <Search
             className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-soft"
             aria-hidden
@@ -365,7 +391,13 @@ export function UltrasoundList() {
         <p className="text-xs text-ink-soft">Nenhum brinco corresponde à busca.</p>
       ) : (
         shown.map((group) => (
-          <GroupCard key={group.key} group={group} lotNames={lotNames} examDate={tapDate} />
+          <GroupCard
+            key={group.key}
+            group={group}
+            lotNames={lotNames}
+            examDate={tapDate}
+            canEdit={canEdit}
+          />
         ))
       )}
     </div>

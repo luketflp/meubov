@@ -17,6 +17,7 @@ import { weekdayName } from "@/components/calendar/helpers";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/components/providers/Toasts";
+import { useCan } from "@/lib/store/usePermissions";
 
 interface DayDialogProps {
   iso: string | null;
@@ -38,6 +39,7 @@ export function DayDialog({
 }: DayDialogProps) {
   const [scheduling, setScheduling] = useState(false);
   const { addToast } = useToast();
+  const canEdit = useCan("sanitary", "edit");
 
   function close(): void {
     setScheduling(false);
@@ -105,14 +107,16 @@ export function DayDialog({
                     onDeleteGroup={onDeleteGroup}
                   />
                 )}
-                <Button
-                  type="button"
-                  onClick={() => setScheduling(true)}
-                  className="min-h-11 w-full md:min-h-8"
-                >
-                  <Plus data-icon="inline-start" aria-hidden />
-                  Agendar tratamento
-                </Button>
+                {canEdit ? (
+                  <Button
+                    type="button"
+                    onClick={() => setScheduling(true)}
+                    className="min-h-11 w-full md:min-h-8"
+                  >
+                    <Plus data-icon="inline-start" aria-hidden />
+                    Agendar tratamento
+                  </Button>
+                ) : null}
               </>
             )}
           </>

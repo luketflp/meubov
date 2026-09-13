@@ -100,6 +100,24 @@ describe("bullStock", () => {
       lastPurchase: "2026-06-10",
     });
   });
+
+  it("counts the doses but has no cost when a purchase came without its total", () => {
+    const bull = makeSemenBull({
+      purchases: [
+        purchase({ id: "p-1", doses: 40, totalBrl: 1520 }),
+        { id: "p-2", date: "2026-06-10", doses: 20 },
+      ],
+    });
+
+    expect(bullStock(bull, inseminated("bull-1", 3))).toEqual({
+      bought: 60,
+      used: 3,
+      left: 57,
+      totalBrl: null,
+      avgCostPerDose: null,
+      lastPurchase: "2026-06-10",
+    });
+  });
 });
 
 describe("canRemovePurchase", () => {
@@ -269,6 +287,23 @@ describe("sessionSemenCost", () => {
       semCompra,
     ]);
 
+    expect(cost.doses).toBe(5);
+    expect(cost.totalBrl).toBeNull();
+    expect(cost.perCowBrl).toBeNull();
+  });
+
+  it("has no money at all when the purchase totals were stripped", () => {
+    const hide = (bull: typeof tufao) => ({
+      ...bull,
+      purchases: bull.purchases.map(({ id, date, doses }) => ({ id, date, doses })),
+    });
+    const cost = sessionSemenCost(session, animals, [hide(tufao), hide(bravo), semCompra]);
+
+    expect(cost.lines.map((line) => [line.doses, line.costBrl, line.avgCostPerDose])).toEqual([
+      [3, null, null],
+      [1, null, null],
+      [1, null, null],
+    ]);
     expect(cost.doses).toBe(5);
     expect(cost.totalBrl).toBeNull();
     expect(cost.perCowBrl).toBeNull();
