@@ -26,7 +26,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-export function RegisterBreedingDialog() {
+interface RegisterBreedingDialogProps {
+  /** Look of the trigger; `outline` when it sits beside a primary action. */
+  variant?: "default" | "outline";
+}
+
+export function RegisterBreedingDialog({ variant = "default" }: RegisterBreedingDialogProps) {
   const [open, setOpen] = useState(false);
   const [dam, setDam] = useState<Animal | null>(null);
 
@@ -38,7 +43,7 @@ export function RegisterBreedingDialog() {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button className="min-h-11">
+        <Button variant={variant} className="min-h-11">
           <Plus data-icon="inline-start" aria-hidden />
           Registrar cobertura
         </Button>

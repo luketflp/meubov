@@ -2,6 +2,7 @@
 
 exports[`herd API route table > exposes exactly the documented routes 1`] = `
 [
+  "DELETE /api/herd/animals/:id/diagnoses/:breedingId",
   "DELETE /api/herd/breeds/:name",
   "DELETE /api/herd/categories/:id",
   "DELETE /api/herd/expenses/:id",
@@ -9,6 +10,7 @@ exports[`herd API route table > exposes exactly the documented routes 1`] = `
   "DELETE /api/herd/lots/:id",
   "DELETE /api/herd/manejo/:id",
   "DELETE /api/herd/protocols/:id",
+  "DELETE /api/herd/semen-bulls/:id/purchases/:purchaseId",
   "DELETE /api/herd/treatments/:id",
   "DELETE /api/herd/weighings",
   "GET /api/herd",
@@ -17,6 +19,7 @@ exports[`herd API route table > exposes exactly the documented routes 1`] = `
   "PATCH /api/herd/animals/:id",
   "PATCH /api/herd/invernadas/:id",
   "PATCH /api/herd/lots/:id",
+  "PATCH /api/herd/semen-bulls/:id",
   "POST /api/herd/animals",
   "POST /api/herd/animals/:id/breedings",
   "POST /api/herd/animals/:id/calvings",
@@ -41,6 +44,8 @@ exports[`herd API route table > exposes exactly the documented routes 1`] = `
   "POST /api/herd/manejo/:id/carcass-yield",
   "POST /api/herd/manejo/:id/close",
   "POST /api/herd/protocols",
+  "POST /api/herd/semen-bulls",
+  "POST /api/herd/semen-bulls/:id/purchases",
   "POST /api/herd/treatments/complete",
   "POST /api/herd/treatments/schedule",
   "PUT /api/herd/farm",

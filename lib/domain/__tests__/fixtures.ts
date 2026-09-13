@@ -1,7 +1,7 @@
 /**
  * Synthetic data factories for the domain tests.
  */
-import type { Animal, Treatment } from "@/lib/types";
+import type { Animal, ManejoSession, SemenBull, Treatment } from "@/lib/types";
 
 /** Creates a default animal for tests, with partial overrides. */
 export function makeAnimal(overrides: Partial<Animal> = {}): Animal {
@@ -29,6 +29,32 @@ export function makeTreatment(overrides: Partial<Treatment> = {}): Treatment {
     date: "2026-08-01",
     status: "scheduled",
     withdrawalDays: 0,
+    ...overrides,
+  };
+}
+
+/** Creates a default semen bull for tests (no purchases), with partial overrides. */
+export function makeSemenBull(overrides: Partial<SemenBull> = {}): SemenBull {
+  return {
+    id: "bull-1",
+    name: "Tufão da Serra",
+    code: "NEL-4471",
+    breed: "Nelore",
+    purchases: [],
+    ...overrides,
+  };
+}
+
+/** Creates a default open inseminação for tests, with partial overrides. */
+export function makeManejoSession(overrides: Partial<ManejoSession> = {}): ManejoSession {
+  return {
+    id: "s-1",
+    name: "Inseminação",
+    date: "2026-07-01",
+    status: "open",
+    kind: "insemination",
+    weighing: false,
+    animals: [],
     ...overrides,
   };
 }

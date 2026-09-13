@@ -3,9 +3,11 @@
 /**
  * The cobertura form itself: date, type and the bull.
  *
- * Natural mating picks a bull from the herd; timed AI (IATF) takes free text,
- * because the semen usually comes from a sire that is not on the farm. When the
- * herd has no bull registered, natural mating falls back to free text too.
+ * Natural mating picks a bull from the herd; timed AI (IATF) picks one of the
+ * semen bulls on Touros, and that cobertura takes a dose of its stock. "Outro"
+ * keeps free text for a semen that is not in stock, and takes nothing. When the
+ * herd has no bull registered, natural mating falls back to free text too, and
+ * so does IATF when the farm has no semen bull.
  *
  * It is shared by the female's ficha ({@link RegisterBreedingDialog}) and the
  * Reprodução screen, which differ only in how the dam gets chosen and in the
@@ -14,9 +16,11 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useHerdStore, type NewBreeding } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
-import type { BreedingType } from "@/lib/types";
+import type { BreedingType, SemenBull } from "@/lib/types";
 import { todayISO } from "@/lib/domain/dates";
 import { BREEDING_TYPE_LABEL } from "@/lib/domain/labels";
+import { dosesLabel } from "@/components/semen/stock-pill";
+import { useSemenStock } from "@/components/semen/use-semen-stock";
 import { Button } from "@/components/ui/button";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -25,6 +29,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -32,14 +37,28 @@ import {
 const BREEDING_TYPE_LIST = Object.keys(BREEDING_TYPE_LABEL) as BreedingType[];
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
+/** The semen bull select's "Outro (digitar código)": a code typed by hand. */
+const OTHER_SEMEN = "other";
+
 interface BreedingFields {
   date: string;
   type: BreedingType;
   bullEarTag: string;
+  /** The semen bull picked for an IATF, {@link OTHER_SEMEN} for a typed code, "" before a pick. */
+  semenBullId: string;
 }
 
 function createInitialFields(): BreedingFields {
-  return { date: todayISO(), type: "naturalMating", bullEarTag: "" };
+  return { date: todayISO(), type: "naturalMating", bullEarTag: "", semenBullId: "" };
+}
+
+/** " · NEL-4471 · 19 doses" after the bull's name; "sem doses" once the stock is gone. */
+function semenBullDetail(bull: SemenBull, left: number): string {
+  const doses = left <= 0 ? "sem doses" : dosesLabel(left);
+  return [bull.code, doses]
+    .filter((part) => part !== undefined && part !== "")
+    .map((part) => ` · ${part}`)
+    .join("");
 }
 
 interface BreedingFormProps {
@@ -52,6 +71,7 @@ interface BreedingFormProps {
 
 export function BreedingForm({ earTag, onRegistered, leadingAction }: BreedingFormProps) {
   const animals = useHerdStore((s) => s.animals);
+  const { bulls: semenBulls, dosesLeft } = useSemenStock();
   const recordBreeding = useHerdStore((s) => s.recordBreeding);
   const { addToast } = useToast();
 
@@ -60,10 +80,13 @@ export function BreedingForm({ earTag, onRegistered, leadingAction }: BreedingFo
 
   const bulls = animals.filter((a) => a.active && a.category === "bull");
   const pickFromHerd = fields.type === "naturalMating" && bulls.length > 0;
+  const pickSemen = fields.type === "timedAI" && semenBulls.length > 0;
+  /** The bull goes in as text: no bull to pick from, or "Outro" picked. */
+  const typeBull = !pickFromHerd && (!pickSemen || fields.semenBullId === OTHER_SEMEN);
 
   /** Switching type clears the bull: a semen code is not a herd ear tag. */
   function onChangeType(type: BreedingType) {
-    setFields((f) => ({ ...f, type, bullEarTag: "" }));
+    setFields((f) => ({ ...f, type, bullEarTag: "", semenBullId: "" }));
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -76,7 +99,14 @@ export function BreedingForm({ earTag, onRegistered, leadingAction }: BreedingFo
       setError("A cobertura não pode ser no futuro.");
       return;
     }
-    const bullEarTag = fields.bullEarTag.trim();
+    if (pickSemen && fields.semenBullId === "") {
+      setError("Selecione o touro.");
+      return;
+    }
+    const semenBull = typeBull
+      ? undefined
+      : semenBulls.find((bull) => bull.id === fields.semenBullId);
+    const bullEarTag = semenBull?.name ?? fields.bullEarTag.trim();
     if (bullEarTag === "") {
       setError(
         pickFromHerd ? "Selecione o touro." : "Informe o touro ou o código do sêmen."
@@ -86,9 +116,13 @@ export function BreedingForm({ earTag, onRegistered, leadingAction }: BreedingFo
     const breeding: NewBreeding = {
       date: fields.date,
       type: fields.type,
+      // With a semen bull the server stores its code here; the name holds the place until then.
       bullEarTag,
+      ...(semenBull ? { semenBullId: semenBull.id } : {}),
     };
-    await recordBreeding(earTag, breeding);
+    // False when the bull's last dose went meanwhile: the store told the farmer,
+    // and the dialog stays open to pick another one.
+    if (!(await recordBreeding(earTag, breeding))) return;
     addToast({ messageType: "success", text: `Cobertura de ${earTag} registrada` });
     onRegistered();
   }
@@ -148,18 +182,50 @@ export function BreedingForm({ earTag, onRegistered, leadingAction }: BreedingFo
           </Select>
         ) : (
           <>
-            <Input
-              id="breeding-bull"
-              value={fields.bullEarTag}
-              onChange={(e) => setFields((f) => ({ ...f, bullEarTag: e.target.value }))}
-              placeholder="Ex.: NEL-4471 ou código do sêmen"
-              className="min-h-11 font-mono"
-            />
-            <p className="text-xs text-ink-soft">
-              {fields.type === "timedAI"
-                ? "Touro do sêmen usado, mesmo que não seja do rebanho."
-                : "Nenhum touro cadastrado no rebanho — informe a identificação."}
-            </p>
+            {pickSemen ? (
+              <Select
+                value={fields.semenBullId === "" ? undefined : fields.semenBullId}
+                onValueChange={(semenBullId) =>
+                  setFields((f) => ({ ...f, semenBullId, bullEarTag: "" }))
+                }
+              >
+                <SelectTrigger id="breeding-bull" className="min-h-11 w-full">
+                  <SelectValue placeholder="Selecione o touro" />
+                </SelectTrigger>
+                <SelectContent>
+                  {semenBulls.map((bull) => {
+                    const left = dosesLeft(bull.id);
+                    return (
+                      <SelectItem key={bull.id} value={bull.id} disabled={left <= 0}>
+                        {bull.name}
+                        <span className="text-ink-soft">{semenBullDetail(bull, left)}</span>
+                      </SelectItem>
+                    );
+                  })}
+                  <SelectSeparator />
+                  <SelectItem value={OTHER_SEMEN}>Outro (digitar código)</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : null}
+            {typeBull ? (
+              <>
+                <Input
+                  id={pickSemen ? "breeding-bull-code" : "breeding-bull"}
+                  aria-label={pickSemen ? "Código do sêmen" : undefined}
+                  value={fields.bullEarTag}
+                  onChange={(e) => setFields((f) => ({ ...f, bullEarTag: e.target.value }))}
+                  placeholder="Ex.: NEL-4471 ou código do sêmen"
+                  className="min-h-11 font-mono"
+                />
+                <p className="text-xs text-ink-soft">
+                  {fields.type === "timedAI"
+                    ? "Touro do sêmen usado, mesmo que não seja do rebanho."
+                    : "Nenhum touro cadastrado no rebanho — informe a identificação."}
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-ink-soft">Usa 1 dose do estoque do touro.</p>
+            )}
           </>
         )}
       </div>

@@ -23,10 +23,12 @@ import {
   manejoSessions,
   movements,
   pregnancyDiagnoses,
+  semenBulls,
+  semenPurchases,
   treatments,
   weighings,
 } from "@/lib/db/schema";
-import type { HerdData, ReproductionRecord, Weighing } from "@/lib/types";
+import type { HerdData, ReproductionRecord, SemenPurchase, Weighing } from "@/lib/types";
 import { herdMovements } from "@/lib/domain/movements";
 import {
   toAnimal,
@@ -43,6 +45,8 @@ import {
   toManejoSessionAnimal,
   toMovement,
   toProtocol,
+  toSemenBull,
+  toSemenPurchase,
   toTreatment,
   toWeighing,
 } from "@/lib/api/mappers";
@@ -86,6 +90,8 @@ export class LoadHerdUseCase implements CurrUseCase {
       diagnosisRows,
       calvingRows,
       sessionAnimalRows,
+      semenBullRows,
+      semenPurchaseRows,
     ] = await Promise.all([
       this.repository.select().from(farm).where(eq(farm.id, farmId)),
       this.repository.select().from(animals).where(eq(animals.farmId, farmId)).orderBy(asc(animals.earTag)),
@@ -164,6 +170,17 @@ export class LoadHerdUseCase implements CurrUseCase {
         .innerJoin(animals, eq(manejoSessionAnimals.animalId, animals.id))
         .where(and(eq(manejoSessions.farmId, farmId), isNull(manejoSessions.deletedAt)))
         .orderBy(asc(manejoSessionAnimals.position)),
+      this.repository
+        .select()
+        .from(semenBulls)
+        .where(eq(semenBulls.farmId, farmId))
+        .orderBy(asc(semenBulls.name)),
+      this.repository
+        .select({ row: semenPurchases })
+        .from(semenPurchases)
+        .innerJoin(semenBulls, eq(semenPurchases.bullId, semenBulls.id))
+        .where(eq(semenBulls.farmId, farmId))
+        .orderBy(asc(semenPurchases.date), asc(semenPurchases.id)),
     ]);
 
     const weighingsByAnimal = new Map<string, Weighing[]>();
@@ -196,6 +213,13 @@ export class LoadHerdUseCase implements CurrUseCase {
       sessionAnimalsBySession.set(row.sessionId, list);
     }
 
+    const purchasesByBull = new Map<string, SemenPurchase[]>();
+    for (const { row } of semenPurchaseRows) {
+      const list = purchasesByBull.get(row.bullId) ?? [];
+      list.push(toSemenPurchase(row));
+      purchasesByBull.set(row.bullId, list);
+    }
+
     const herdAnimals = animalRows.map((row) =>
       toAnimal(row, weighingsByAnimal.get(row.id) ?? [], reproductionByAnimal.get(row.id))
     );
@@ -223,6 +247,7 @@ export class LoadHerdUseCase implements CurrUseCase {
       manejoSessions: sessions,
       expenses: expenseRows.map(toExpense),
       customCategories: customCategoryRows.map(toCustomCategory),
+      semenBulls: semenBullRows.map((row) => toSemenBull(row, purchasesByBull.get(row.id) ?? [])),
       farm: farmRows.length
         ? toFarmData(farmRows[0])
         : { name: "", municipality: "", stateRegistration: "", manager: "" },

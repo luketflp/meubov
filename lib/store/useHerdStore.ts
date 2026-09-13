@@ -3,7 +3,7 @@
  * actions. All updates are immutable and the new ids are deterministic
  * (prefix + counter derived from the current collection size).
  */
-import { create } from "zustand";
+import { create, type StoreApi } from "zustand";
 import type {
   Animal,
   Breeding,
@@ -23,6 +23,8 @@ import type {
   PregnancyDiagnosis,
   ReproductionRecord,
   ScheduleTreatmentsInput,
+  SemenBull,
+  SemenPurchase,
   Sex,
   Weighing,
   HealthProtocol,
@@ -67,6 +69,8 @@ export interface NewManejoSession {
   carcassYieldPct?: number;
   /** Closed price of the batch, or the purchase total of an entry. */
   totalAmountBrl?: number;
+  /** Touro principal of an inseminação session. */
+  semenBullId?: string;
   notes?: string;
 }
 
@@ -77,6 +81,7 @@ export type EntryAnimal = Omit<NewAnimal, "lotId"> & { notes?: string };
 export interface ManejoPassData {
   weightKg?: number;
   notes?: string;
+  semenBullId?: string;
 }
 
 /** Herd change a manejo pass applied to one animal (lot, herd membership). */
@@ -96,8 +101,32 @@ export interface NewBaixa {
   notes?: string;
 }
 
-/** Breeding to record; the id comes from the server. */
+/**
+ * Breeding to record; the id comes from the server. With `semenBullId` it takes
+ * one dose of that registered bull, and the server stores the bull's code (or
+ * name) as `bullEarTag`.
+ */
 export type NewBreeding = Omit<Breeding, "id">;
+
+/** Purchase of semen doses to record; it also becomes a Reprodução expense. */
+export interface NewSemenPurchase {
+  date: string;
+  doses: number;
+  totalBrl: number;
+  seller?: string;
+}
+
+/** Semen bull to register, with the first purchase of doses when there is one. */
+export interface NewSemenBull {
+  name: string;
+  code?: string;
+  breed?: string;
+  central?: string;
+  firstPurchase?: NewSemenPurchase;
+}
+
+/** Editable fields of a semen bull (only sent ones change; a blank text clears it). */
+export type SemenBullPatch = Partial<Pick<SemenBull, "name" | "code" | "breed" | "central">>;
 
 /**
  * Calving to record. The calf joins the herd in the same transaction, taking
@@ -197,15 +226,23 @@ export interface HerdStore extends HerdData {
   deleteTreatment: (id: string, scope?: "one" | "batch") => Promise<number>;
   /** Opens a manejo session and returns its id (for the run screen). */
   startManejoSession: (input: NewManejoSession) => Promise<string>;
-  /** Applies the session's effects to one animal and marks it done. */
+  /**
+   * Applies the session's effects to one animal and marks it done. False when
+   * nothing was saved: the pass was refused (409) — the bull out of doses, or a
+   * stale screen.
+   */
   completeManejoAnimal: (
     sessionId: string,
     earTag: string,
     data?: ManejoPassData
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   /** Marks one animal as skipped (did not pass the chute). */
   skipManejoAnimal: (sessionId: string, earTag: string, notes?: string) => Promise<void>;
-  /** Undo: reverts one animal to pending, removing the effects it created. */
+  /**
+   * Undo: reverts one animal to pending, removing the effects it created. An
+   * inseminação pass whose cobertura was diagnosed is refused; the toast offers
+   * to clear that diagnosis and undo again.
+   */
   reopenManejoAnimal: (sessionId: string, earTag: string) => Promise<void>;
   /**
    * Sets the rendimento de carcaça of an open venda per arroba (the modal
@@ -216,7 +253,8 @@ export interface HerdStore extends HerdData {
   closeManejoSession: (sessionId: string) => Promise<void>;
   /**
    * Deletes a manejo and puts the herd back where it was. Returns null when it
-   * went through, or the animals that blocked it when the server refused.
+   * went through, or the animals that blocked it when the server refused — a
+   * diagnosed cow of an inseminação with the `breedingId` to clear.
    */
   deleteManejoSession: (sessionId: string) => Promise<BlockedAnimal[] | null>;
   /**
@@ -261,10 +299,32 @@ export interface HerdStore extends HerdData {
   addCustomCategory: (c: Omit<CustomCategory, "id">) => Promise<boolean>;
   /** Removes a custom category; false when an active animal still uses it. */
   removeCustomCategory: (id: string) => Promise<boolean>;
-  /** Records a breeding of one female (herd bull or external semen code). */
-  recordBreeding: (earTag: string, input: NewBreeding) => Promise<void>;
+  /**
+   * Records a breeding of one female (herd bull, external semen code or a dose
+   * of a registered semen bull). False when that bull has no dose left (409
+   * out_of_stock): the toast is shown here, nothing is written and the herd is
+   * reloaded so the doses on screen match the server.
+   */
+  recordBreeding: (earTag: string, input: NewBreeding) => Promise<boolean>;
   /** Records (or corrects) the pregnancy diagnosis of one breeding. */
   recordDiagnosis: (earTag: string, input: PregnancyDiagnosis) => Promise<void>;
+  /** Removes the pregnancy diagnosis of one breeding — the undo of an Ultrassom tap. */
+  clearDiagnosis: (earTag: string, breedingId: string) => Promise<void>;
+  /**
+   * Registers a semen bull; its first purchase, when sent, also lands in
+   * Financeiro as an expense. "duplicate" when the farm already has that name.
+   */
+  addSemenBull: (input: NewSemenBull) => Promise<SemenBull | "duplicate">;
+  /** Edits a semen bull's registration; false when the new name is already in use. */
+  updateSemenBull: (id: string, patch: SemenBullPatch) => Promise<boolean>;
+  /** Records a purchase of doses of a bull, and merges the expense it wrote. */
+  addSemenPurchase: (bullId: string, input: NewSemenPurchase) => Promise<void>;
+  /**
+   * Deletes a purchase and its expense. False when the other purchases would
+   * not cover the doses already used (409 stock_negative); the herd is then
+   * reloaded, since the store's count was behind the server's.
+   */
+  removeSemenPurchase: (bullId: string, purchaseId: string) => Promise<boolean>;
   /** Records a calving; false when the calf's ear tag is already in use. */
   recordCalving: (earTag: string, input: NewCalving) => Promise<boolean>;
   /** Edits an animal's registration fields (category/breed/birth/lot). */
@@ -311,8 +371,30 @@ function apiFail(action: string, status: number): never {
 /** Default repository; swap the implementation here to change the backend. */
 const repository: HerdRepository = new ApiHerdRepository();
 
-const compareByDate = (a: Weighing, b: Weighing): number =>
+/**
+ * Re-fetches the whole herd after a write the server already settled — an
+ * import, or a refusal that proves the store's copy stale (a bull's doses).
+ * Best-effort: a failed refresh never masks the write's own outcome, and the
+ * store refreshes on the next successful load.
+ */
+async function reloadHerd(set: StoreApi<HerdStore>["setState"]): Promise<void> {
+  try {
+    const fresh = await repository.load();
+    set({ ...fresh, loaded: true });
+  } catch {
+    // best-effort: keep what the store has
+  }
+}
+
+const compareByDate = (a: { date: string }, b: { date: string }): number =>
   a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
+
+/** Semen bulls keep the snapshot's order (by name) after a create or a rename. */
+const compareByName = (a: { name: string }, b: { name: string }): number =>
+  a.name.localeCompare(b.name, "pt-BR");
+
+/** A toast the farmer has to act on ("Limpar diagnóstico") stays long enough to reach. */
+export const ACTION_TOAST_MS = 10_000;
 
 /** Resolves the editable ear tag to the stable id used by API path segments. */
 function animalIdByEarTag(animals: Animal[], earTag: string): string {
@@ -321,8 +403,23 @@ function animalIdByEarTag(animals: Animal[], earTag: string): string {
   return animalId;
 }
 
-/** Conflict statuses a manejo pass can hit (stale UI); treated as a no-op. */
+/**
+ * Conflict statuses a manejo pass can hit (stale UI); treated as a no-op —
+ * except a bull out of doses or a diagnosed cow, which the farmer is told about.
+ */
 const CONFLICT = 409;
+
+/** Toast of a cobertura refused because the semen bull has no dose left. */
+const OUT_OF_STOCK_MESSAGE = "Esse touro não tem mais doses.";
+
+/** Immutably updates one semen bull's purchases. */
+function withPurchases(
+  bulls: SemenBull[],
+  bullId: string,
+  update: (purchases: SemenPurchase[]) => SemenPurchase[]
+): SemenBull[] {
+  return bulls.map((b) => (b.id === bullId ? { ...b, purchases: update(b.purchases) } : b));
+}
 
 /** A female with no reproduction history yet — she can still receive records. */
 const EMPTY_REPRODUCTION: ReproductionRecord = {
@@ -370,6 +467,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   manejoSessions: [],
   expenses: [],
   customCategories: [],
+  semenBulls: [],
   farm: { name: "", municipality: "", stateRegistration: "", manager: "" },
   loaded: false,
   farms: [],
@@ -458,15 +556,9 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       createdLots: result.createdLots.map((lot) => lot.name),
     };
     // The import already committed on the server. Re-fetch the whole herd so
-    // animals plus any new raças/lots/placements stay consistent, but never let a refresh
-    // failure mask a successful import — return the server-reported summary
-    // regardless; the store refreshes on the next successful load.
-    try {
-      const fresh = await repository.load();
-      set({ ...fresh, loaded: true });
-    } catch {
-      // best-effort: keep the committed import's summary
-    }
+    // animals plus any new raças/lots/placements stay consistent; the summary is
+    // the server's and comes back regardless of the refresh.
+    await reloadHerd(set);
     return summary;
   },
 
@@ -483,12 +575,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const summary = data as ImportBirthsSummary;
     // Same as importHerd: the write already committed, so a failed refresh must
     // not hide the summary.
-    try {
-      const fresh = await repository.load();
-      set({ ...fresh, loaded: true });
-    } catch {
-      // best-effort: keep the committed import's summary
-    }
+    await reloadHerd(set);
     return summary;
   },
 
@@ -535,7 +622,16 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const animalId = animalIdByEarTag(get().animals, earTag);
     const response = await api.manejo({ id: sessionId }).animals({ animalId }).complete.post(data);
     if (response.error) {
-      if (response.error.status === CONFLICT) return; // stale UI: pass already recorded
+      if (response.error.status === CONFLICT) {
+        const detail = response.error.value as { error?: string };
+        if (detail.error === "out_of_stock") {
+          // The bull's last dose went meanwhile (another pass, another screen):
+          // reload so the chips show the doses the server counts.
+          toast.error(OUT_OF_STOCK_MESSAGE);
+          await reloadHerd(set);
+        }
+        return false; // otherwise stale UI: pass already recorded
+      }
       apiFail("concluir o animal no manejo", response.error.status);
     }
     const result = response.data as {
@@ -543,9 +639,18 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       treatments: Treatment[];
       weighing?: Weighing;
       animal?: PassAnimalPatch;
+      breeding?: Breeding;
     };
     set((s) => {
       let animals = s.animals;
+      // An inseminação pass recorded an IATF cobertura on the cow.
+      const breeding = result.breeding;
+      if (breeding) {
+        animals = withReproduction(animals, earTag, (r) => ({
+          ...r,
+          breedings: [...r.breedings, breeding],
+        }));
+      }
       const weighing = result.weighing;
       if (weighing) {
         animals = animals.map((a) =>
@@ -570,6 +675,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
         manejoSessions: withSessionAnimal(s.manejoSessions, sessionId, earTag, result.entry),
       };
     });
+    return true;
   },
 
   skipManejoAnimal: async (sessionId, earTag, notes) => {
@@ -589,7 +695,35 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const animalId = animalIdByEarTag(get().animals, earTag);
     const { data, error } = await api.manejo({ id: sessionId }).animals({ animalId }).reopen.post();
     if (error) {
-      if (error.status === CONFLICT) return;
+      if (error.status === CONFLICT) {
+        const detail = error.value as { error?: string; breedingId?: string };
+        if (detail.error === "has_diagnosis") {
+          // The cobertura of that pass was already diagnosed: clearing the
+          // diagnosis is what lets the undo through, so the toast offers it.
+          const clearAndRetry = async (breedingId: string) => {
+            try {
+              await get().clearDiagnosis(earTag, breedingId);
+              await get().reopenManejoAnimal(sessionId, earTag);
+            } catch {
+              // The store already told the farmer.
+            }
+          };
+          const breedingId = detail.breedingId;
+          toast.error(
+            "Essa vaca já tem diagnóstico.",
+            breedingId === undefined
+              ? undefined
+              : {
+                  duration: ACTION_TOAST_MS,
+                  action: {
+                    label: "Limpar diagnóstico",
+                    onClick: () => void clearAndRetry(breedingId),
+                  },
+                }
+          );
+        }
+        return; // otherwise stale UI: pass already reverted
+      }
       apiFail("desfazer o registro do animal", error.status);
     }
     const result = data as {
@@ -598,6 +732,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       removedWeighing?: Weighing;
       animal?: PassAnimalPatch;
       removedEarTag?: string;
+      removedBreedingId?: string;
     };
     set((s) => {
       const removedIds = new Set(result.removedTreatmentIds);
@@ -634,6 +769,15 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
           if (index === -1) return a;
           return { ...a, weighings: a.weighings.filter((_, i) => i !== index) };
         });
+      }
+
+      // Undoing an inseminação pass deleted its cobertura; the dose is back in stock.
+      const breedingId = result.removedBreedingId;
+      if (breedingId !== undefined) {
+        animals = withReproduction(animals, earTag, (r) => ({
+          ...r,
+          breedings: r.breedings.filter((b) => b.id !== breedingId),
+        }));
       }
 
       // The undo put the animal back in its lot / in the active herd.
@@ -704,6 +848,8 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const weighed = new Set(result.weighedEarTags);
     const restored = new Map(result.restored.map((r) => [r.earTag, r]));
     const removed = new Set(result.removedEarTags);
+    const removedBreedingIds = new Set(result.removedBreedings.map((b) => b.breedingId));
+    const bred = new Set(result.removedBreedings.map((b) => b.earTag));
     set((s) => ({
       manejoSessions: s.manejoSessions.filter((m) => m.id !== sessionId),
       treatments: s.treatments.filter((t) => !removedTreatments.has(t.id)),
@@ -713,7 +859,9 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
           const back = restored.get(a.earTag);
           // The session wrote at most one reading per animal, on its own date.
           const dropsWeighing = weighed.has(a.earTag) && sessionDate !== undefined;
-          if (!back && !dropsWeighing) return a;
+          // An inseminação's coberturas go with it; their doses are back in stock.
+          const reproduction = bred.has(a.earTag) ? a.reproduction : undefined;
+          if (!back && !dropsWeighing && !reproduction) return a;
           return {
             ...a,
             ...(back
@@ -726,6 +874,16 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
               : {}),
             ...(dropsWeighing
               ? { weighings: a.weighings.filter((w) => w.date !== sessionDate) }
+              : {}),
+            ...(reproduction
+              ? {
+                  reproduction: {
+                    ...reproduction,
+                    breedings: reproduction.breedings.filter(
+                      (b) => !removedBreedingIds.has(b.id)
+                    ),
+                  },
+                }
               : {}),
           };
         }),
@@ -996,7 +1154,17 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   recordBreeding: async (earTag, input) => {
     const id = animalIdByEarTag(get().animals, earTag);
     const { data, error } = await api.animals({ id }).breedings.post(input);
-    if (error) apiFail("registrar a cobertura", error.status);
+    if (error) {
+      const detail = error.value as { error?: string };
+      if (error.status === CONFLICT && detail.error === "out_of_stock") {
+        // The registered bull's last dose is gone: reload so the select shows it.
+        toast.error(OUT_OF_STOCK_MESSAGE);
+        await reloadHerd(set);
+        return false;
+      }
+      apiFail("registrar a cobertura", error.status);
+    }
+    // With a semen bull the server replaced bullEarTag: keep its record, not the input.
     const breeding = data as Breeding;
     set((s) => ({
       animals: withReproduction(s.animals, earTag, (r) => ({
@@ -1004,6 +1172,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
         breedings: [...r.breedings, breeding],
       })),
     }));
+    return true;
   },
 
   recordDiagnosis: async (earTag, input) => {
@@ -1021,6 +1190,85 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
         ],
       })),
     }));
+  },
+
+  clearDiagnosis: async (earTag, breedingId) => {
+    const id = animalIdByEarTag(get().animals, earTag);
+    const { error } = await api.animals({ id }).diagnoses({ breedingId }).delete();
+    if (error) apiFail("desfazer o diagnóstico", error.status);
+    set((s) => ({
+      animals: withReproduction(s.animals, earTag, (r) => ({
+        ...r,
+        diagnoses: r.diagnoses.filter((d) => d.breedingId !== breedingId),
+      })),
+    }));
+  },
+
+  addSemenBull: async (input) => {
+    const { data, error } = await api["semen-bulls"].post(input);
+    if (error) {
+      if (error.status === CONFLICT) return "duplicate";
+      apiFail("cadastrar o touro", error.status);
+    }
+    const result = data as { bull: SemenBull; expense?: Expense };
+    const expense = result.expense;
+    set((s) => ({
+      semenBulls: [...s.semenBulls, result.bull].sort(compareByName),
+      ...(expense ? { expenses: [...s.expenses, expense] } : {}),
+    }));
+    return result.bull;
+  },
+
+  updateSemenBull: async (id, patch) => {
+    const { data, error } = await api["semen-bulls"]({ id }).patch(patch);
+    if (error) {
+      if (error.status === CONFLICT) return false;
+      apiFail("salvar o touro", error.status);
+    }
+    // The API returns the whole bull, purchases included.
+    const bull = data as SemenBull;
+    set((s) => ({
+      semenBulls: s.semenBulls.map((b) => (b.id === id ? bull : b)).sort(compareByName),
+    }));
+    return true;
+  },
+
+  addSemenPurchase: async (bullId, input) => {
+    const { data, error } = await api["semen-bulls"]({ id: bullId }).purchases.post(input);
+    if (error) apiFail("registrar a compra de sêmen", error.status);
+    const { purchase, expense } = data as { purchase: SemenPurchase; expense: Expense };
+    set((s) => ({
+      semenBulls: withPurchases(s.semenBulls, bullId, (purchases) =>
+        [...purchases, purchase].sort(compareByDate)
+      ),
+      expenses: [...s.expenses, expense],
+    }));
+  },
+
+  removeSemenPurchase: async (bullId, purchaseId) => {
+    const { data, error } = await api["semen-bulls"]({ id: bullId })
+      .purchases({ purchaseId })
+      .delete();
+    if (error) {
+      const detail = error.value as { error?: string };
+      if (error.status === CONFLICT && detail.error === "stock_negative") {
+        // Its doses were already used, more than the store counted: catch up.
+        await reloadHerd(set);
+        return false;
+      }
+      apiFail("excluir a compra de sêmen", error.status);
+    }
+    // The purchase's expense went with it, unless it had been removed before.
+    const { expenseId } = data as { id: string; expenseId: string | null };
+    set((s) => ({
+      semenBulls: withPurchases(s.semenBulls, bullId, (purchases) =>
+        purchases.filter((p) => p.id !== purchaseId)
+      ),
+      ...(expenseId !== null
+        ? { expenses: s.expenses.filter((e) => e.id !== expenseId) }
+        : {}),
+    }));
+    return true;
   },
 
   recordCalving: async (earTag, input) => {

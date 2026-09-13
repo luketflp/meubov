@@ -3,14 +3,15 @@
 /**
  * "Reproduction" section (females): current diagnosis, calving forecast when
  * pregnant, list of breedings and calvings with links to bull and calf — plus
- * the three write actions (breeding, diagnosis, calving).
+ * the three write actions (breeding, diagnosis, calving). A cobertura with a
+ * registered semen bull names the bull and links to its page on Touros.
  *
  * Rendered for EVERY female, with or without history: an empty record is where
  * the first breeding gets registered. Actions disappear once the animal leaves
  * the herd (sold, dead), the history stays readable.
  */
 import Link from "next/link";
-import type { Animal, ReproductionRecord } from "@/lib/types";
+import type { Animal, Breeding, ReproductionRecord } from "@/lib/types";
 import { todayISO, formatDate } from "@/lib/domain/dates";
 import {
   expectedCalvingDate,
@@ -23,6 +24,7 @@ import { SectionCard } from "@/components/ui/section-card";
 import { RegisterBreedingDialog } from "@/components/animal/RegisterBreedingDialog";
 import { RegisterDiagnosisDialog } from "@/components/animal/RegisterDiagnosisDialog";
 import { RegisterCalvingDialog } from "@/components/animal/RegisterCalvingDialog";
+import { bullDisplay } from "@/components/semen/helpers";
 import { ResultPill, BreedingPill } from "@/components/animal/reproduction-pills";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { animalByEarTag } from "@/lib/store/selectors";
@@ -36,6 +38,18 @@ function EarTagLink({ earTag }: { earTag: string }) {
       className="font-mono font-medium text-brand hover:underline"
     >
       {earTag}
+    </Link>
+  );
+}
+
+/** The cobertura's bull: a registered semen bull by name, any other by its ear tag. */
+function BullLink({ breeding }: { breeding: Breeding }) {
+  const semenBulls = useHerdStore((state) => state.semenBulls);
+  const bull = bullDisplay(breeding, semenBulls);
+  if (bull.href === null) return <EarTagLink earTag={breeding.bullEarTag} />;
+  return (
+    <Link href={bull.href} className="font-medium text-brand hover:underline">
+      {bull.label}
     </Link>
   );
 }
@@ -109,7 +123,7 @@ export function AnimalReproduction({ animal }: AnimalReproductionProps) {
                   <span className="font-mono text-sm text-ink">{formatDate(b.date)}</span>
                   <BreedingPill type={b.type} />
                   <span className="text-sm text-ink-soft">
-                    Touro <EarTagLink earTag={b.bullEarTag} />
+                    Touro <BullLink breeding={b} />
                   </span>
                 </li>
               ))}

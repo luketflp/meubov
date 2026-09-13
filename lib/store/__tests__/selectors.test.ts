@@ -8,6 +8,7 @@ import type {
   LotPlacement,
   ManejoSession,
   ReproductionRecord,
+  SemenBull,
   Treatment,
 } from "@/lib/types";
 import { makeAnimal, makeTreatment } from "@/lib/domain/__tests__/fixtures";
@@ -359,7 +360,7 @@ describe("recentBreedings", () => {
       dam("dam-3", { breedings: [breeding("c4", "2026-02-20")] }),
     ];
 
-    expect(recentBreedings(animals).map((row) => row.key)).toEqual([
+    expect(recentBreedings(animals, []).map((row) => row.key)).toEqual([
       "c2",
       "c1",
       "c4",
@@ -375,7 +376,7 @@ describe("recentBreedings", () => {
       bull("T-10"),
     ];
 
-    const [row] = recentBreedings(animals);
+    const [row] = recentBreedings(animals, []);
 
     expect(row.key).toBe("c1");
     expect(row.breeding).toBe(covered);
@@ -394,10 +395,48 @@ describe("recentBreedings", () => {
       bull("T-10"),
     ];
 
-    const [row] = recentBreedings(animals);
+    const [row] = recentBreedings(animals, []);
 
     expect(row.breeding.bullEarTag).toBe("SEMEN-4521");
     expect(row.bull).toBeNull();
+    expect(row.semenBull).toBeNull();
+  });
+
+  it("resolves the registered semen bull whose dose the breeding used", () => {
+    const tufao: SemenBull = { id: "sb-1", name: "Tufão da Serra", code: "NEL-4471", purchases: [] };
+    const other: SemenBull = { id: "sb-2", name: "Bravo", purchases: [] };
+    const animals = [
+      dam("dam-1", {
+        breedings: [{ ...breeding("c1", "2026-01-01", "NEL-4471"), semenBullId: "sb-1" }],
+      }),
+    ];
+
+    const [row] = recentBreedings(animals, [other, tufao]);
+
+    expect(row.semenBull).toBe(tufao);
+    expect(row.bull).toBeNull();
+  });
+
+  it("keeps the herd bull and no semen bull for a natural mating", () => {
+    const animals = [
+      dam("dam-1", { breedings: [breeding("c1", "2026-01-01", "T-10")] }),
+      bull("T-10"),
+    ];
+
+    const [row] = recentBreedings(animals, [{ id: "sb-1", name: "T-10", purchases: [] }]);
+
+    expect(row.bull?.id).toBe("bull-T-10");
+    expect(row.semenBull).toBeNull();
+  });
+
+  it("has no semen bull when its id no longer resolves", () => {
+    const animals = [
+      dam("dam-1", {
+        breedings: [{ ...breeding("c1", "2026-01-01", "NEL-4471"), semenBullId: "sb-gone" }],
+      }),
+    ];
+
+    expect(recentBreedings(animals, [])[0].semenBull).toBeNull();
   });
 
   it("keeps the breedings of a dam that has since left the herd", () => {
@@ -408,11 +447,11 @@ describe("recentBreedings", () => {
       }),
     ];
 
-    expect(recentBreedings(animals)).toHaveLength(1);
+    expect(recentBreedings(animals, [])).toHaveLength(1);
   });
 
   it("ignores animals with no reproduction record or no breedings", () => {
-    expect(recentBreedings([makeAnimal(), dam("dam-1", {})])).toEqual([]);
+    expect(recentBreedings([makeAnimal(), dam("dam-1", {})], [])).toEqual([]);
   });
 });
 
@@ -436,7 +475,7 @@ describe("filterBreedings", () => {
         calvings: [],
       },
     }),
-  ]);
+  ], []);
 
   it("keeps everything for 'all'", () => {
     expect(filterBreedings(rows, "all").map((row) => row.key)).toEqual([

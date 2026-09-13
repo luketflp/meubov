@@ -25,6 +25,7 @@ import { todayISO, formatDate } from "@/lib/domain/dates";
 import { daysToCalving, daysToCalvingText } from "@/lib/domain/reproduction";
 import { ResultPill, BreedingPill } from "@/components/animal/reproduction-pills";
 import { RowDiagnosisDialog } from "@/components/breedings/row-diagnosis-dialog";
+import { semenBullHref } from "@/components/semen/helpers";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import {
@@ -54,11 +55,22 @@ const FILTER_LIST = Object.keys(FILTER_LABEL) as BreedingFilter[];
 const linkClass = "font-mono font-medium text-ink underline-offset-2 hover:underline";
 
 /**
- * The bull's ear tag, linked to its ficha when it is a herd animal. An
- * external bull or a semen code has no ficha — the tag still shows, as plain
- * text.
+ * The bull of the cobertura. A registered semen bull shows by name, linked to
+ * its page on Touros; a herd bull by ear tag, linked to its ficha. An external
+ * bull or a semen code typed by hand has neither — the tag still shows, as
+ * plain text.
  */
 function BullTag({ row }: { row: BreedingRow }) {
+  if (row.semenBull !== null) {
+    return (
+      <Link
+        href={semenBullHref(row.semenBull.id)}
+        className="font-medium text-ink underline-offset-2 hover:underline"
+      >
+        {row.semenBull.name}
+      </Link>
+    );
+  }
   if (row.bull === null) {
     return (
       <span className="font-mono font-medium text-ink">{row.breeding.bullEarTag}</span>
@@ -83,8 +95,9 @@ function forecastDistance(expectedIso: string, todayIso: string): string {
 
 export function BreedingsList() {
   const animals = useHerdStore((s) => s.animals);
+  const semenBulls = useHerdStore((s) => s.semenBulls);
   const [filter, setFilter] = useState<BreedingFilter>("all");
-  const rows = useMemo(() => recentBreedings(animals), [animals]);
+  const rows = useMemo(() => recentBreedings(animals, semenBulls), [animals, semenBulls]);
   const shown = useMemo(() => filterBreedings(rows, filter), [rows, filter]);
   const today = todayISO();
 

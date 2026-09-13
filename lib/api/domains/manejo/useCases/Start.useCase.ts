@@ -6,6 +6,7 @@ import {
   animals,
   manejoSessionAnimals,
   manejoSessions,
+  semenBulls,
 } from "@/lib/db/schema";
 import { sessionName } from "@/lib/domain/manejo";
 import {
@@ -31,7 +32,12 @@ interface StartSessionUseCaseProps {
   input: NewManejoSession;
 }
 
-type StartSessionUseCaseResponse = ManejoSession | LotAssignmentError | null;
+type StartSessionUseCaseResponse =
+  | ManejoSession
+  | LotAssignmentError
+  | "bull_not_found"
+  | "not_female"
+  | null;
 
 type CurrUseCase = _UseCase<StartSessionUseCaseProps, StartSessionUseCaseResponse>;
 
@@ -42,6 +48,10 @@ type CurrUseCase = _UseCase<StartSessionUseCaseProps, StartSessionUseCaseRespons
  * exist yet and join the herd one by one, as the truck unloads at the curral
  * (see `registerEntryAnimal`). Any destination is resolved inside this farm
  * before the session row is written.
+ *
+ * An inseminação takes only females and keeps its touro principal, a semen
+ * bull of this farm; any other kind ignores a bull sent along. Its stock is not
+ * checked here: each pass takes its own dose at the chute.
  */
 export class StartSessionUseCase implements CurrUseCase {
   private repository: RepositoryType;
@@ -57,11 +67,25 @@ export class StartSessionUseCase implements CurrUseCase {
         input.earTags.length === 0
           ? []
           : await tx
-              .select({ id: animals.id, earTag: animals.earTag })
+              .select({ id: animals.id, earTag: animals.earTag, sex: animals.sex })
               .from(animals)
               .where(and(eq(animals.farmId, farmId), inArray(animals.earTag, input.earTags)));
       const idByEarTag = new Map(herd.map((a) => [a.earTag, a.id]));
       if (input.earTags.some((earTag) => !idByEarTag.has(earTag))) return null;
+
+      const semenBullId = input.kind === "insemination" ? input.semenBullId : undefined;
+      if (input.kind === "insemination") {
+        if (herd.some((a) => a.sex !== "female")) return "not_female";
+        const [bull] =
+          semenBullId === undefined
+            ? []
+            : await tx
+                .select({ id: semenBulls.id })
+                .from(semenBulls)
+                .where(and(eq(semenBulls.id, semenBullId), eq(semenBulls.farmId, farmId)))
+                .limit(1);
+        if (!bull) return "bull_not_found";
+      }
 
       if (input.destinationLotId !== undefined) {
         const lotError = await new ValidateLotAssignmentUseCase(tx).run({ farmId, lotId: input.destinationLotId });
@@ -85,6 +109,7 @@ export class StartSessionUseCase implements CurrUseCase {
           pricePerArroba: input.pricePerArroba,
           carcassYieldPct: input.carcassYieldPct,
           totalAmountBrl: input.totalAmountBrl,
+          semenBullId,
           planType: plan?.type,
           planName: plan?.name,
           planWithdrawalDays: plan?.withdrawalDays,

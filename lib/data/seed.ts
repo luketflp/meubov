@@ -650,6 +650,7 @@ export function generateInitialData(): HerdData {
     manejoSessions: movementSessions,
     expenses: buildExpenses(),
     customCategories: [],
+    semenBulls: [],
     farm: { ...FARM },
   };
 }

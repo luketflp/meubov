@@ -11,6 +11,8 @@
  */
 import { Elysia } from "elysia";
 
+import { isForeignKeyViolation } from "@/lib/api/dbErrors";
+
 import { animalsController } from "@/lib/api/domains/animals/animals.controller";
 import { weighingsController } from "@/lib/api/domains/animals/weighings.controller";
 import { breedsController } from "@/lib/api/domains/breeds/breeds.controller";
@@ -24,19 +26,8 @@ import { manejoController } from "@/lib/api/domains/manejo/manejo.controller";
 import { protocolsController } from "@/lib/api/domains/protocols/protocols.controller";
 import { birthsController } from "@/lib/api/domains/reproduction/births.controller";
 import { reproductionController } from "@/lib/api/domains/reproduction/reproduction.controller";
+import { semenController } from "@/lib/api/domains/semen/semen.controller";
 import { treatmentsController } from "@/lib/api/domains/treatments/treatments.controller";
-
-/** Postgres `foreign_key_violation`. */
-const FOREIGN_KEY_VIOLATION = "23503";
-
-function isForeignKeyViolation(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === FOREIGN_KEY_VIOLATION
-  );
-}
 
 export const herdApi = new Elysia({ prefix: "/api/herd" })
   /*
@@ -67,9 +58,10 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
   .use(weighingsController)
   .use(treatmentsController)
 
-  /* ---- Reproduction (females) ------------------------------------------- */
+  /* ---- Reproduction (females), semen bulls ------------------------------- */
   .use(reproductionController)
   .use(birthsController)
+  .use(semenController)
 
   /* ---- Custom herd categories, expenses ---------------------------------- */
   .use(categoriesController)

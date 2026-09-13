@@ -23,6 +23,8 @@ import type {
   Movement,
   PregnancyDiagnosis,
   ReproductionRecord,
+  SemenBull,
+  SemenPurchase,
   Treatment,
   Weighing,
 } from "@/lib/types";
@@ -41,6 +43,8 @@ import type {
   ManejoSessionRow,
   MovementRow,
   PregnancyDiagnosisRow,
+  SemenBullRow,
+  SemenPurchaseRow,
   TreatmentRow,
   WeighingRow,
 } from "@/lib/db/schema";
@@ -70,7 +74,36 @@ export function toTreatment(row: TreatmentRow, earTag: string): Treatment {
 }
 
 export function toBreeding(row: BreedingRow): Breeding {
-  return { id: row.id, date: row.date, type: row.type, bullEarTag: row.bullEarTag };
+  return {
+    id: row.id,
+    date: row.date,
+    type: row.type,
+    bullEarTag: row.bullEarTag,
+    semenBullId: orNothing(row.semenBullId),
+  };
+}
+
+export function toSemenPurchase(row: SemenPurchaseRow): SemenPurchase {
+  return {
+    id: row.id,
+    date: row.date,
+    doses: row.doses,
+    totalBrl: row.totalBrl,
+    seller: orNothing(row.seller),
+    expenseId: orNothing(row.expenseId),
+  };
+}
+
+/** Purchases must already be sorted asc by date. */
+export function toSemenBull(row: SemenBullRow, purchases: SemenPurchase[]): SemenBull {
+  return {
+    id: row.id,
+    name: row.name,
+    code: orNothing(row.code),
+    breed: orNothing(row.breed),
+    central: orNothing(row.central),
+    purchases,
+  };
 }
 
 export function toDiagnosis(row: PregnancyDiagnosisRow): PregnancyDiagnosis {
@@ -236,6 +269,7 @@ export function toManejoSessionAnimal(
     amountBrl: orNothing(row.amountBrl),
     previousLotId: orNothing(row.previousLotId),
     createdAnimal: row.createdAnimal,
+    breedingId: orNothing(row.breedingId),
   };
 }
 
@@ -258,6 +292,7 @@ export function toManejoSession(
     pricePerArroba: orNothing(row.pricePerArroba),
     carcassYieldPct: orNothing(row.carcassYieldPct),
     totalAmountBrl: orNothing(row.totalAmountBrl),
+    semenBullId: orNothing(row.semenBullId),
     notes: orNothing(row.notes),
   };
 }

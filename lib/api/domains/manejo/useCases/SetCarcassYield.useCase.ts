@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import {
@@ -51,7 +51,13 @@ export class SetCarcassYieldUseCase implements CurrUseCase {
       const [session] = await tx
         .select()
         .from(manejoSessions)
-        .where(and(eq(manejoSessions.id, sessionId), eq(manejoSessions.farmId, farmId)))
+        .where(
+          and(
+            eq(manejoSessions.id, sessionId),
+            eq(manejoSessions.farmId, farmId),
+            isNull(manejoSessions.deletedAt)
+          )
+        )
         .for("update");
       if (!session || session.kind !== "sale" || session.pricePerArroba === null) {
         return null;

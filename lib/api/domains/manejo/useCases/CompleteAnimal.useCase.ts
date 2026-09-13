@@ -4,12 +4,14 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   animals,
+  breedings,
   manejoSessionAnimals,
   treatments,
   weighings,
 } from "@/lib/db/schema";
 import { buildPassEffects } from "@/lib/domain/manejo";
 import {
+  toBreeding,
   toManejoPlan,
   toManejoSessionAnimal,
   toTreatment,
@@ -19,6 +21,7 @@ import {
   ValidateLotAssignmentUseCase,
   type LotAssignmentError,
 } from "@/lib/api/domains/animals/useCases/ValidateLotAssignment.useCase";
+import { bullEarTagOf, lockBullStock } from "@/lib/api/domains/semen/_shared/stock";
 
 import {
   ANIMAL_PATCH_COLUMNS,
@@ -30,6 +33,7 @@ import {
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
 import type {
+  Breeding,
   ManejoSessionAnimal,
   Treatment,
   Weighing,
@@ -43,6 +47,8 @@ export interface CompleteResult {
   weighing?: Weighing;
   /** Present when the pass moved or sold the animal. */
   animal?: AnimalPatch;
+  /** The IATF cobertura an inseminação pass recorded on the cow. */
+  breeding?: Breeding;
 }
 
 interface CompleteAnimalUseCaseProps {
@@ -52,11 +58,22 @@ interface CompleteAnimalUseCaseProps {
   data: ManejoPassData;
 }
 
-type CompleteAnimalUseCaseResponse = CompleteResult | { conflict: ManejoConflict } | LotAssignmentError | null;
+type CompleteAnimalUseCaseResponse =
+  | CompleteResult
+  | { conflict: ManejoConflict }
+  | LotAssignmentError
+  | "bull_not_found"
+  | null;
 
 type CurrUseCase = _UseCase<CompleteAnimalUseCaseProps, CompleteAnimalUseCaseResponse>;
 
-/** Applies the session's effects to one animal and marks it done. */
+/**
+ * Applies the session's effects to one animal and marks it done.
+ *
+ * An inseminação pass takes one dose: the bull row stays locked until the
+ * transaction ends, so two cows passing at once cannot both take the last one.
+ * The stock is checked before anything is written.
+ */
 export class CompleteAnimalUseCase implements CurrUseCase {
   private repository: RepositoryType;
 
@@ -82,6 +99,7 @@ export class CompleteAnimalUseCase implements CurrUseCase {
           destinationLotId: session.destinationLotId ?? undefined,
           pricePerArroba: session.pricePerArroba ?? undefined,
           carcassYieldPct: session.carcassYieldPct ?? undefined,
+          semenBullId: session.semenBullId ?? undefined,
         },
         data
       );
@@ -90,6 +108,12 @@ export class CompleteAnimalUseCase implements CurrUseCase {
         const lotError = await new ValidateLotAssignmentUseCase(tx).run({ farmId, lotId: effects.lotId });
         if (lotError) return lotError;
       }
+
+      const stock = effects.breeding
+        ? await lockBullStock(tx, farmId, effects.breeding.semenBullId)
+        : undefined;
+      if (stock === null) return "bull_not_found";
+      if (stock && stock.left <= 0) return conflict("out_of_stock");
 
       const createdTreatments: Treatment[] = [];
       let treatmentId: string | undefined;
@@ -109,6 +133,22 @@ export class CompleteAnimalUseCase implements CurrUseCase {
           .returning();
         boosterId = row.id;
         createdTreatments.push(toTreatment(row, earTag));
+      }
+
+      // The cobertura names its bull the way a single IATF does: by the code,
+      // or by the name when the bull has none.
+      let breeding: Breeding | undefined;
+      if (effects.breeding && stock) {
+        const [row] = await tx
+          .insert(breedings)
+          .values({
+            id: randomUUID(),
+            animalId,
+            ...effects.breeding,
+            bullEarTag: bullEarTagOf(stock.bull),
+          })
+          .returning();
+        breeding = toBreeding(row);
       }
 
       let weighingId: number | undefined;
@@ -155,6 +195,7 @@ export class CompleteAnimalUseCase implements CurrUseCase {
           treatmentId: treatmentId ?? null,
           boosterId: boosterId ?? null,
           weighingId: weighingId ?? null,
+          breedingId: breeding?.id ?? null,
         })
         .where(
           and(
@@ -169,6 +210,7 @@ export class CompleteAnimalUseCase implements CurrUseCase {
         treatments: createdTreatments,
         weighing: effects.weighing,
         animal: patch,
+        breeding,
       };
     });
   };

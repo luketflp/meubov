@@ -38,6 +38,7 @@ export default function AnimalRecordPage() {
   const lots = useHerdStore((s) => s.lots);
   const invernadas = useHerdStore((s) => s.invernadas);
   const lotPlacements = useHerdStore((s) => s.lotPlacements);
+  const semenBulls = useHerdStore((s) => s.semenBulls);
 
   const animal = animalById(animals, params.id);
 
@@ -95,7 +96,7 @@ export default function AnimalRecordPage() {
 
       <div className="grid items-start gap-4 xl:grid-cols-5">
         <div className="xl:col-span-2">
-          <Timeline animal={animal} treatments={forAnimal} />
+          <Timeline animal={animal} treatments={forAnimal} semenBulls={semenBulls} />
         </div>
         <div className="space-y-4 xl:col-span-3">
           <HealthHistory treatments={forAnimal} />

@@ -1,4 +1,4 @@
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import {
@@ -69,7 +69,13 @@ export class RegisterEntryAnimalUseCase implements CurrUseCase {
       const [session] = await tx
         .select()
         .from(manejoSessions)
-        .where(and(eq(manejoSessions.id, sessionId), eq(manejoSessions.farmId, farmId)))
+        .where(
+          and(
+            eq(manejoSessions.id, sessionId),
+            eq(manejoSessions.farmId, farmId),
+            isNull(manejoSessions.deletedAt)
+          )
+        )
         .for("update");
       if (!session || session.kind !== "entry" || session.destinationLotId === null) {
         return null;

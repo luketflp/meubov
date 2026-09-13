@@ -13,6 +13,7 @@ import type {
   LotPlacement,
   AnimalStatus,
   ManejoSession,
+  SemenBull,
   Treatment,
   TreatmentType,
 } from "@/lib/types";
@@ -72,6 +73,8 @@ export interface BreedingRow {
   dam: Animal;
   /** The bull when its ear tag resolves to a herd animal; null for an external bull or a semen code. */
   bull: Animal | null;
+  /** The registered semen bull whose dose the breeding used; null for any other bull. */
+  semenBull: SemenBull | null;
   outcome: BreedingOutcome;
 }
 
@@ -799,12 +802,14 @@ export function recentBirths(animals: Animal[]): Birth[] {
 
 /**
  * Every breeding on the farm as the Reprodução screen shows it: the dam's
- * record, the bull's when the ear tag resolves, and the outcome of the
- * breeding. Newest first, then by dam ear tag so a batch of IATF on the same
- * day reads in a stable order.
+ * record, the bull's when the ear tag resolves, the registered semen bull when
+ * the breeding used one of its doses, and the outcome of the breeding. Newest
+ * first, then by dam ear tag so a batch of IATF on the same day reads in a
+ * stable order.
  */
-export function recentBreedings(animals: Animal[]): BreedingRow[] {
+export function recentBreedings(animals: Animal[], semenBulls: SemenBull[]): BreedingRow[] {
   const byEarTag = new Map(animals.map((animal) => [animal.earTag, animal]));
+  const semenBullById = new Map(semenBulls.map((bull) => [bull.id, bull]));
   return animals
     .flatMap((dam) => {
       const record = dam.reproduction;
@@ -814,6 +819,10 @@ export function recentBreedings(animals: Animal[]): BreedingRow[] {
         breeding,
         dam,
         bull: byEarTag.get(breeding.bullEarTag) ?? null,
+        semenBull:
+          breeding.semenBullId === undefined
+            ? null
+            : (semenBullById.get(breeding.semenBullId) ?? null),
         outcome: breedingOutcome(record, breeding),
       }));
     })

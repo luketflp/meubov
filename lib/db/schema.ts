@@ -99,7 +99,8 @@ export const manejoSessionStatusEnum = pgEnum("manejo_session_status", [
 /**
  * What a manejo session does to each animal at the chute. Health and weighing
  * only record history; transfer, sale and entry also move the herd (lot, active
- * flag, registration) and feed the financial ledger.
+ * flag, registration) and feed the financial ledger. Insemination records an
+ * IATF breeding per cow, each taking one dose of a semen bull.
  */
 export const manejoKindEnum = pgEnum("manejo_kind", [
   "health",
@@ -107,6 +108,7 @@ export const manejoKindEnum = pgEnum("manejo_kind", [
   "transfer",
   "sale",
   "entry",
+  "insemination",
 ]);
 
 /** Outcome of one animal inside a manejo session. */
@@ -368,17 +370,75 @@ export const treatments = pgTable(
   ]
 );
 
+/**
+ * Bull the farm buys semen from (not a herd animal: herd bulls for natural
+ * mating are animals of category `bull`). Its stock is never stored — it
+ * derives from the purchases and the breedings that used a dose.
+ */
+export const semenBulls = pgTable(
+  "semen_bulls",
+  {
+    id: text("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farm.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Registro or central code, e.g. "NEL-4471". */
+    code: text("code"),
+    /** Free text, picked from the farm's breeds. */
+    breed: text("breed"),
+    /** Central de sêmen the doses come from. */
+    central: text("central"),
+  },
+  // Names are unique per farm ignoring case: "tufão" and "Tufão" are one bull.
+  (t) => [uniqueIndex("semen_bulls_farm_id_name_idx").on(t.farmId, sql`lower(${t.name})`)]
+);
+
+/** One purchase of semen doses of a bull, written together with its expense. */
+export const semenPurchases = pgTable(
+  "semen_purchases",
+  {
+    id: text("id").primaryKey(),
+    bullId: text("bull_id")
+      .notNull()
+      .references(() => semenBulls.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    doses: integer("doses").notNull(),
+    totalBrl: numeric("total_brl", { mode: "number" }).notNull(),
+    /** Fornecedor, free text: they are outside the farm. */
+    seller: text("seller"),
+    /** Expense the purchase wrote in Financeiro; nulls out if that row goes. */
+    expenseId: text("expense_id").references(() => expenses.id, {
+      onDelete: "set null",
+    }),
+  },
+  (t) => [
+    index("semen_purchases_bull_id_idx").on(t.bullId),
+    check("semen_purchases_doses_positive", sql`${t.doses} > 0`),
+  ]
+);
+
 /** Breeding (timed AI or natural mating) of a female. */
-export const breedings = pgTable("breedings", {
-  id: text("id").primaryKey(),
-  animalId: text("animal_id")
-    .notNull()
-    .references(() => animals.id, { onDelete: "cascade" }),
-  date: date("date").notNull(),
-  type: breedingTypeEnum("type").notNull(),
-  /** Plain text: the bull may be external / not registered in the herd. */
-  bullEarTag: text("bull_ear_tag").notNull(),
-});
+export const breedings = pgTable(
+  "breedings",
+  {
+    id: text("id").primaryKey(),
+    animalId: text("animal_id")
+      .notNull()
+      .references(() => animals.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    type: breedingTypeEnum("type").notNull(),
+    /** Plain text: the bull may be external / not registered in the herd. */
+    bullEarTag: text("bull_ear_tag").notNull(),
+    /**
+     * Semen bull whose dose this breeding used; null for any other bull.
+     * Restricts: a bull cannot be deleted while a breeding used its doses.
+     */
+    semenBullId: text("semen_bull_id").references(() => semenBulls.id),
+  },
+  // A bull's stock counts its breedings on every dose taken.
+  (t) => [index("breedings_semen_bull_id_idx").on(t.semenBullId)]
+);
 
 /** Pregnancy diagnosis linked to a breeding (one per breeding). */
 export const pregnancyDiagnoses = pgTable("pregnancy_diagnoses", {
@@ -481,6 +541,8 @@ export const manejoSessions = pgTable(
     carcassYieldPct: numeric("carcass_yield_pct", { mode: "number" }),
     /** Closed price in BRL: a sale sold as one lot, or an entry's purchase total. */
     totalAmountBrl: numeric("total_amount_brl", { mode: "number" }),
+    /** Touro principal of an insemination, pre-selected for every cow. */
+    semenBullId: text("semen_bull_id").references(() => semenBulls.id),
     planType: treatmentTypeEnum("plan_type"),
     planName: text("plan_name"),
     planWithdrawalDays: integer("plan_withdrawal_days"),
@@ -497,8 +559,8 @@ export const manejoSessions = pgTable(
 
 /**
  * Per-animal state of a manejo session (the chute line). The effect refs
- * (treatment, booster, weighing) support the undo of a pass; they null out if
- * the effect row is deleted elsewhere.
+ * (treatment, booster, weighing, breeding) support the undo of a pass; they
+ * null out if the effect row is deleted elsewhere.
  */
 export const manejoSessionAnimals = pgTable(
   "manejo_session_animals",
@@ -529,6 +591,9 @@ export const manejoSessionAnimals = pgTable(
     weighingId: integer("weighing_id").references(() => weighings.id, {
       onDelete: "set null",
     }),
+    breedingId: text("breeding_id").references(() => breedings.id, {
+      onDelete: "set null",
+    }),
   },
   (t) => [primaryKey({ columns: [t.sessionId, t.animalId] })]
 );
@@ -546,6 +611,8 @@ export type BreedRow = typeof breeds.$inferSelect;
 export type AnimalRow = typeof animals.$inferSelect;
 export type WeighingRow = typeof weighings.$inferSelect;
 export type TreatmentRow = typeof treatments.$inferSelect;
+export type SemenBullRow = typeof semenBulls.$inferSelect;
+export type SemenPurchaseRow = typeof semenPurchases.$inferSelect;
 export type BreedingRow = typeof breedings.$inferSelect;
 export type PregnancyDiagnosisRow = typeof pregnancyDiagnoses.$inferSelect;
 export type CalvingRow = typeof calvings.$inferSelect;

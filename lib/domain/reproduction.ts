@@ -63,12 +63,33 @@ export function breedingsAwaitingDiagnosis(record: ReproductionRecord): Breeding
 }
 
 /**
+ * Whether an exam result diagnosed the breeding. Only pregnant or open do: an
+ * exam recorded as "pending" could not tell yet, so the cow still awaits the
+ * ultrassom — and a pass undone takes that exam along with its breeding.
+ */
+export function isDiagnosed(result: DiagnosisResult): boolean {
+  return result === "pregnant" || result === "open";
+}
+
+/**
  * True when a calving was already recorded on or after the breeding date — the
  * pregnancy ended. Without this a "pregnant" diagnosis would keep forecasting a
  * calving that already happened.
  */
 export function hasCalvedSince(record: ReproductionRecord, breedingIso: string): boolean {
   return record.calvings.some((c) => c.date >= breedingIso);
+}
+
+/**
+ * True while the dam carries a calf: her latest breeding was diagnosed pregnant
+ * and no calving was recorded since. An older pregnant diagnosis does not
+ * count — a newer breeding means that pregnancy is behind her.
+ */
+export function isPregnantNow(record: ReproductionRecord | undefined): boolean {
+  if (!record) return false;
+  const current = currentDiagnosis(record);
+  if (current === null || current.result !== "pregnant") return false;
+  return !hasCalvedSince(record, current.breeding.date);
 }
 
 /** What became of one breeding: its diagnosis and the calving it still forecasts. */

@@ -21,6 +21,7 @@ import { todayISO, formatDate } from "@/lib/domain/dates";
 import { breedingsAwaitingDiagnosis } from "@/lib/domain/reproduction";
 import { BREEDING_TYPE_LABEL, DIAGNOSIS_RESULT_LABEL } from "@/lib/domain/labels";
 import { BreedingPill } from "@/components/animal/reproduction-pills";
+import { bullDisplay } from "@/components/semen/helpers";
 import { Button } from "@/components/ui/button";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -65,6 +66,7 @@ interface DiagnosisFormProps {
 
 export function DiagnosisForm({ earTag, record, breeding, onRegistered }: DiagnosisFormProps) {
   const recordDiagnosis = useHerdStore((s) => s.recordDiagnosis);
+  const semenBulls = useHerdStore((s) => s.semenBulls);
   const { addToast } = useToast();
 
   const [fields, setFields] = useState<DiagnosisFields>(() => ({
@@ -77,6 +79,8 @@ export function DiagnosisForm({ earTag, record, breeding, onRegistered }: Diagno
   const options = byDateDesc(record.breedings);
   const awaitingIds = new Set(breedingsAwaitingDiagnosis(record).map((b) => b.id));
   const selected = breeding ?? options.find((b) => b.id === fields.breedingId) ?? null;
+  // A registered semen bull reads by name; a herd bull or a semen code by its tag, in mono.
+  const fixedBull = breeding ? bullDisplay(breeding, semenBulls) : null;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -110,7 +114,7 @@ export function DiagnosisForm({ earTag, record, breeding, onRegistered }: Diagno
 
   return (
     <form onSubmit={onSubmit} noValidate className="grid gap-4">
-      {breeding ? (
+      {breeding && fixedBull ? (
         <div className="rounded-lg border border-hairline bg-surface px-3 py-2.5">
           <p className="text-[11px] font-medium tracking-wide text-ink-soft uppercase">
             Cobertura
@@ -119,7 +123,10 @@ export function DiagnosisForm({ earTag, record, breeding, onRegistered }: Diagno
             <span className="font-mono text-ink">{formatDate(breeding.date)}</span>
             <BreedingPill type={breeding.type} />
             <span className="text-ink-soft">
-              Touro <span className="font-mono">{breeding.bullEarTag}</span>
+              Touro{" "}
+              <span className={fixedBull.href === null ? "font-mono" : undefined}>
+                {fixedBull.label}
+              </span>
             </span>
           </div>
         </div>
@@ -137,7 +144,7 @@ export function DiagnosisForm({ earTag, record, breeding, onRegistered }: Diagno
               {options.map((item) => (
                 <SelectItem key={item.id} value={item.id}>
                   {formatDate(item.date)} · {BREEDING_TYPE_LABEL[item.type]} ·{" "}
-                  {item.bullEarTag}
+                  {bullDisplay(item, semenBulls).label}
                   {awaitingIds.has(item.id) ? " · sem DG" : ""}
                 </SelectItem>
               ))}

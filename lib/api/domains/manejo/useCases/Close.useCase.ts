@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import {
@@ -18,7 +18,10 @@ type CloseSessionUseCaseResponse = boolean;
 
 type CurrUseCase = _UseCase<CloseSessionUseCaseProps, CloseSessionUseCaseResponse>;
 
-/** Closes the session (remaining animals stay recorded as they are). */
+/**
+ * Closes the session (remaining animals stay recorded as they are). A discarded
+ * session is not found.
+ */
 export class CloseSessionUseCase implements CurrUseCase {
   private repository: RepositoryType;
 
@@ -31,7 +34,13 @@ export class CloseSessionUseCase implements CurrUseCase {
     const rows = await this.repository
       .update(manejoSessions)
       .set({ status: "closed" })
-      .where(and(eq(manejoSessions.id, sessionId), eq(manejoSessions.farmId, farmId)))
+      .where(
+        and(
+          eq(manejoSessions.id, sessionId),
+          eq(manejoSessions.farmId, farmId),
+          isNull(manejoSessions.deletedAt)
+        )
+      )
       .returning({ id: manejoSessions.id });
     return rows.length > 0;
   };

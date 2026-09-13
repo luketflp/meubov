@@ -99,6 +99,13 @@
       "when": 1789163195993,
       "tag": "0013_manejo-soft-delete",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1789304890942,
+      "tag": "0014_touros-de-semen",
+      "breakpoints": true
     }
   ]
 }

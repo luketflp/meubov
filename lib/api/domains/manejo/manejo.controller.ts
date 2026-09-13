@@ -5,7 +5,8 @@
  * A manejo takes hours, not one click: the session opens with every selected
  * animal pending and each one is completed, skipped or reopened as it passes
  * the chute. Transfers, sales and entries are manejo sessions too, which is
- * why there is no separate movement endpoint.
+ * why there is no separate movement endpoint. So is an inseminação: each pass
+ * records an IATF cobertura and takes one dose of semen.
  */
 import { Elysia } from "elysia";
 
@@ -43,8 +44,14 @@ export const manejoController = new Elysia({ prefix: "/manejo" })
       ) {
         return status(422, { error: "destination_required" });
       }
+      // The touro principal is what every cow of an inseminação starts with.
+      if (body.kind === "insemination" && body.semenBullId === undefined) {
+        return status(422, { error: "semen_bull_required" });
+      }
       const session = await new StartSessionUseCase().run({ farmId, input: body });
       if (session === "lot_not_found") return status(404, { error: session });
+      if (session === "bull_not_found") return status(404, { error: session });
+      if (session === "not_female") return status(422, { error: session });
       if (session === null) return status(404, { error: "animal_not_found" });
       return session;
     },
@@ -76,6 +83,7 @@ export const manejoController = new Elysia({ prefix: "/manejo" })
         data: body,
       });
       if (result === "lot_not_found") return status(404, { error: result });
+      if (result === "bull_not_found") return status(404, { error: result });
       if (result === null) return status(404, { error: "not_found" });
       if ("conflict" in result) return status(409, { error: result.conflict });
       return result;
@@ -107,7 +115,12 @@ export const manejoController = new Elysia({ prefix: "/manejo" })
       });
       if (result === "lot_not_found") return status(404, { error: result });
       if (result === null) return status(404, { error: "not_found" });
-      if ("conflict" in result) return status(409, { error: result.conflict });
+      if ("conflict" in result) {
+        // A diagnosed cobertura names itself, so the client can offer to clear it.
+        return "breedingId" in result
+          ? status(409, { error: result.conflict, breedingId: result.breedingId })
+          : status(409, { error: result.conflict });
+      }
       return result;
     },
     { farm: true }

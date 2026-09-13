@@ -20,6 +20,16 @@ export type TreatmentEffect = Omit<Treatment, "id" | "animalEarTag"> & {
   status: TreatmentStatus;
 };
 
+/**
+ * Cobertura an inseminação pass records (no id / dam ref yet). Always an IATF,
+ * and always with a registered bull: it takes one dose of that bull's semen.
+ */
+export interface BreedingEffect {
+  date: string;
+  type: "timedAI";
+  semenBullId: string;
+}
+
 /** Effects one completed pass produces for one animal. */
 export interface PassEffects {
   /** The applied treatment (status done, dated on the session), if planned. */
@@ -34,6 +44,8 @@ export interface PassEffects {
   sold?: boolean;
   /** What this animal was worth (R$), when the sale is priced per arroba. */
   amountBrl?: number;
+  /** The IATF cobertura an inseminação records on the cow. */
+  breeding?: BreedingEffect;
 }
 
 /** Session fields that drive the effects of a pass. */
@@ -48,16 +60,19 @@ export interface PassContext {
   pricePerArroba?: number;
   /** Rendimento de carcaça (%) pricing the arrobas of a venda. */
   carcassYieldPct?: number;
+  /** Touro principal of an inseminação, used when the pass picks no bull. */
+  semenBullId?: string;
 }
 
 /** Default session name when there is no sanitary plan (weighing-only). */
 export const WEIGHING_SESSION_NAME = "Pesagem";
 
-/** pt-BR name of the sessions that move the herd instead of treating it. */
+/** pt-BR name of the sessions that move or breed the herd instead of treating it. */
 const KIND_SESSION_NAME: Partial<Record<ManejoKind, string>> = {
   transfer: "Troca de lote",
   sale: "Venda",
   entry: "Entrada",
+  insemination: "Inseminação",
 };
 
 /** Name of a new session: the plan's name, or the default name of its kind. */
@@ -78,6 +93,10 @@ export function sessionName(
  * the animal in the destination lot, a venda takes it out of the active herd
  * and prices it by the weight just read on the scale (R$/@ × arrobas) — a sale
  * closed as one lot has no per-animal value, only the session total.
+ *
+ * An inseminação records one IATF cobertura per cow, with the bull picked at the
+ * brete or, when the pass names none, the session's touro principal. Without
+ * either there is no dose to take, so no cobertura.
  */
 export function buildPassEffects(
   session: PassContext,
@@ -111,6 +130,12 @@ export function buildPassEffects(
     effects.sold = true;
     if (weightKg !== undefined && session.pricePerArroba !== undefined) {
       effects.amountBrl = saleAmount(weightKg, session.pricePerArroba, session.carcassYieldPct);
+    }
+  }
+  if (session.kind === "insemination") {
+    const semenBullId = data.semenBullId || session.semenBullId;
+    if (semenBullId) {
+      effects.breeding = { date: session.date, type: "timedAI", semenBullId };
     }
   }
 

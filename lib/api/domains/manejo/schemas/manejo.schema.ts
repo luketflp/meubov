@@ -12,7 +12,7 @@ import {
 /**
  * What a manejo session does at the chute. `transfer`, `sale` and `entry` are
  * the compras, vendas e transferências of the farm — there is no separate
- * movement endpoint anymore.
+ * movement endpoint anymore. `insemination` records an IATF cobertura per cow.
  */
 export const ManejoKindModel = t.Union([
   t.Literal("health"),
@@ -20,6 +20,7 @@ export const ManejoKindModel = t.Union([
   t.Literal("transfer"),
   t.Literal("sale"),
   t.Literal("entry"),
+  t.Literal("insemination"),
 ]);
 
 /** Sanitary plan applied per animal in a manejo session. */
@@ -56,6 +57,8 @@ export const NewManejoSessionBody = t.Object({
   carcassYieldPct: t.Optional(t.Number({ exclusiveMinimum: 0, maximum: 100 })),
   /** Closed price of the batch, or the purchase total of an entry. */
   totalAmountBrl: t.Optional(t.Number({ exclusiveMinimum: 0 })),
+  /** Touro principal of an inseminação; the route requires it for that kind. */
+  semenBullId: t.Optional(t.String({ minLength: 1 })),
   notes: t.Optional(t.String()),
 });
 
@@ -85,6 +88,8 @@ export const EntryAnimalBody = t.Object({
 /** Body of POST /manejo/:id/animals/:animalId/complete (ManejoPassData). */
 export const ManejoPassBody = t.Object({
   weightKg: t.Optional(t.Number({ exclusiveMinimum: 0 })),
+  /** Bull whose dose an inseminação pass uses; the session's touro principal when absent. */
+  semenBullId: t.Optional(t.String({ minLength: 1 })),
   notes: t.Optional(t.String()),
 });
 

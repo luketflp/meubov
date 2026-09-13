@@ -4,11 +4,13 @@
  * "Iniciar manejo" dialog: opens a manejo session (curral working session) for
  * the selected animals. A sanitary action (vaccine, deworming, medication,
  * exam) captures product, dose, withdrawal, responsible, cost and optional
- * booster date; weighing is a toggle (or the session itself). Nothing is
- * applied here: the animals are handled one by one on the session screen, as
- * they pass the chute. Validation is a local pure function (validateManejo).
+ * booster date; weighing is a toggle (or the session itself). An inseminação
+ * picks the lote and the touro principal first and lists only the cows it can
+ * take (see insemination-fields.tsx). Nothing is applied here: the animals are
+ * handled one by one on the session screen, as they pass the chute. Validation
+ * is a local pure function (validateManejo).
  */
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Play, Search } from "lucide-react";
 import { useHerdStore, type NewManejoSession } from "@/lib/store/useHerdStore";
@@ -23,6 +25,8 @@ import { todayISO, formatAge } from "@/lib/domain/dates";
 import { CATEGORY_LABEL } from "@/lib/domain/labels";
 import { currentWeight } from "@/lib/domain/weights";
 import { formatKg } from "@/lib/domain/format";
+import { isPregnantNow } from "@/lib/domain/reproduction";
+import { eligibleForInsemination } from "@/lib/domain/semen";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -58,6 +62,8 @@ import {
   type ManejoFields,
   type SalePricing,
 } from "@/components/manejo/helpers";
+import { MainBullField, MainBullShortNotice } from "@/components/manejo/insemination-fields";
+import { cn } from "@/lib/utils";
 
 /** Sentinel of the "all" option in the lot/category filters. */
 const ALL = "all";
@@ -70,9 +76,9 @@ function typedNumber(raw: string): number | undefined {
   return raw.trim() === "" || !Number.isFinite(value) || value <= 0 ? undefined : value;
 }
 
-function createInitialFields(): ManejoFields {
+function createInitialFields(action: ManejoAction): ManejoFields {
   return {
-    action: "vaccine",
+    action,
     date: todayISO(),
     name: "",
     dose: "",
@@ -88,7 +94,14 @@ function createInitialFields(): ManejoFields {
     pricing: "perArroba",
     pricePerArroba: "",
     totalAmountBrl: "",
+    semenBullId: "",
   };
+}
+
+/** "1 animal selecionado", "32 vacas selecionadas" — an inseminação counts cows. */
+function selectedLabel(n: number, cows: boolean): string {
+  if (cows) return n === 1 ? "1 vaca selecionada" : `${n} vacas selecionadas`;
+  return n === 1 ? "1 animal selecionado" : `${n} animais selecionados`;
 }
 
 function ErrorMessage({ message }: { message?: string }) {
@@ -100,10 +113,13 @@ function AnimalRow({
   animal,
   checked,
   onToggle,
+  pregnant = false,
 }: {
   animal: Animal;
   checked: boolean;
   onToggle: () => void;
+  /** Inseminação: the cow is pregnant now, so she reads muted with "Já prenhe". */
+  pregnant?: boolean;
 }) {
   const lastWeight = currentWeight(animal);
   return (
@@ -116,30 +132,87 @@ function AnimalRow({
             onChange={onToggle}
             className="size-4 shrink-0 accent-brand"
           />
-          <span className="font-mono font-medium text-ink">{animal.earTag}</span>
+          <span className={cn("font-mono font-medium", pregnant ? "text-ink-soft" : "text-ink")}>
+            {animal.earTag}
+          </span>
           <span className="truncate text-xs text-ink-soft">
             {CATEGORY_LABEL[animal.category]} · {formatAge(animal.birthDate)}
           </span>
         </label>
-        <span className="ml-auto shrink-0 font-mono text-xs text-ink-soft">
-          {lastWeight === null ? "Sem pesagem" : formatKg(lastWeight)}
-        </span>
+        {pregnant ? (
+          <span className="ml-auto inline-flex shrink-0 items-center rounded-md bg-healthy-soft px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-healthy">
+            Já prenhe
+          </span>
+        ) : (
+          <span className="ml-auto shrink-0 font-mono text-xs text-ink-soft">
+            {lastWeight === null ? "Sem pesagem" : formatKg(lastWeight)}
+          </span>
+        )}
       </div>
     </li>
   );
 }
 
-export function RegisterManejoDialog() {
+/** The lote filter: inside the animal picker, or on top of an inseminação. */
+function LotFilter({
+  id,
+  value,
+  onChange,
+  lots,
+  invernadaNameByLot,
+}: {
+  id?: string;
+  value: string;
+  onChange: (lotId: string) => void;
+  lots: { id: string; name: string }[];
+  invernadaNameByLot: Map<string, string>;
+}) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger
+        id={id}
+        className="min-h-11 w-full"
+        aria-label={id ? undefined : "Filtrar por lote"}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={ALL}>Todos os lotes</SelectItem>
+        {lots.map((lot) => (
+          <SelectItem key={lot.id} value={lot.id}>
+            {lot.name} · {invernadaNameByLot.get(lot.id)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+interface RegisterManejoDialogProps {
+  /**
+   * Action the dialog opens on ("Tipo de manejo" starts on vacina). A screen
+   * that opens it for one action — Reprodução's "Iniciar inseminação" — passes
+   * it, and the choice of type is not offered.
+   */
+  initialAction?: ManejoAction;
+  /** Button that opens the dialog; "Iniciar manejo" by default. */
+  trigger?: ReactNode;
+}
+
+export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoDialogProps) {
   const router = useRouter();
   const lots = useHerdStore((s) => s.lots);
   const invernadas = useHerdStore((s) => s.invernadas);
   const lotPlacements = useHerdStore((s) => s.lotPlacements);
   const animals = useHerdStore((s) => s.animals);
+  const semenBulls = useHerdStore((s) => s.semenBulls);
   const startManejoSession = useHerdStore((s) => s.startManejoSession);
   const { addToast } = useToast();
 
   const [open, setOpen] = useState(false);
-  const [fields, setFields] = useState<ManejoFields>(createInitialFields);
+  const [fields, setFields] = useState<ManejoFields>(() =>
+    createInitialFields(initialAction ?? "vaccine")
+  );
   const [errors, setErrors] = useState<ManejoErrors>({});
   const [lotId, setLotId] = useState<string>(ALL);
   const [category, setCategory] = useState<Category | typeof ALL>(ALL);
@@ -147,6 +220,7 @@ export function RegisterManejoDialog() {
 
   const sanitary = isSanitaryAction(fields.action);
   const moves = isMovementAction(fields.action);
+  const inseminates = fields.action === "insemination";
   const destinationLots = useMemo(
     () => currentlyPlacedLots(lots, lotPlacements),
     [lots, lotPlacements]
@@ -174,7 +248,7 @@ export function RegisterManejoDialog() {
 
   function onOpenChange(next: boolean) {
     if (next) {
-      setFields(createInitialFields());
+      setFields(createInitialFields(initialAction ?? "vaccine"));
       setErrors({});
       setLotId(ALL);
       setCategory(ALL);
@@ -188,13 +262,21 @@ export function RegisterManejoDialog() {
     return activeAnimals(animals).filter(
       (a) =>
         (lotId === ALL || a.lotId === lotId) &&
-        (category === ALL || a.category === category) &&
+        // An inseminação lists only the cows it can take; it has no category filter.
+        (inseminates
+          ? eligibleForInsemination(a)
+          : category === ALL || a.category === category) &&
         (searchTerm === "" || a.earTag.toLowerCase().includes(searchTerm))
     );
-  }, [animals, lotId, category, search]);
+  }, [animals, lotId, category, search, inseminates]);
 
+  // A cow pregnant now stays listed but out of "Selecionar todos": a dose on her
+  // is wasted unless the farmer checks her on purpose.
+  const pickable = inseminates
+    ? selectable.filter((a) => !isPregnantNow(a.reproduction))
+    : selectable;
   const allVisibleSelected =
-    selectable.length > 0 && selectable.every((a) => fields.earTags.includes(a.earTag));
+    pickable.length > 0 && pickable.every((a) => fields.earTags.includes(a.earTag));
 
   function toggleEarTag(earTag: string) {
     setFields((f) => ({
@@ -208,10 +290,10 @@ export function RegisterManejoDialog() {
   function toggleAllVisible() {
     setFields((f) => {
       if (allVisibleSelected) {
-        const visible = new Set(selectable.map((a) => a.earTag));
+        const visible = new Set(pickable.map((a) => a.earTag));
         return { ...f, earTags: f.earTags.filter((t) => !visible.has(t)) };
       }
-      const merged = new Set([...f.earTags, ...selectable.map((a) => a.earTag)]);
+      const merged = new Set([...f.earTags, ...pickable.map((a) => a.earTag)]);
       return { ...f, earTags: [...merged] };
     });
   }
@@ -233,6 +315,7 @@ export function RegisterManejoDialog() {
       earTags: fields.earTags,
       weighing: sessionWeighs(fields),
     };
+    if (inseminates) input.semenBullId = fields.semenBullId;
     if (moves) {
       const counterparty = fields.counterparty.trim();
       if (fields.action === "transfer" || fields.action === "entry") {
@@ -271,38 +354,44 @@ export function RegisterManejoDialog() {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button className="min-h-11">
-          <Play aria-hidden />
-          Iniciar manejo
-        </Button>
+        {trigger ?? (
+          <Button className="min-h-11">
+            <Play aria-hidden />
+            Iniciar manejo
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Iniciar manejo</DialogTitle>
+          <DialogTitle>{inseminates ? "Iniciar inseminação" : "Iniciar manejo"}</DialogTitle>
           <DialogDescription>
             {fields.action === "entry"
               ? "Os animais comprados entram no rebanho um a um, conforme passam no brete e recebem o brinco."
-              : "Monte a lista do curral e comece o trabalho: os animais são manejados um a um no brete, e o andamento fica salvo na sessão."}
+              : inseminates
+                ? "Monte a lista das vacas e comece o trabalho: cada vaca é inseminada no brete, e o andamento fica salvo na sessão."
+                : "Monte a lista do curral e comece o trabalho: os animais são manejados um a um no brete, e o andamento fica salvo na sessão."}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={onSubmit} noValidate className="grid gap-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-1.5">
-              <Label htmlFor="manejo-action">Tipo de manejo</Label>
-              <Select value={fields.action} onValueChange={onChangeAction}>
-                <SelectTrigger id="manejo-action" className="min-h-11 w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MANEJO_ACTION_LIST.map((action) => (
-                    <SelectItem key={action} value={action}>
-                      {MANEJO_ACTION_LABEL[action]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {initialAction === undefined ? (
+              <div className="grid gap-1.5">
+                <Label htmlFor="manejo-action">Tipo de manejo</Label>
+                <Select value={fields.action} onValueChange={onChangeAction}>
+                  <SelectTrigger id="manejo-action" className="min-h-11 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MANEJO_ACTION_LIST.map((action) => (
+                      <SelectItem key={action} value={action}>
+                        {MANEJO_ACTION_LABEL[action]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
 
             <div className="grid gap-1.5">
               <Label htmlFor="manejo-date">Data</Label>
@@ -316,6 +405,28 @@ export function RegisterManejoDialog() {
               />
               <ErrorMessage message={errors.date} />
             </div>
+
+            {inseminates ? (
+              <>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="manejo-lot">Lote</Label>
+                  <LotFilter
+                    id="manejo-lot"
+                    value={lotId}
+                    onChange={setLotId}
+                    lots={filterLots}
+                    invernadaNameByLot={invernadaNameByLot}
+                  />
+                </div>
+                <MainBullField
+                  value={fields.semenBullId}
+                  onChange={(semenBullId) => setFields((f) => ({ ...f, semenBullId }))}
+                  error={errors.semenBullId}
+                  // Alone on its row when the type is fixed and Data shares the row with Lote.
+                  className={cn(initialAction !== undefined && "sm:col-span-2")}
+                />
+              </>
+            ) : null}
           </div>
 
           {moves ? (
@@ -582,21 +693,17 @@ export function RegisterManejoDialog() {
 
           {picksAnimals ? (
           <fieldset className="grid gap-1.5">
-            <legend className="mb-1.5 text-sm font-medium text-ink">Selecionar animais</legend>
+            <legend className="mb-1.5 text-sm font-medium text-ink">
+              {inseminates ? "Selecionar vacas" : "Selecionar animais"}
+            </legend>
+            {inseminates ? null : (
             <div className="grid gap-2 sm:grid-cols-2">
-              <Select value={lotId} onValueChange={setLotId}>
-                <SelectTrigger className="min-h-11 w-full" aria-label="Filtrar por lote">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>Todos os lotes</SelectItem>
-                  {filterLots.map((lot) => (
-                    <SelectItem key={lot.id} value={lot.id}>
-                      {lot.name} · {invernadaNameByLot.get(lot.id)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <LotFilter
+                value={lotId}
+                onChange={setLotId}
+                lots={filterLots}
+                invernadaNameByLot={invernadaNameByLot}
+              />
               <Select
                 value={category}
                 onValueChange={(v) => setCategory(v as Category | typeof ALL)}
@@ -614,6 +721,7 @@ export function RegisterManejoDialog() {
                 </SelectContent>
               </Select>
             </div>
+            )}
 
             <div className="relative">
               <Search
@@ -632,7 +740,9 @@ export function RegisterManejoDialog() {
 
             {selectable.length === 0 ? (
               <p className="px-1 py-2 text-xs text-ink-soft">
-                Nenhum animal ativo com os filtros atuais.
+                {inseminates
+                  ? "Nenhuma vaca ou novilha ativa com os filtros atuais."
+                  : "Nenhum animal ativo com os filtros atuais."}
               </p>
             ) : (
               <>
@@ -643,7 +753,7 @@ export function RegisterManejoDialog() {
                     onChange={toggleAllVisible}
                     className="size-4 shrink-0 accent-brand"
                   />
-                  Selecionar todos os listados ({selectable.length})
+                  Selecionar todos os listados ({pickable.length})
                 </label>
                 <ul className="max-h-52 overflow-y-auto rounded-lg border border-hairline">
                   {selectable.map((animal) => (
@@ -652,6 +762,7 @@ export function RegisterManejoDialog() {
                       animal={animal}
                       checked={fields.earTags.includes(animal.earTag)}
                       onToggle={() => toggleEarTag(animal.earTag)}
+                      pregnant={inseminates && isPregnantNow(animal.reproduction)}
                     />
                   ))}
                 </ul>
@@ -659,9 +770,11 @@ export function RegisterManejoDialog() {
             )}
             {fields.earTags.length > 0 ? (
               <p className="text-xs text-ink-soft">
-                {fields.earTags.length}{" "}
-                {fields.earTags.length === 1 ? "animal selecionado" : "animais selecionados"}.
+                {selectedLabel(fields.earTags.length, inseminates)}.
               </p>
+            ) : null}
+            {inseminates && fields.semenBullId !== "" ? (
+              <MainBullShortNotice bullId={fields.semenBullId} cows={fields.earTags.length} />
             ) : null}
             <ErrorMessage message={errors.earTags} />
           </fieldset>
@@ -689,8 +802,13 @@ export function RegisterManejoDialog() {
                 Cancelar
               </Button>
             </DialogClose>
-            <Button type="submit" className="min-h-11">
-              Iniciar manejo
+            <Button
+              type="submit"
+              className="min-h-11"
+              // Nothing to inseminate with until a bull is registered on Reprodução.
+              disabled={inseminates && semenBulls.length === 0}
+            >
+              {inseminates ? "Iniciar inseminação" : "Iniciar manejo"}
             </Button>
           </DialogFooter>
         </form>

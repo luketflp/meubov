@@ -47,6 +47,35 @@ export interface Breeding {
   date: string;
   type: BreedingType;
   bullEarTag: string;
+  /** Registered semen bull whose dose this cobertura used; absent for any other bull. */
+  semenBullId?: string;
+}
+
+/** One purchase of semen doses of a bull; it also became a farm expense. */
+export interface SemenPurchase {
+  id: string;
+  date: string;
+  doses: number;
+  totalBrl: number;
+  seller?: string;
+  /** Expense this purchase wrote in Financeiro; absent once that expense is gone. */
+  expenseId?: string;
+}
+
+/**
+ * Bull the farm buys semen from. Its stock is never stored: it derives from the
+ * doses bought and the coberturas that used one (lib/domain/semen.ts).
+ */
+export interface SemenBull {
+  id: string;
+  name: string;
+  /** Registro or central code, e.g.: "NEL-4471". */
+  code?: string;
+  breed?: string;
+  /** Central de sêmen the doses come from. */
+  central?: string;
+  /** Sorted asc by date. */
+  purchases: SemenPurchase[];
 }
 
 /** Pregnancy diagnosis linked to a breeding. */
@@ -166,6 +195,8 @@ export interface ManejoSessionAnimal {
   previousLotId?: string;
   /** True when an entry session registered this animal — undo deletes it. */
   createdAnimal?: boolean;
+  /** Id of the cobertura an inseminação pass recorded (for undo and delete). */
+  breedingId?: string;
 }
 
 /** Sanitary action a manejo session applies to each animal that passes. */
@@ -185,8 +216,9 @@ export interface ManejoTreatmentPlan {
  * What a manejo session does to each animal at the chute. `health` and
  * `weighing` only record history; `transfer`, `sale` and `entry` also move the
  * herd — they are the compras, vendas e transferências of the farm.
+ * `insemination` records an IATF cobertura per cow, each taking one dose of semen.
  */
-export type ManejoKind = "health" | "weighing" | "transfer" | "sale" | "entry";
+export type ManejoKind = "health" | "weighing" | "transfer" | "sale" | "entry" | "insemination";
 
 /**
  * Manejo session: a curral working session that stays open while the animals
@@ -218,6 +250,8 @@ export interface ManejoSession {
   carcassYieldPct?: number;
   /** Closed price in BRL: a sale sold as one lot, or an entry's purchase total. */
   totalAmountBrl?: number;
+  /** Touro principal of an inseminação: pre-selected for every cow at the brete. */
+  semenBullId?: string;
   notes?: string;
 }
 
@@ -344,5 +378,6 @@ export interface HerdData {
   manejoSessions: ManejoSession[];
   expenses: Expense[];
   customCategories: CustomCategory[];
+  semenBulls: SemenBull[];
   farm: FarmData;
 }

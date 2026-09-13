@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { manejoHistory, visibleSaleRows } from "@/components/manejo/helpers";
+import {
+  MANEJO_ACTION_LABEL,
+  MANEJO_ACTION_LIST,
+  actionKind,
+  isMovementAction,
+  isSanitaryAction,
+  manejoHistory,
+  sessionWeighs,
+  validateManejo,
+  visibleSaleRows,
+  type ManejoFields,
+} from "@/components/manejo/helpers";
 import type { SaleRow } from "@/lib/domain/movements";
 import type { Animal, ManejoSession, Treatment } from "@/lib/types";
 
@@ -102,6 +113,29 @@ describe("manejoHistory", () => {
     expect(row).toMatchObject({ kind: "weighing", amountBrl: null, responsible: undefined });
   });
 
+  it("gives an inseminação session its own pill, no value and no responsável", () => {
+    const session = makeSession({
+      id: "sess-iatf",
+      kind: "insemination",
+      name: "Inseminação",
+      weighing: false,
+      pricePerArroba: undefined,
+      semenBullId: "bull-1",
+      animals: [
+        { earTag: "BR-001", outcome: "done", breedingId: "br-1" },
+        { earTag: "BR-002", outcome: "skipped" },
+      ],
+    });
+    const [row] = manejoHistory(noTreatments, noAnimals, [session]);
+    expect(row).toMatchObject({
+      kind: "insemination",
+      headCount: 1,
+      amountBrl: null,
+      responsible: undefined,
+      href: "/manejo/sess-iatf",
+    });
+  });
+
   it("groups the treatments marked feito outside a session", () => {
     const rows = manejoHistory(
       [
@@ -147,6 +181,87 @@ describe("manejoHistory", () => {
       ["Pesagens avulsas", "fora do brete", 2, "/manejo/avulso/pesagem/2026-08-10", ["BR-001", "BR-002"]],
       ["Pesagem boiada", undefined, 1, "/manejo/sess-1", undefined],
     ]);
+  });
+});
+
+describe("manejo actions", () => {
+  it("offers the inseminação right after the pesagem", () => {
+    expect(MANEJO_ACTION_LIST).toEqual([
+      "vaccine",
+      "deworming",
+      "medication",
+      "exam",
+      "weighing",
+      "insemination",
+      "transfer",
+      "sale",
+      "entry",
+    ]);
+    expect(MANEJO_ACTION_LABEL.insemination).toBe("Inseminação");
+  });
+
+  it("stores an inseminação as its own kind, neither sanitary nor a movement", () => {
+    expect(isSanitaryAction("insemination")).toBe(false);
+    expect(isMovementAction("insemination")).toBe(false);
+    expect(actionKind("insemination")).toBe("insemination");
+  });
+
+  it("keeps every treatment type a health session", () => {
+    expect(actionKind("vaccine")).toBe("health");
+    expect(actionKind("weighing")).toBe("weighing");
+    expect(actionKind("sale")).toBe("sale");
+  });
+});
+
+describe("sessionWeighs", () => {
+  it("does not weigh an inseminação unless asked to", () => {
+    expect(sessionWeighs({ action: "insemination", weighAlso: false, pricing: "perArroba" })).toBe(false);
+    expect(sessionWeighs({ action: "insemination", weighAlso: true, pricing: "perArroba" })).toBe(true);
+  });
+});
+
+describe("validateManejo", () => {
+  const fields = (overrides: Partial<ManejoFields> = {}): ManejoFields => ({
+    action: "insemination",
+    date: "2026-09-12",
+    name: "",
+    dose: "",
+    withdrawalDays: "0",
+    responsible: "",
+    costBrl: "",
+    nextDate: "",
+    notes: "",
+    weighAlso: false,
+    earTags: ["BR-001"],
+    destinationLotId: "",
+    counterparty: "",
+    pricing: "perArroba",
+    pricePerArroba: "",
+    totalAmountBrl: "",
+    semenBullId: "bull-1",
+    ...overrides,
+  });
+
+  it("accepts an inseminação with a touro principal and a cow, without a product name", () => {
+    expect(validateManejo(fields())).toEqual({});
+  });
+
+  it("asks for the touro principal of an inseminação", () => {
+    expect(validateManejo(fields({ semenBullId: "" }))).toEqual({
+      semenBullId: "Selecione o touro principal.",
+    });
+  });
+
+  it("asks for a cow when an inseminação has no animal", () => {
+    expect(validateManejo(fields({ earTags: [] }))).toEqual({
+      earTags: "Selecione ao menos uma vaca.",
+    });
+  });
+
+  it("keeps asking for an animal on the other kinds, with no bull needed", () => {
+    expect(validateManejo(fields({ action: "weighing", earTags: [], semenBullId: "" }))).toEqual({
+      earTags: "Selecione ao menos um animal.",
+    });
   });
 });
 

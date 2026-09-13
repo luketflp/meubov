@@ -3,6 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   animals,
+  breedings,
   manejoSessionAnimals,
   treatments,
   weighings,
@@ -19,6 +20,7 @@ import {
 import {
   ANIMAL_PATCH_COLUMNS,
   conflict,
+  lockDiagnosedBreedings,
   lockEntry,
   type AnimalPatch,
   type ManejoConflict,
@@ -39,6 +41,8 @@ export interface ReopenResult {
   animal?: AnimalPatch;
   /** Ear tag of the animal deleted by undoing an entry pass. */
   removedEarTag?: string;
+  /** Cobertura deleted by undoing an inseminação pass; its dose is back in stock. */
+  removedBreedingId?: string;
 }
 
 interface ReopenAnimalUseCaseProps {
@@ -47,7 +51,21 @@ interface ReopenAnimalUseCaseProps {
   animalId: string;
 }
 
-type ReopenAnimalUseCaseResponse = ReopenResult | { conflict: ManejoConflict } | LotAssignmentError | null;
+/**
+ * The pass's cobertura was already diagnosed; `breedingId` names it so the
+ * client can offer to clear that diagnosis first.
+ */
+export interface DiagnosedBreedingConflict {
+  conflict: "has_diagnosis";
+  breedingId: string;
+}
+
+type ReopenAnimalUseCaseResponse =
+  | ReopenResult
+  | { conflict: ManejoConflict }
+  | DiagnosedBreedingConflict
+  | LotAssignmentError
+  | null;
 
 type CurrUseCase = _UseCase<ReopenAnimalUseCaseProps, ReopenAnimalUseCaseResponse>;
 
@@ -71,6 +89,15 @@ export class ReopenAnimalUseCase implements CurrUseCase {
       if (entry.previousLotId !== null) {
         const lotError = await new ValidateLotAssignmentUseCase(tx).run({ farmId, lotId: entry.previousLotId });
         if (lotError) return lotError;
+      }
+
+      // An inseminação pass whose cobertura was already diagnosed stays: undoing
+      // it would take the ultrassom result down with it.
+      if (entry.breedingId !== null) {
+        const diagnosed = await lockDiagnosedBreedings(tx, [entry.breedingId]);
+        if (diagnosed.has(entry.breedingId)) {
+          return { conflict: "has_diagnosis", breedingId: entry.breedingId };
+        }
       }
 
       // An entry pass CREATED the animal, so undoing it removes the registration
@@ -104,8 +131,8 @@ export class ReopenAnimalUseCase implements CurrUseCase {
         }
       }
 
-      // Clear the refs BEFORE deleting the treatments (the FKs are set-null and
-      // would race the update otherwise), then delete the pass's treatments.
+      // Clear the refs BEFORE deleting the treatments and the cobertura (the FKs
+      // are set-null and would race the update otherwise), then delete them.
       const removedTreatmentIds = [entry.treatmentId, entry.boosterId].filter(
         (id): id is string => id !== null
       );
@@ -137,6 +164,7 @@ export class ReopenAnimalUseCase implements CurrUseCase {
           treatmentId: null,
           boosterId: null,
           weighingId: null,
+          breedingId: null,
         })
         .where(
           and(
@@ -148,12 +176,16 @@ export class ReopenAnimalUseCase implements CurrUseCase {
       if (removedTreatmentIds.length > 0) {
         await tx.delete(treatments).where(inArray(treatments.id, removedTreatmentIds));
       }
+      if (entry.breedingId !== null) {
+        await tx.delete(breedings).where(eq(breedings.id, entry.breedingId));
+      }
 
       return {
         entry: toManejoSessionAnimal(updated, earTag),
         removedTreatmentIds,
         removedWeighing,
         animal: patch,
+        removedBreedingId: entry.breedingId ?? undefined,
       };
     });
   };

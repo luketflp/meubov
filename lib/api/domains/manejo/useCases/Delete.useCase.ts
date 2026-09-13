@@ -3,6 +3,7 @@ import { and, eq, inArray, isNull, ne } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   animals,
+  breedings,
   lots,
   manejoSessionAnimals,
   manejoSessions,
@@ -17,6 +18,7 @@ import {
 } from "@/lib/domain/manejoRevert";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
 
+import { lockDiagnosedBreedings } from "../_shared/session";
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
 
@@ -27,6 +29,8 @@ export interface DeletedManejo {
   weighedEarTags: string[];
   restored: { earTag: string; lotId: string | null; active: boolean }[];
   removedEarTags: string[];
+  /** Coberturas an inseminação wrote, deleted with it; their doses are back in stock. */
+  removedBreedings: { earTag: string; breedingId: string }[];
 }
 
 interface DeleteSessionUseCaseProps {
@@ -42,9 +46,12 @@ type CurrUseCase = _UseCase<DeleteSessionUseCaseProps, DeleteSessionUseCaseRespo
  * Deletes a manejo — descartar while it runs, excluir once closed — undoing
  * what it did to the herd. The session row and the effects it wrote are stamped
  * with deleted_at rather than removed; only an entrada's own animals go, since
- * they were born with the session and have no history apart from it. A guard
- * that refuses stops the whole delete: the transaction returns the blocked
- * animals before the first write.
+ * they were born with the session and have no history apart from it, and so do
+ * an inseminação's coberturas, whose doses count as used for as long as they
+ * exist. A guard that refuses stops the whole delete: the transaction returns
+ * the blocked animals before the first write. The session row is locked first,
+ * so a delete waits for a pass in flight, and a pass that was waiting for it
+ * finds no session once it commits.
  */
 export class DeleteSessionUseCase implements CurrUseCase {
   private repository: RepositoryType;
@@ -66,7 +73,7 @@ export class DeleteSessionUseCase implements CurrUseCase {
             isNull(manejoSessions.deletedAt)
           )
         )
-        .limit(1);
+        .for("update");
       if (!row) return "session_not_found";
 
       const entries = await tx
@@ -79,6 +86,7 @@ export class DeleteSessionUseCase implements CurrUseCase {
           treatmentId: manejoSessionAnimals.treatmentId,
           boosterId: manejoSessionAnimals.boosterId,
           weighingId: manejoSessionAnimals.weighingId,
+          breedingId: manejoSessionAnimals.breedingId,
           lotId: animals.lotId,
           active: animals.active,
         })
@@ -101,6 +109,13 @@ export class DeleteSessionUseCase implements CurrUseCase {
                   and(eq(lots.farmId, farmId), inArray(lots.id, originIds), isNull(lots.deletedAt))
                 )
             ).map((l) => l.id)
+      );
+
+      // A cobertura that was already diagnosed keeps its inseminação: deleting it
+      // would take the ultrassom result down with it.
+      const diagnosed = await lockDiagnosedBreedings(
+        tx,
+        entries.map((e) => e.breedingId).filter((b): b is string => b !== null)
       );
 
       // Only an entrada asks whether the animal carries history from elsewhere: a
@@ -155,6 +170,7 @@ export class DeleteSessionUseCase implements CurrUseCase {
           treatmentId: e.treatmentId ?? undefined,
           boosterId: e.boosterId ?? undefined,
           weighingId: e.weighingId ?? undefined,
+          breedingId: e.breedingId ?? undefined,
         })),
       };
 
@@ -164,6 +180,7 @@ export class DeleteSessionUseCase implements CurrUseCase {
         active: e.active,
         hasForeignHistory: foreign.has(e.animalId),
         originLotMissing: e.previousLotId !== null && !liveOrigins.has(e.previousLotId),
+        hasDiagnosis: e.breedingId !== null && diagnosed.has(e.breedingId),
       }));
 
       const { plan, blocked } = revertDecision(session, facts);
@@ -196,6 +213,20 @@ export class DeleteSessionUseCase implements CurrUseCase {
           })
           .where(eq(animals.id, entry.animalId));
       }
+      // Clear the entries' refs BEFORE deleting the coberturas (the FK is set-null
+      // and would race the delete otherwise), then delete them.
+      if (plan.breedingIds.length > 0) {
+        await tx
+          .update(manejoSessionAnimals)
+          .set({ breedingId: null })
+          .where(
+            and(
+              eq(manejoSessionAnimals.sessionId, id),
+              inArray(manejoSessionAnimals.breedingId, plan.breedingIds)
+            )
+          );
+        await tx.delete(breedings).where(inArray(breedings.id, plan.breedingIds));
+      }
       const removedIds = plan.removeEarTags
         .map((earTag) => byEarTag.get(earTag)?.animalId)
         .filter((animalId): animalId is string => animalId !== undefined);
@@ -217,6 +248,11 @@ export class DeleteSessionUseCase implements CurrUseCase {
           active: item.reactivate,
         })),
         removedEarTags: plan.removeEarTags,
+        removedBreedings: entries.flatMap((e) =>
+          e.breedingId !== null && plan.breedingIds.includes(e.breedingId)
+            ? [{ earTag: e.earTag, breedingId: e.breedingId }]
+            : []
+        ),
       };
     });
   };

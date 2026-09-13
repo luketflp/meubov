@@ -17,16 +17,23 @@ import { deriveTreatmentStatus, isFootAndMouth } from "@/lib/domain/status";
 import type { SaleRow } from "@/lib/domain/movements";
 
 /**
- * Action selectable in the register dialog: a health treatment, a weighing, or
- * one of the three that move the herd — the farm's compras, vendas e
- * transferências, which used to live on a screen of their own.
+ * Action selectable in the register dialog: a health treatment, a weighing, an
+ * inseminação, or one of the three that move the herd — the farm's compras,
+ * vendas e transferências, which used to live on a screen of their own.
  */
-export type ManejoAction = TreatmentType | "weighing" | "transfer" | "sale" | "entry";
+export type ManejoAction =
+  | TreatmentType
+  | "weighing"
+  | "insemination"
+  | "transfer"
+  | "sale"
+  | "entry";
 
 /** pt-BR label of each manejo action (treatment labels are canonical). */
 export const MANEJO_ACTION_LABEL: Record<ManejoAction, string> = {
   ...TREATMENT_TYPE_LABEL,
   weighing: "Pesagem",
+  insemination: "Inseminação",
   transfer: "Troca de lote",
   sale: "Venda",
   entry: "Entrada (compra)",
@@ -39,6 +46,7 @@ export const MANEJO_ACTION_LIST: readonly ManejoAction[] = [
   "medication",
   "exam",
   "weighing",
+  "insemination",
   "transfer",
   "sale",
   "entry",
@@ -54,7 +62,7 @@ export function isMovementAction(action: ManejoAction): boolean {
 
 /** True when the action applies a sanitary treatment (the plan fields show). */
 export function isSanitaryAction(action: ManejoAction): boolean {
-  return action !== "weighing" && !MOVEMENT_ACTIONS.has(action);
+  return action !== "weighing" && action !== "insemination" && !MOVEMENT_ACTIONS.has(action);
 }
 
 /** Session kind stored for an action: every treatment type is one `health`. */
@@ -384,6 +392,8 @@ export interface ManejoFields {
   pricePerArroba: string;
   /** Closed value of the batch (venda) or the purchase total (entrada). */
   totalAmountBrl: string;
+  /** Touro principal of an inseminação; empty string until one is picked. */
+  semenBullId: string;
 }
 
 export type ManejoErrors = Partial<
@@ -396,7 +406,8 @@ export type ManejoErrors = Partial<
     | "earTags"
     | "destinationLotId"
     | "pricePerArroba"
-    | "totalAmountBrl",
+    | "totalAmountBrl"
+    | "semenBullId",
     string
   >
 >;
@@ -447,6 +458,9 @@ export function validateManejo(fields: ManejoFields): ManejoErrors {
   if (fields.action === "entry" && positiveNumber(fields.totalAmountBrl) === null) {
     errors.totalAmountBrl = "Informe o valor total da compra.";
   }
+  if (fields.action === "insemination" && fields.semenBullId === "") {
+    errors.semenBullId = "Selecione o touro principal.";
+  }
 
   if (sanitary) {
     if (fields.name.trim() === "") {
@@ -472,7 +486,10 @@ export function validateManejo(fields: ManejoFields): ManejoErrors {
   }
   // An entrada opens empty: its animals are registered as the truck unloads.
   if (fields.action !== "entry" && fields.earTags.length === 0) {
-    errors.earTags = "Selecione ao menos um animal.";
+    errors.earTags =
+      fields.action === "insemination"
+        ? "Selecione ao menos uma vaca."
+        : "Selecione ao menos um animal.";
   }
   return errors;
 }

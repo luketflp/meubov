@@ -10,6 +10,8 @@ import {
   breedingsAwaitingDiagnosis,
   hasCalvedSince,
   breedingOutcome,
+  isDiagnosed,
+  isPregnantNow,
 } from "@/lib/domain/reproduction";
 
 const emptyRecord: ReproductionRecord = { breedings: [], diagnoses: [], calvings: [] };
@@ -198,5 +200,74 @@ describe("breedingOutcome", () => {
 
     expect(breedingOutcome(record, breeding).result).toBe("pending");
     expect(breedingOutcome(record, other).result).toBe("open");
+  });
+});
+
+describe("isDiagnosed", () => {
+  it("is true only for a result that called the breeding pregnant or open", () => {
+    expect(isDiagnosed("pregnant")).toBe(true);
+    expect(isDiagnosed("open")).toBe(true);
+    expect(isDiagnosed("pending")).toBe(false);
+  });
+});
+
+describe("isPregnantNow", () => {
+  const older: ReproductionRecord["breedings"][number] = {
+    id: "c1",
+    date: "2025-10-01",
+    type: "naturalMating",
+    bullEarTag: "T-10",
+  };
+  const latest: ReproductionRecord["breedings"][number] = {
+    id: "c2",
+    date: "2026-05-01",
+    type: "timedAI",
+    bullEarTag: "T-11",
+  };
+
+  it("is false without a record or without breedings", () => {
+    expect(isPregnantNow(undefined)).toBe(false);
+    expect(isPregnantNow(emptyRecord)).toBe(false);
+  });
+
+  it("is true when the latest breeding was diagnosed pregnant", () => {
+    const record: ReproductionRecord = {
+      breedings: [older, latest],
+      diagnoses: [
+        { breedingId: "c1", result: "open", date: "2025-11-05" },
+        { breedingId: "c2", result: "pregnant", date: "2026-06-05" },
+      ],
+      calvings: [],
+    };
+    expect(isPregnantNow(record)).toBe(true);
+  });
+
+  it("is false once a calving was recorded on or after that breeding", () => {
+    const record = (calvingDate: string): ReproductionRecord => ({
+      breedings: [latest],
+      diagnoses: [{ breedingId: "c2", result: "pregnant", date: "2026-06-05" }],
+      calvings: [{ date: calvingDate, calfEarTag: "BR-2001" }],
+    });
+    expect(isPregnantNow(record("2026-05-01"))).toBe(false);
+    expect(isPregnantNow(record("2027-02-08"))).toBe(false);
+    expect(isPregnantNow(record("2026-04-30"))).toBe(true);
+  });
+
+  it("is false when the latest breeding still waits, even if an older one was pregnant", () => {
+    const record: ReproductionRecord = {
+      breedings: [older, latest],
+      diagnoses: [{ breedingId: "c1", result: "pregnant", date: "2025-11-05" }],
+      calvings: [],
+    };
+    expect(isPregnantNow(record)).toBe(false);
+  });
+
+  it("is false when the latest breeding was diagnosed open", () => {
+    const record: ReproductionRecord = {
+      breedings: [latest],
+      diagnoses: [{ breedingId: "c2", result: "open", date: "2026-06-05" }],
+      calvings: [],
+    };
+    expect(isPregnantNow(record)).toBe(false);
   });
 });

@@ -3,7 +3,7 @@
  * merged in descending date order, with a dot per type.
  */
 import type { ReactNode } from "react";
-import type { Animal, Treatment } from "@/lib/types";
+import type { Animal, SemenBull, Treatment } from "@/lib/types";
 import { todayISO, formatDate } from "@/lib/domain/dates";
 import { formatWeightWithArroba } from "@/lib/domain/weights";
 import {
@@ -15,6 +15,7 @@ import { deriveTreatmentStatus } from "@/lib/domain/status";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusDot } from "@/components/ui/status-dot";
 import { StatusPill } from "@/components/ui/status-pill";
+import { bullDisplay } from "@/components/semen/helpers";
 import { cn } from "@/lib/utils";
 
 interface TimelineEvent {
@@ -34,7 +35,11 @@ function Mono({ children }: { children: ReactNode }) {
 }
 
 /** Merges all events of the animal and sorts by descending date. */
-function buildEvents(animal: Animal, treatments: Treatment[]): TimelineEvent[] {
+function buildEvents(
+  animal: Animal,
+  treatments: Treatment[],
+  semenBulls: SemenBull[]
+): TimelineEvent[] {
   const events: TimelineEvent[] = [
     {
       key: "birth",
@@ -74,13 +79,16 @@ function buildEvents(animal: Animal, treatments: Treatment[]): TimelineEvent[] {
   const record = animal.reproduction;
   if (record) {
     for (const b of record.breedings) {
+      // A registered semen bull reads by name; a herd bull or a semen code by its tag, in mono.
+      const bull = bullDisplay(b, semenBulls);
       events.push({
         key: `breeding-${b.id}`,
         date: b.date,
         label: "Cobertura",
         description: (
           <>
-            {BREEDING_TYPE_LABEL[b.type]} com touro <Mono>{b.bullEarTag}</Mono>
+            {BREEDING_TYPE_LABEL[b.type]} com touro{" "}
+            {bull.href === null ? <Mono>{bull.label}</Mono> : bull.label}
           </>
         ),
         dot: <ColorDot className="bg-fmd" />,
@@ -131,10 +139,12 @@ function buildEvents(animal: Animal, treatments: Treatment[]): TimelineEvent[] {
 interface TimelineProps {
   animal: Animal;
   treatments: Treatment[];
+  /** The farm's semen bulls, to name the bull of a cobertura that took a dose. */
+  semenBulls: SemenBull[];
 }
 
-export function Timeline({ animal, treatments }: TimelineProps) {
-  const events = buildEvents(animal, treatments);
+export function Timeline({ animal, treatments, semenBulls }: TimelineProps) {
+  const events = buildEvents(animal, treatments, semenBulls);
 
   return (
     <SectionCard title="Linha do tempo">

@@ -17,6 +17,7 @@ function facts(overrides: Partial<AnimalFacts> = {}): AnimalFacts {
     active: true,
     hasForeignHistory: false,
     originLotMissing: false,
+    hasDiagnosis: false,
     ...overrides,
   };
 }
@@ -29,13 +30,18 @@ describe("revertDecision", () => {
     );
 
     expect(result.blocked).toEqual([]);
-    expect(result.plan.treatmentIds).toEqual(["t-1", "t-2"]);
-    expect(result.plan.restore).toEqual([]);
+    expect(result.plan).toEqual({
+      treatmentIds: ["t-1", "t-2"],
+      weighingIds: [],
+      restore: [],
+      removeEarTags: [],
+      breedingIds: [],
+    });
   });
 
   it("never blocks a sanitária, whatever happened since", () => {
     const result = revertDecision(session({ animals: [pass({ treatmentId: "t-1" })] }), [
-      facts({ lotId: "lot-9", active: false, hasForeignHistory: true }),
+      facts({ lotId: "lot-9", active: false, hasForeignHistory: true, hasDiagnosis: true }),
     ]);
 
     expect(result.blocked).toEqual([]);
@@ -137,5 +143,49 @@ describe("revertDecision", () => {
 
     expect(result.blocked).toEqual([]);
     expect(result.plan.weighingIds).toEqual([11]);
+  });
+
+  it("removes the coberturas an inseminação recorded and ignores the cows that did not pass", () => {
+    const result = revertDecision(
+      session({
+        kind: "insemination",
+        animals: [
+          pass({ earTag: "B-001", breedingId: "b-1" }),
+          pass({ earTag: "B-002", outcome: "skipped" }),
+          pass({ earTag: "B-003", outcome: "pending" }),
+        ],
+      }),
+      [facts({ earTag: "B-001" }), facts({ earTag: "B-002" }), facts({ earTag: "B-003" })]
+    );
+
+    expect(result.blocked).toEqual([]);
+    expect(result.plan.breedingIds).toEqual(["b-1"]);
+    expect(result.plan.restore).toEqual([]);
+    expect(result.plan.removeEarTags).toEqual([]);
+  });
+
+  it("blocks an inseminação whose cobertura already has a diagnosis", () => {
+    const result = revertDecision(
+      session({
+        kind: "insemination",
+        animals: [
+          pass({ earTag: "B-001", breedingId: "b-1" }),
+          pass({ earTag: "B-002", breedingId: "b-2" }),
+        ],
+      }),
+      [facts({ earTag: "B-001", hasDiagnosis: true }), facts({ earTag: "B-002" })]
+    );
+
+    // The cobertura names itself, so the client can offer to clear the diagnosis.
+    expect(result.blocked).toStrictEqual([
+      { earTag: "B-001", reason: "has_diagnosis", breedingId: "b-1" },
+    ]);
+    expect(result.plan).toEqual({
+      treatmentIds: [],
+      weighingIds: [],
+      restore: [],
+      removeEarTags: [],
+      breedingIds: [],
+    });
   });
 });

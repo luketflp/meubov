@@ -22,12 +22,15 @@ export const DiagnosisResultModel = t.Union([
 /**
  * Body of POST /animals/:id/breedings. `bullEarTag` is free text on
  * purpose: natural mating points at a herd bull, timed AI at a semen code from
- * outside the farm.
+ * outside the farm. `semenBullId` names a registered semen bull instead: only
+ * for timed AI, it takes one dose and the server stores the bull's code (or
+ * name) as `bullEarTag`.
  */
 export const NewBreedingBody = t.Object({
   date: DateString,
   type: BreedingTypeModel,
   bullEarTag: t.String({ minLength: 1 }),
+  semenBullId: t.Optional(t.String({ minLength: 1 })),
 });
 
 /**

@@ -34,6 +34,10 @@ describe("sessionName", () => {
     expect(sessionName(undefined, "sale")).toBe("Venda");
     expect(sessionName(undefined, "entry")).toBe("Entrada");
   });
+
+  it("names an inseminação after its kind", () => {
+    expect(sessionName(undefined, "insemination")).toBe("Inseminação");
+  });
 });
 
 describe("buildPassEffects", () => {
@@ -139,5 +143,62 @@ describe("buildPassEffects", () => {
     const effects = buildPassEffects(session, { weightKg: 400 });
     expect(effects.lotId).toBeUndefined();
     expect(effects.sold).toBeUndefined();
+  });
+});
+
+describe("buildPassEffects on an inseminação", () => {
+  const insemination = {
+    date: "2026-08-02",
+    kind: "insemination" as const,
+    weighing: false,
+    semenBullId: "bull-1",
+  };
+
+  it("records an IATF cobertura with the bull picked at the brete", () => {
+    const effects = buildPassEffects(insemination, { semenBullId: "bull-2" });
+    expect(effects.breeding).toEqual({
+      date: "2026-08-02",
+      type: "timedAI",
+      semenBullId: "bull-2",
+    });
+  });
+
+  it("falls back to the touro principal when the pass names no bull", () => {
+    expect(buildPassEffects(insemination, {}).breeding).toEqual({
+      date: "2026-08-02",
+      type: "timedAI",
+      semenBullId: "bull-1",
+    });
+  });
+
+  it("records no cobertura without any bull", () => {
+    const effects = buildPassEffects({ ...insemination, semenBullId: undefined }, {});
+    expect(effects.breeding).toBeUndefined();
+  });
+
+  it("weighs only when the session weighs", () => {
+    expect(buildPassEffects(insemination, { weightKg: 410 }).weighing).toBeUndefined();
+    expect(
+      buildPassEffects({ ...insemination, weighing: true }, { weightKg: 410 }).weighing
+    ).toEqual({ date: "2026-08-02", weightKg: 410 });
+  });
+
+  it("neither treats nor moves the cow", () => {
+    const effects = buildPassEffects(insemination, {});
+    expect(effects.treatment).toBeUndefined();
+    expect(effects.lotId).toBeUndefined();
+    expect(effects.sold).toBeUndefined();
+  });
+
+  it("never records a cobertura on the other kinds", () => {
+    expect(
+      buildPassEffects({ ...session, semenBullId: "bull-1" }, { semenBullId: "bull-1" }).breeding
+    ).toBeUndefined();
+    expect(
+      buildPassEffects(
+        { date: "2026-08-02", kind: "weighing", weighing: true, semenBullId: "bull-1" },
+        { weightKg: 300, semenBullId: "bull-1" }
+      ).breeding
+    ).toBeUndefined();
   });
 });

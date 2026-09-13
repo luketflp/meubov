@@ -1,7 +1,8 @@
 /**
- * Pill of the manejo action: treatment types, weighing, and the three that move
- * the herd (transferência, venda, entrada). Local component: the shared
- * StatusPill has fixed status labels, whereas here they are the manejo actions.
+ * Pill of the manejo action: treatment types, weighing, inseminação, and the
+ * three that move the herd (transferência, venda, entrada). Local component:
+ * the shared StatusPill has fixed status labels, whereas here they are the
+ * manejo actions.
  */
 import { MANEJO_ACTION_LABEL, type ManejoAction } from "@/components/manejo/helpers";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,7 @@ const ACTION_STYLES: Record<ManejoAction, string> = {
   medication: "bg-attention-soft text-attention",
   exam: "bg-fmd-soft text-fmd",
   weighing: "bg-brand-soft text-brand",
+  insemination: "bg-scheduled-soft text-scheduled",
   // Carried over from the old movement pills, so the colors farmers already
   // read as entrada/saída/transferência survive the move into Manejo.
   entry: "bg-healthy-soft text-healthy",

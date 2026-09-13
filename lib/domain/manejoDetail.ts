@@ -66,6 +66,8 @@ export function passedLabel(session: ManejoSession): string {
       return "recebidas";
     case "sale":
       return "vendidas";
+    case "insemination":
+      return "inseminadas";
     case "health":
       return TREATED_LABEL[session.treatment?.type ?? "medication"];
   }

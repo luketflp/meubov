@@ -4,8 +4,9 @@
  * What /manejo/[id] shows: the chute while the session runs, its record once
  * it is closed. The record is picked by kind — a pesagem compares weights, a
  * sanitary manejo shows its plan, a troca de lote where the animals came from,
- * a compra and a venda their money. An id with no session behind it falls to
- * the chute screen, which already says so.
+ * a compra and a venda their money, an inseminação its doses and semen cost.
+ * An id with no session behind it falls to the chute screen, which already
+ * says so.
  */
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { ManejoSessionRunner } from "@/components/manejo/session-runner";
@@ -14,6 +15,7 @@ import { TreatmentDetail } from "@/components/manejo/treatment-detail";
 import { TransferDetail } from "@/components/manejo/transfer-detail";
 import { EntryDetail } from "@/components/manejo/entry-detail";
 import { SaleDetail } from "@/components/manejo/sale-detail";
+import { InseminationDetail } from "@/components/manejo/insemination-detail";
 
 export function ManejoScreen({ sessionId }: { sessionId: string }) {
   const session = useHerdStore((s) => s.manejoSessions.find((m) => m.id === sessionId));
@@ -32,5 +34,7 @@ export function ManejoScreen({ sessionId }: { sessionId: string }) {
       return <EntryDetail session={session} />;
     case "sale":
       return <SaleDetail session={session} />;
+    case "insemination":
+      return <InseminationDetail session={session} />;
   }
 }

@@ -5,7 +5,8 @@
  * time (the brete); the operator records weight/note and taps "Concluir" or
  * "Pular", and the next pending animal takes the focus. Every action applies
  * its effects immediately (treatment, weighing), so the session can stop and
- * resume at any point without losing work — a manejo takes hours.
+ * resume at any point without losing work — a manejo takes hours. An entrada
+ * and an inseminação bring their own chute form.
  */
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
@@ -32,6 +33,12 @@ import {
 import { formatArroba, formatCurrency, formatKg, formatPercent } from "@/lib/domain/format";
 import { saleAmount } from "@/lib/domain/movements";
 import { EntryChuteForm } from "@/components/manejo/entry-chute-form";
+import {
+  DosesUsedToday,
+  InseminationChuteForm,
+  inseminationTitle,
+  passBreeding,
+} from "@/components/manejo/insemination-chute-form";
 import { SaleSummaryCard } from "@/components/manejo/sale-summary";
 import { SaleYieldDialog } from "@/components/manejo/sale-yield-dialog";
 import { DeleteManejoDialog } from "@/components/manejo/delete-manejo-dialog";
@@ -58,6 +65,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
   const session = useHerdStore((s) => s.manejoSessions.find((m) => m.id === sessionId));
   const animals = useHerdStore((s) => s.animals);
   const lots = useHerdStore((s) => s.lots);
+  const semenBulls = useHerdStore((s) => s.semenBulls);
   const completeManejoAnimal = useHerdStore((s) => s.completeManejoAnimal);
   const skipManejoAnimal = useHerdStore((s) => s.skipManejoAnimal);
   const reopenManejoAnimal = useHerdStore((s) => s.reopenManejoAnimal);
@@ -105,7 +113,11 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
 
   const isEntry = session.kind === "entry";
   const isSale = session.kind === "sale";
+  const isInsemination = session.kind === "insemination";
   const destinationName = lots.find((l) => l.id === session.destinationLotId)?.name;
+  const bullName = (bullId: string | undefined) =>
+    semenBulls.find((bull) => bull.id === bullId)?.name;
+  const mainBullName = bullName(session.semenBullId);
   // A venda per arroba pays the carcass: its chute stays held until the modal
   // collects the rendimento the R$/@ applies to.
   const perArroba = isSale && session.pricePerArroba !== undefined;
@@ -179,13 +191,17 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={session.name}
+        title={isInsemination ? inseminationTitle(session, animals, lots) : session.name}
         subtitle={
           session.kind === "health" || session.kind === "weighing"
             ? `Manejo de ${formatDate(session.date)}${
                 session.treatment?.dose ? ` · ${session.treatment.dose}` : ""
               }${session.treatment?.responsible ? ` · ${session.treatment.responsible}` : ""}`
-            : `${formatDate(session.date)} · ${movementSubtitle(session, destinationName)}`
+            : isInsemination
+              ? `Manejo de ${formatDate(session.date)}${
+                  mainBullName ? ` · touro principal ${mainBullName}` : ""
+                }`
+              : `${formatDate(session.date)} · ${movementSubtitle(session, destinationName)}`
         }
         actions={
           <div className="flex flex-wrap items-center gap-3">
@@ -222,6 +238,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         action={<ManejoTypePill action={sessionKind(session)} />}
       >
         <ManejoProgressBar progress={progress} />
+        {isInsemination ? <DosesUsedToday session={session} /> : null}
         {!open ? (
           <p className="mt-2 text-xs text-ink-soft">
             Manejo encerrado
@@ -245,6 +262,10 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
 
       {open && isEntry ? <EntryChuteForm session={session} todayIso={todayISO()} /> : null}
 
+      {open && isInsemination && current ? (
+        <InseminationChuteForm session={session} entry={current} onDone={resetPassForm} />
+      ) : null}
+
       {needsYield ? (
         <SectionCard title="No brete agora">
           <EmptyState
@@ -258,7 +279,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         </SectionCard>
       ) : null}
 
-      {open && !isEntry && !needsYield && current ? (
+      {open && !isEntry && !isInsemination && !needsYield && current ? (
         <SectionCard title="No brete agora">
           <form onSubmit={onComplete} className="space-y-4">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -447,24 +468,34 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         )}
 
         <div className="space-y-4">
-          <SectionCard title={`${isEntry ? "Registrados" : "Manejados"} (${done.length})`}>
+          <SectionCard
+            title={`${isEntry ? "Registrados" : isInsemination ? "Inseminadas" : "Manejados"} (${done.length})`}
+          >
             {done.length === 0 ? (
               <p className="py-1 text-xs text-ink-soft">
                 {isEntry
                   ? "Nenhum animal registrado ainda."
-                  : "Nenhum animal manejado ainda."}
+                  : isInsemination
+                    ? "Nenhuma vaca inseminada ainda."
+                    : "Nenhum animal manejado ainda."}
               </p>
             ) : (
               <HandledList
                 entries={done}
                 open={open}
                 onUndo={(earTag) => reopenManejoAnimal(session.id, earTag)}
+                detail={
+                  isInsemination
+                    ? (entry) =>
+                        bullName(passBreeding(entry, byTag.get(entry.earTag))?.semenBullId)
+                    : undefined
+                }
               />
             )}
           </SectionCard>
 
           {skipped.length > 0 ? (
-            <SectionCard title={`Pulados (${skipped.length})`}>
+            <SectionCard title={`${isInsemination ? "Puladas" : "Pulados"} (${skipped.length})`}>
               <HandledList
                 entries={skipped}
                 open={open}
@@ -500,39 +531,46 @@ function HandledList({
   entries,
   open,
   onUndo,
+  detail,
 }: {
   entries: ManejoSessionAnimal[];
   open: boolean;
   onUndo: (earTag: string) => void;
+  /** What the pass recorded beside the brinco — the bull, on an inseminação. */
+  detail?: (entry: ManejoSessionAnimal) => string | undefined;
 }) {
   return (
     <ul className="-my-1 max-h-72 divide-y divide-hairline overflow-y-auto">
-      {entries.map((entry) => (
-        <li key={entry.earTag} className="flex min-h-11 items-center gap-2 px-1 py-2">
-          <span className="font-mono text-sm font-medium text-ink">{entry.earTag}</span>
-          {entry.weightKg !== undefined ? (
-            <span className="font-mono text-xs text-ink-soft">{formatKg(entry.weightKg)}</span>
-          ) : null}
-          {entry.amountBrl !== undefined ? (
-            <span className="font-mono text-xs text-ink">{formatCurrency(entry.amountBrl)}</span>
-          ) : null}
-          {entry.notes ? (
-            <span className="truncate text-xs text-ink-soft">{entry.notes}</span>
-          ) : null}
-          {open ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="ml-auto min-h-11 text-brand md:min-h-0"
-              onClick={() => onUndo(entry.earTag)}
-              aria-label={`Desfazer o manejo do animal ${entry.earTag}`}
-            >
-              <Undo2 aria-hidden />
-              Desfazer
-            </Button>
-          ) : null}
-        </li>
-      ))}
+      {entries.map((entry) => {
+        const recorded = detail?.(entry);
+        return (
+          <li key={entry.earTag} className="flex min-h-11 items-center gap-2 px-1 py-2">
+            <span className="font-mono text-sm font-medium text-ink">{entry.earTag}</span>
+            {recorded ? <span className="truncate text-xs text-ink-soft">{recorded}</span> : null}
+            {entry.weightKg !== undefined ? (
+              <span className="font-mono text-xs text-ink-soft">{formatKg(entry.weightKg)}</span>
+            ) : null}
+            {entry.amountBrl !== undefined ? (
+              <span className="font-mono text-xs text-ink">{formatCurrency(entry.amountBrl)}</span>
+            ) : null}
+            {entry.notes ? (
+              <span className="truncate text-xs text-ink-soft">{entry.notes}</span>
+            ) : null}
+            {open ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto min-h-11 text-brand md:min-h-0"
+                onClick={() => onUndo(entry.earTag)}
+                aria-label={`Desfazer o manejo do animal ${entry.earTag}`}
+              >
+                <Undo2 aria-hidden />
+                Desfazer
+              </Button>
+            ) : null}
+          </li>
+        );
+      })}
     </ul>
   );
 }

@@ -302,5 +302,6 @@ describe("passedLabel", () => {
     expect(passedLabel(session({ kind: "transfer" }))).toBe("transferidas");
     expect(passedLabel(session({ kind: "entry" }))).toBe("recebidas");
     expect(passedLabel(session({ kind: "sale" }))).toBe("vendidas");
+    expect(passedLabel(session({ kind: "insemination" }))).toBe("inseminadas");
   });
 });
