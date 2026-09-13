@@ -8,7 +8,7 @@
  * herd has no bull registered, natural mating falls back to free text too.
  *
  * It is shared by the female's ficha ({@link RegisterBreedingDialog}) and the
- * Coberturas screen, which differ only in how the dam gets chosen and in the
+ * Reprodução screen, which differ only in how the dam gets chosen and in the
  * footer's left button.
  */
 import { useState, type FormEvent, type ReactNode } from "react";

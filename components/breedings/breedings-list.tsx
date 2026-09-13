@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Coberturas log: every breeding on the farm, newest first, joining the dam to
+ * Reprodução log: every breeding on the farm, newest first, joining the dam to
  * the bull and to what became of the cobertura — its diagnosis and, when
  * pregnant, the calving it forecasts. Table on desktop, stacked cards on
  * mobile — the same shape the Nascimentos log uses.

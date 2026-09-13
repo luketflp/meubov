@@ -3,7 +3,7 @@
 /**
  * "Lançar diagnóstico" dialog on the female's ficha, where the cobertura is
  * picked inside the form. The form itself lives in {@link DiagnosisForm},
- * shared with the Coberturas screen — which opens it from a row with the
+ * shared with the Reprodução screen — which opens it from a row with the
  * breeding already fixed.
  *
  * The fields start fresh on every open: the dialog content unmounts when it

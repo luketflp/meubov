@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * "Lançar diagnóstico" from a row of the Coberturas screen, where the
+ * "Lançar diagnóstico" from a row of the Reprodução screen, where the
  * cobertura is already known: {@link DiagnosisForm} gets it fixed, so the
  * picker the ficha's dialog shows gives way to a summary of that cobertura.
  * The write is the same as the ficha's.

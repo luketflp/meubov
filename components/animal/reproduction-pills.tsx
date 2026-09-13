@@ -1,7 +1,7 @@
 /**
  * The two reproduction pills: the pregnancy diagnosis result and the breeding
  * type. Shared by the female's ficha ({@link AnimalReproduction}) and the
- * Coberturas page, so a cobertura reads the same on both screens.
+ * Reprodução page, so a cobertura reads the same on both screens.
  */
 import type { DiagnosisResult, BreedingType } from "@/lib/types";
 import {

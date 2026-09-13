@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * "Registrar cobertura" on the Coberturas screen. Same write as the dam's
+ * "Registrar cobertura" on the Reprodução screen. Same write as the dam's
  * ficha — a breeding on her reproduction record — but reached from the screen
  * instead of the mother's record, so the dam is picked here first.
  *

@@ -61,10 +61,10 @@ export interface Birth {
   birthWeightKg: number | null;
 }
 
-/** Which outcomes the Coberturas screen shows; "all" keeps every breeding. */
+/** Which outcomes the Reprodução screen shows; "all" keeps every breeding. */
 export type BreedingFilter = "all" | "pending" | "pregnant" | "open";
 
-/** A breeding joined to both animals it involves, for the Coberturas screen. */
+/** A breeding joined to both animals it involves, for the Reprodução screen. */
 export interface BreedingRow {
   /** Stable list key: the breeding id. */
   key: string;
@@ -798,7 +798,7 @@ export function recentBirths(animals: Animal[]): Birth[] {
 }
 
 /**
- * Every breeding on the farm as the Coberturas screen shows it: the dam's
+ * Every breeding on the farm as the Reprodução screen shows it: the dam's
  * record, the bull's when the ear tag resolves, and the outcome of the
  * breeding. Newest first, then by dam ear tag so a batch of IATF on the same
  * day reads in a stable order.

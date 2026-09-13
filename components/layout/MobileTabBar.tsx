@@ -102,19 +102,22 @@ export function MobileTabBar() {
                       {item.label}
                     </Link>
                   )}
-                  {item.children?.map((child) => (
-                    <Link
-                      key={child.href}
-                      href={child.href}
-                      onClick={() => setMoreOpen(false)}
-                      className={moreLinkClass}
-                    >
-                      {/* The parent's icon, so the child reads as part of that area. */}
-                      <item.icon className="size-4 text-ink-soft" aria-hidden />
-                      {child.label}
-                      <span className="ml-auto text-[11px] text-ink-soft">em {item.label}</span>
-                    </Link>
-                  ))}
+                  {item.children?.map((child) => {
+                    const ChildIcon = child.icon ?? item.icon;
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        onClick={() => setMoreOpen(false)}
+                        className={moreLinkClass}
+                      >
+                        {/* Its own icon, or the parent's so the child reads as part of that area. */}
+                        <ChildIcon className="size-4 text-ink-soft" aria-hidden />
+                        {child.label}
+                        <span className="ml-auto text-[11px] text-ink-soft">em {item.label}</span>
+                      </Link>
+                    );
+                  })}
                 </Fragment>
               ))}
               <button

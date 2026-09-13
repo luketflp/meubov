@@ -40,7 +40,7 @@ const activeClass = "bg-sidebar-active font-medium text-sidebar-active-ink";
  * 2px past the row to bridge the `space-y-0.5` gap.
  */
 const childClass =
-  "relative flex items-center rounded-md py-1 pr-2.5 pl-2 text-[13px] text-sidebar-ink-soft transition-colors hover:bg-sidebar-hover hover:text-sidebar-ink before:absolute before:-top-0.5 before:-left-2.5 before:h-[calc(50%+2px)] before:w-2.5 before:rounded-bl-md before:border-b before:border-l before:border-sidebar-line";
+  "relative flex items-center gap-2 rounded-md py-1 pr-2.5 pl-2 text-[13px] text-sidebar-ink-soft transition-colors hover:bg-sidebar-hover hover:text-sidebar-ink before:absolute before:-top-0.5 before:-left-2.5 before:h-[calc(50%+2px)] before:w-2.5 before:rounded-bl-md before:border-b before:border-l before:border-sidebar-line";
 
 const childTrunkClass =
   "after:absolute after:top-1/2 after:-left-2.5 after:h-[calc(50%+2px)] after:w-px after:bg-sidebar-line";
@@ -143,6 +143,7 @@ export function Sidebar() {
                         sub === child && activeClass
                       )}
                     >
+                      {sub.icon && <sub.icon className="size-3.5 shrink-0" aria-hidden />}
                       {sub.label}
                     </Link>
                   ))}

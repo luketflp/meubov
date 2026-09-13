@@ -1,4 +1,4 @@
-import { Baby, Fence } from "lucide-react";
+import { Baby, Dna, Fence } from "lucide-react";
 import { describe, expect, it } from "vitest";
 import { NAV_ITEMS, type NavItem, activeChild, isActiveRoute } from "@/lib/nav";
 
@@ -6,7 +6,7 @@ const nascimentos: NavItem = {
   label: "Nascimentos",
   href: "/nascimentos",
   icon: Baby,
-  children: [{ label: "Coberturas", href: "/nascimentos/coberturas" }],
+  children: [{ label: "Reprodução", href: "/nascimentos/reproducao", icon: Dna }],
 };
 
 const lots: NavItem = { label: "Lotes", href: "/lots", icon: Fence };
@@ -31,15 +31,16 @@ describe("isActiveRoute", () => {
 
 describe("activeChild", () => {
   it("returns the child whose route matches", () => {
-    expect(activeChild("/nascimentos/coberturas", nascimentos)).toEqual({
-      label: "Coberturas",
-      href: "/nascimentos/coberturas",
+    expect(activeChild("/nascimentos/reproducao", nascimentos)).toEqual({
+      label: "Reprodução",
+      href: "/nascimentos/reproducao",
+      icon: Dna,
     });
   });
 
   it("matches a sub-route of the child", () => {
-    expect(activeChild("/nascimentos/coberturas/nova", nascimentos)?.href).toBe(
-      "/nascimentos/coberturas"
+    expect(activeChild("/nascimentos/reproducao/nova", nascimentos)?.href).toBe(
+      "/nascimentos/reproducao"
     );
   });
 
@@ -57,10 +58,10 @@ describe("activeChild", () => {
 });
 
 describe("NAV_ITEMS", () => {
-  it("lists Coberturas under Nascimentos", () => {
+  it("lists Reprodução under Nascimentos, with its own icon", () => {
     const item = NAV_ITEMS.find((i) => i.href === "/nascimentos");
     expect(item?.children).toEqual([
-      { label: "Coberturas", href: "/nascimentos/coberturas" },
+      { label: "Reprodução", href: "/nascimentos/reproducao", icon: Dna },
     ]);
   });
 });

@@ -12,6 +12,7 @@ import {
   Beef,
   CalendarDays,
   CircleDollarSign,
+  Dna,
   Fence,
   LayoutDashboard,
   Map,
@@ -24,6 +25,8 @@ import {
 export interface NavChild {
   label: string;
   href: string;
+  /** Icon of its own; without one the child borrows its parent's. */
+  icon?: LucideIcon;
 }
 
 /** A primary navigation destination. */
@@ -44,7 +47,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     label: "Nascimentos",
     href: "/nascimentos",
     icon: Baby,
-    children: [{ label: "Coberturas", href: "/nascimentos/coberturas" }],
+    children: [{ label: "Reprodução", href: "/nascimentos/reproducao", icon: Dna }],
   },
   { label: "Calendário Sanitário", href: "/calendar", icon: CalendarDays },
   { label: "Lotes", href: "/lots", icon: Fence },

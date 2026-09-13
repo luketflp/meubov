@@ -42,7 +42,7 @@ export function daysToCalving(expectedIso: string, todayIso: string): number {
  * The calving forecast in words, from the days {@link daysToCalving} returns:
  * "hoje", "em 1 dia", "em N dias" — or "há N dias" once the date has passed
  * with no parto recorded. Shared by the ficha's forecast card and the
- * Coberturas rows, so the same distance reads the same on both screens.
+ * Reprodução rows, so the same distance reads the same on both screens.
  */
 export function daysToCalvingText(days: number): string {
   if (days === 0) return "hoje";

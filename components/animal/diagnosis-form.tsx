@@ -9,7 +9,7 @@
  * per breeding), which is what a 30-then-60-day check does in practice.
  *
  * It is shared by the female's ficha ({@link RegisterDiagnosisDialog}), where
- * the cobertura is picked in the form, and the Coberturas screen, which opens
+ * the cobertura is picked in the form, and the Reprodução screen, which opens
  * it from a row with the `breeding` already fixed — there the picker gives way
  * to a summary of that cobertura.
  */

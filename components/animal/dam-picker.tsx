@@ -2,7 +2,7 @@
 
 /**
  * Search box plus the list of active females, for the screens that record a
- * write on a matriz without starting from her ficha (Nascimentos, Coberturas):
+ * write on a matriz without starting from her ficha (Nascimentos, Reprodução):
  * the caller shows the picker first and moves on to its form once a dam is
  * chosen.
  *

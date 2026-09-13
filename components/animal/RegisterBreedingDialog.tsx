@@ -3,7 +3,7 @@
 /**
  * "Registrar cobertura" dialog on the female's ficha, where the dam is already
  * known. The form itself lives in {@link BreedingForm}, shared with the
- * Coberturas screen — which opens the same form after picking a dam.
+ * Reprodução screen — which opens the same form after picking a dam.
  *
  * The fields start fresh on every open: the dialog content unmounts when it
  * closes, so the form's state is rebuilt with it.
