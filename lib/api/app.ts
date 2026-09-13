@@ -3,8 +3,12 @@
  * catch-all route handler (app/api/herd/[[...slugs]]/route.ts).
  *
  * This file only composes: every route lives in its domain's controller under
- * lib/api/domains/, and each controller opts into the `farm` macro, which
- * resolves the authenticated user and the active farm (401 without a session).
+ * lib/api/domains/, and each controller's routes opt into one of two macros —
+ * `farm` (session, active farm and permissions; 401 without a session, 403
+ * without the farm or the level the route needs) for almost everything, or
+ * the bare `session` macro (401 without a session, no farm resolved) for the
+ * invitee routes in invitesController, which run before the caller belongs to
+ * any farm, and POST /farms, which creates one.
  * `HerdApi` is the type the Eden Treaty client derives end-to-end types from —
  * import it with `import type` only, so no server code leaks into the client
  * bundle.
@@ -24,6 +28,8 @@ import { invernadasController } from "@/lib/api/domains/invernadas/invernadas.co
 import { lotsController } from "@/lib/api/domains/lots/lots.controller";
 import { manejoController } from "@/lib/api/domains/manejo/manejo.controller";
 import { protocolsController } from "@/lib/api/domains/protocols/protocols.controller";
+import { teamController } from "@/lib/api/domains/team/team.controller";
+import { invitesController } from "@/lib/api/domains/invites/invites.controller";
 import { birthsController } from "@/lib/api/domains/reproduction/births.controller";
 import { reproductionController } from "@/lib/api/domains/reproduction/reproduction.controller";
 import { semenController } from "@/lib/api/domains/semen/semen.controller";
@@ -51,6 +57,8 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
   .use(lotsController)
   .use(invernadasController)
   .use(farmController)
+  .use(teamController)
+  .use(invitesController)
   .use(protocolsController)
 
   /* ---- Animals, weighings, treatments ----------------------------------- */

@@ -10,6 +10,9 @@
 import { useState } from "react";
 import { Ellipsis, Trash2 } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useActivePermissions } from "@/lib/store/usePermissions";
+import { can } from "@/lib/domain/permissions";
+import { canDeleteSession } from "@/lib/domain/moneyRedaction";
 import type { ManejoHistoryRow } from "@/components/manejo/helpers";
 import {
   DeleteManejoDialog,
@@ -28,6 +31,7 @@ export function ManejoRowMenu({ row }: { row: ManejoHistoryRow }) {
     row.sessionId === undefined ? undefined : s.manejoSessions.find((m) => m.id === row.sessionId)
   );
   const [deleting, setDeleting] = useState(false);
+  const permissions = useActivePermissions();
 
   const target: DeleteTarget | null = session
     ? { kind: "session", session }
@@ -43,6 +47,14 @@ export function ManejoRowMenu({ row }: { row: ManejoHistoryRow }) {
         : null;
 
   if (!target) return null;
+  // Each row deletes through the area that wrote it: a session through Manejo
+  // (plus Financeiro when it has money), a group of treatments through
+  // Sanitário, a day of weighings through Rebanho. A reader gets no menu.
+  const allowed =
+    target.kind === "session"
+      ? canDeleteSession(permissions, target.session)
+      : can(permissions, target.kind === "treatments" ? "sanitary" : "herd", "edit");
+  if (!allowed) return null;
 
   return (
     // The card around it is a link: no click inside the menu may navigate.

@@ -56,7 +56,8 @@ export interface SemenPurchase {
   id: string;
   date: string;
   doses: number;
-  totalBrl: number;
+  /** Absent when the server stripped it for a member without Financeiro. */
+  totalBrl?: number;
   seller?: string;
   /** Expense this purchase wrote in Financeiro; absent once that expense is gone. */
   expenseId?: string;
@@ -253,6 +254,11 @@ export interface ManejoSession {
   /** Touro principal of an inseminação: pre-selected for every cow at the brete. */
   semenBullId?: string;
   notes?: string;
+  /**
+   * Set by the server when it stripped the session's values for a member
+   * without Financeiro, so "no price" and "a price you may not see" differ.
+   */
+  valuesHidden?: boolean;
 }
 
 /** Logical group of cattle, independent of the pasture it currently occupies. */

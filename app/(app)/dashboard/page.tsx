@@ -35,6 +35,8 @@ import { summaryByCategory } from "@/components/dashboard/helpers";
 import { AdgChart } from "@/components/dashboard/AdgChart";
 import { AnimalsNeedingAttention } from "@/components/dashboard/AnimalsNeedingAttention";
 import { OpenManejoSessions } from "@/components/manejo/open-sessions";
+import { PendingInviteBanner } from "@/components/invites/PendingInviteBanner";
+import { useCan } from "@/lib/store/usePermissions";
 import {
   UpcomingTreatments,
   type PendingTreatmentItem,
@@ -62,7 +64,10 @@ export default function DashboardPage() {
   const movements = useHerdStore((s) => s.movements);
   const expenses = useHerdStore((s) => s.expenses);
   const farm = useHerdStore((s) => s.farm);
+  // Without Financeiro the server sends no values: the money cards go instead of showing zeros.
+  const seeMoney = useCan("finance", "view");
   const markTreatmentDone = useHerdStore((s) => s.markTreatmentDone);
+  const canCompleteTreatments = useCan("sanitary", "edit");
   const { addToast } = useToast();
 
   /** Completes one treatment and confirms it with a toast. */
@@ -128,6 +133,8 @@ export default function DashboardPage() {
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 md:px-8 md:py-8">
       <PageHeader title="Painel" subtitle={`${farm.name} · ${farm.municipality}`} />
 
+      <PendingInviteBanner />
+
       <div className="space-y-2">
         <DashboardKpisRow
           headCount={active.length}
@@ -138,8 +145,9 @@ export default function DashboardPage() {
           averageAdg={averageAdg}
           stockingRate={stockingRate}
           herdValue={herdValue}
+          showMoney={seeMoney}
         />
-        <DashboardKpisNote quoteLive={quote.live} />
+        {seeMoney ? <DashboardKpisNote quoteLive={quote.live} /> : null}
       </div>
 
       <SectionDivider title="Manejo do rebanho" />
@@ -151,7 +159,10 @@ export default function DashboardPage() {
           <AnimalsNeedingAttention items={needingAttention} />
         </div>
         <div className="lg:col-span-2">
-          <UpcomingTreatments items={pending} onComplete={onCompleteTreatment} />
+          <UpcomingTreatments
+            items={pending}
+            onComplete={canCompleteTreatments ? onCompleteTreatment : undefined}
+          />
         </div>
       </div>
 
@@ -159,15 +170,19 @@ export default function DashboardPage() {
 
       <AdgChart series={adgSeries} />
 
-      <SectionDivider
-        title="Financeiro do período"
-        action={<PeriodPicker value={period} onChange={setPeriod} />}
-      />
+      {seeMoney ? (
+        <>
+          <SectionDivider
+            title="Financeiro do período"
+            action={<PeriodPicker value={period} onChange={setPeriod} />}
+          />
 
-      <div className="grid items-start gap-4 lg:grid-cols-2">
-        <PeriodResultCard result={financials} />
-        <ExpensesCard breakdown={periodBreakdown} totalCost={financials.totalCost} />
-      </div>
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            <PeriodResultCard result={financials} />
+            <ExpensesCard breakdown={periodBreakdown} totalCost={financials.totalCost} />
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

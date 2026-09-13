@@ -3,10 +3,12 @@
 /**
  * "Painel de atividades" section: pending treatments grouped into batch
  * activities (same day/type/name), overdue first, each with a one-tap
- * "Concluir" action that marks the whole batch as done.
+ * "Concluir" action that marks the whole batch as done. Without Sanitário
+ * edit the list only reads.
  */
 import { ClipboardCheck } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { todayISO, formatDate } from "@/lib/domain/dates";
 import { formatNumber } from "@/lib/domain/format";
 import { Button } from "@/components/ui/button";
@@ -25,7 +27,8 @@ function ActivityRow({
   onComplete,
 }: {
   activity: ManejoActivity;
-  onComplete: () => void;
+  /** Absent when the user may not complete treatments: the row has no "Concluir". */
+  onComplete?: () => void;
 }) {
   const heads = activity.earTags.length;
   return (
@@ -46,15 +49,17 @@ function ActivityRow({
           {heads === 1 ? "animal" : "animais"}
         </p>
       </div>
-      <Button
-        type="button"
-        variant="outline"
-        className="min-h-11 shrink-0 sm:min-h-9"
-        onClick={onComplete}
-      >
-        <ClipboardCheck aria-hidden />
-        Concluir
-      </Button>
+      {onComplete ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 shrink-0 sm:min-h-9"
+          onClick={onComplete}
+        >
+          <ClipboardCheck aria-hidden />
+          Concluir
+        </Button>
+      ) : null}
     </li>
   );
 }
@@ -62,6 +67,7 @@ function ActivityRow({
 export function ActivityPanel() {
   const treatments = useHerdStore((s) => s.treatments);
   const completeTreatments = useHerdStore((s) => s.completeTreatments);
+  const canComplete = useCan("sanitary", "edit");
   const activities = pendingActivities(treatments, todayISO());
 
   return (
@@ -78,7 +84,9 @@ export function ActivityPanel() {
             <ActivityRow
               key={activity.key}
               activity={activity}
-              onComplete={() => completeTreatments(activity.treatmentIds)}
+              onComplete={
+                canComplete ? () => completeTreatments(activity.treatmentIds) : undefined
+              }
             />
           ))}
         </ul>

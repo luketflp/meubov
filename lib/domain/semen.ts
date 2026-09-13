@@ -7,6 +7,9 @@
  * costs the average of the purchases. The Touros tab, the bull's page, the brete
  * and the inseminação details all read this module; the API counts the stock
  * again inside its transaction before it takes a dose.
+ *
+ * A member without Financeiro receives the purchases without their valor total,
+ * so every cost here is null when a total is missing: the doses still count.
  */
 import type {
   Animal,
@@ -29,9 +32,9 @@ export interface BullStock {
   used: number;
   /** bought − used. */
   left: number;
-  /** Sum of the purchase totals, in BRL. */
-  totalBrl: number;
-  /** totalBrl ÷ bought; null before the first purchase. */
+  /** Sum of the purchase totals, in BRL; null when a purchase came without its total. */
+  totalBrl: number | null;
+  /** totalBrl ÷ bought; null before the first purchase or without the totals. */
   avgCostPerDose: number | null;
   /** Date of the latest purchase; null before the first one. */
   lastPurchase: string | null;
@@ -63,7 +66,9 @@ function bullBreedings(bullId: string, animals: Animal[]): FarmBreeding[] {
 /** What the purchases alone say: doses bought, money spent, cost per dose. */
 function purchased(bull: SemenBull): Omit<BullStock, "used" | "left"> {
   const bought = sum(bull.purchases.map((p) => p.doses));
-  const totalBrl = sum(bull.purchases.map((p) => p.totalBrl));
+  const totals = bull.purchases.flatMap((p) => (p.totalBrl === undefined ? [] : [p.totalBrl]));
+  // One hidden total hides the sum: a partial one would read as the whole spend.
+  const totalBrl = totals.length === bull.purchases.length ? sum(totals) : null;
   const lastPurchase = bull.purchases.reduce<string | null>(
     (latest, p) => (latest === null || p.date > latest ? p.date : latest),
     null
@@ -71,7 +76,7 @@ function purchased(bull: SemenBull): Omit<BullStock, "used" | "left"> {
   return {
     bought,
     totalBrl,
-    avgCostPerDose: bought > 0 ? totalBrl / bought : null,
+    avgCostPerDose: bought > 0 && totalBrl !== null ? totalBrl / bought : null,
     lastPurchase,
   };
 }
@@ -184,7 +189,7 @@ export function sessionDosesByBull(session: ManejoSession, animals: Animal[]): M
 export interface SemenCostLine {
   bull: SemenBull;
   doses: number;
-  /** doses × the bull's average cost; null when the bull has no purchase. */
+  /** doses × the bull's average cost; null when the bull has no purchase or its totals are hidden. */
   costBrl: number | null;
   avgCostPerDose: number | null;
 }

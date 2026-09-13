@@ -3,9 +3,11 @@
 import { useMemo, useState } from "react";
 import { SearchX } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { activeAnimals, withStatus } from "@/lib/store/selectors";
 import { todayISO } from "@/lib/domain/dates";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/herd/FilterBar";
 import { HerdTable } from "@/components/herd/HerdTable";
@@ -31,6 +33,8 @@ export default function HerdPage() {
   const lots = useHerdStore((state) => state.lots);
   const invernadas = useHerdStore((state) => state.invernadas);
   const lotPlacements = useHerdStore((state) => state.lotPlacements);
+  const canEdit = useCan("herd", "edit");
+  const canEditLots = useCan("lots", "edit");
 
   const [filters, setFilters] = useState<HerdFilters>(INITIAL_FILTERS);
   const [sort, setSort] = useState<HerdSort>(DEFAULT_SORT);
@@ -80,11 +84,15 @@ export default function HerdPage() {
       <PageHeader
         title="Rebanho"
         subtitle={herdSubtitle(derived.length, filtered.length, filterActive)}
+        badges={canEdit ? undefined : <ReadOnlyPill />}
         actions={
-          <div className="flex flex-wrap gap-2">
-            <ImportHerdDialog />
-            <AddAnimalsButton />
-          </div>
+          canEdit ? (
+            <div className="flex flex-wrap gap-2">
+              {/* The import creates the sheet's new lots, so the server also asks for Lotes edit. */}
+              {canEditLots ? <ImportHerdDialog /> : null}
+              <AddAnimalsButton />
+            </div>
+          ) : undefined
         }
       />
 

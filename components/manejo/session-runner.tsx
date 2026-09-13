@@ -21,6 +21,8 @@ import {
   Undo2,
 } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useActivePermissions, useCan } from "@/lib/store/usePermissions";
+import { canDeleteSession } from "@/lib/domain/moneyRedaction";
 import { useToast } from "@/components/providers/Toasts";
 import type { ManejoSessionAnimal } from "@/lib/types";
 import { formatDate, todayISO } from "@/lib/domain/dates";
@@ -43,6 +45,7 @@ import { SaleSummaryCard } from "@/components/manejo/sale-summary";
 import { SaleYieldDialog } from "@/components/manejo/sale-yield-dialog";
 import { DeleteManejoDialog } from "@/components/manejo/delete-manejo-dialog";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -72,6 +75,9 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
   const closeManejoSession = useHerdStore((s) => s.closeManejoSession);
   const { addToast } = useToast();
   const router = useRouter();
+  const canRun = useCan("manejo", "edit");
+  const canEditFinance = useCan("finance", "edit");
+  const permissions = useActivePermissions();
 
   const [deleting, setDeleting] = useState(false);
   const [search, setSearch] = useState("");
@@ -106,6 +112,10 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
   }
 
   const open = session.status === "open";
+  // Reading a session is not running it: every chute action needs Manejo edit,
+  // and the rendimento, which reprices the passes, Financeiro edit on top.
+  const operable = open && canRun;
+  const setsYield = operable && canEditFinance;
   const progress = sessionProgress(session);
   const pending = session.animals.filter((a) => a.outcome === "pending");
   const done = session.animals.filter((a) => a.outcome === "done");
@@ -119,9 +129,11 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
     semenBulls.find((bull) => bull.id === bullId)?.name;
   const mainBullName = bullName(session.semenBullId);
   // A venda per arroba pays the carcass: its chute stays held until the modal
-  // collects the rendimento the R$/@ applies to.
+  // collects the rendimento the R$/@ applies to. Only someone who may set it is
+  // held; anyone else runs the chute on the default rendimento, and the passes
+  // are repriced once it is set. A vaqueiro never receives the price at all.
   const perArroba = isSale && session.pricePerArroba !== undefined;
-  const needsYield = open && perArroba && session.carcassYieldPct === undefined;
+  const needsYield = setsYield && perArroba && session.carcassYieldPct === undefined;
   // Live value of the animal on the scale, in a venda priced per arroba.
   const typedWeight = Number(weight);
   const passWeight =
@@ -192,6 +204,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
     <div className="space-y-6">
       <PageHeader
         title={isInsemination ? inseminationTitle(session, animals, lots) : session.name}
+        badges={canRun ? undefined : <ReadOnlyPill />}
         subtitle={
           session.kind === "health" || session.kind === "weighing"
             ? `Manejo de ${formatDate(session.date)}${
@@ -205,16 +218,18 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         }
         actions={
           <div className="flex flex-wrap items-center gap-3">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="min-h-11 text-ink-soft hover:text-overdue md:min-h-9"
-              onClick={() => setDeleting(true)}
-            >
-              <Trash2 data-icon="inline-start" aria-hidden />
-              {open ? "Descartar manejo" : "Excluir manejo"}
-            </Button>
+            {canDeleteSession(permissions, session) ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="min-h-11 text-ink-soft hover:text-overdue md:min-h-9"
+                onClick={() => setDeleting(true)}
+              >
+                <Trash2 data-icon="inline-start" aria-hidden />
+                {open ? "Descartar manejo" : "Excluir manejo"}
+              </Button>
+            ) : null}
             <Link
               href="/manejo"
               className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand hover:underline md:min-h-0"
@@ -249,7 +264,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         ) : null}
       </SectionCard>
 
-      {perArroba && session.pricePerArroba !== undefined ? (
+      {setsYield && perArroba && session.pricePerArroba !== undefined ? (
         <SaleYieldDialog
           key={session.carcassYieldPct ?? "unset"}
           sessionId={session.id}
@@ -260,9 +275,9 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         />
       ) : null}
 
-      {open && isEntry ? <EntryChuteForm session={session} todayIso={todayISO()} /> : null}
+      {operable && isEntry ? <EntryChuteForm session={session} todayIso={todayISO()} /> : null}
 
-      {open && isInsemination && current ? (
+      {operable && isInsemination && current ? (
         <InseminationChuteForm session={session} entry={current} onDone={resetPassForm} />
       ) : null}
 
@@ -279,7 +294,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         </SectionCard>
       ) : null}
 
-      {open && !isEntry && !isInsemination && !needsYield && current ? (
+      {operable && !isEntry && !isInsemination && !needsYield && current ? (
         <SectionCard title="No brete agora">
           <form onSubmit={onComplete} className="space-y-4">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -384,7 +399,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         </SectionCard>
       ) : null}
 
-      {open && !isEntry && !current && pending.length === 0 ? (
+      {operable && !isEntry && !current && pending.length === 0 ? (
         <SectionCard title="No brete agora">
           <EmptyState
             icon={CheckCircle2}
@@ -398,7 +413,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         <SaleSummaryCard
           session={session}
           onEditYield={
-            open && perArroba ? () => setYieldDialogOpen(true) : undefined
+            setsYield && perArroba ? () => setYieldDialogOpen(true) : undefined
           }
         />
       ) : null}
@@ -437,7 +452,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
                   <li key={entry.earTag}>
                     <button
                       type="button"
-                      disabled={!open}
+                      disabled={!operable}
                       onClick={() => {
                         setSelectedTag(entry.earTag);
                         setError(null);
@@ -482,7 +497,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
             ) : (
               <HandledList
                 entries={done}
-                open={open}
+                open={operable}
                 onUndo={(earTag) => reopenManejoAnimal(session.id, earTag)}
                 detail={
                   isInsemination
@@ -498,7 +513,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
             <SectionCard title={`${isInsemination ? "Puladas" : "Pulados"} (${skipped.length})`}>
               <HandledList
                 entries={skipped}
-                open={open}
+                open={operable}
                 onUndo={(earTag) => reopenManejoAnimal(session.id, earTag)}
               />
             </SectionCard>
@@ -506,7 +521,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         </div>
       </div>
 
-      {open ? (
+      {operable ? (
         <div className="flex justify-end">
           <Button
             variant="outline"

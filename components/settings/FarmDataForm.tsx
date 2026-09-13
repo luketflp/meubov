@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SectionCard } from "@/components/ui/section-card";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { useToast } from "@/components/providers/Toasts";
 import type { FarmData } from "@/lib/types";
 
@@ -29,6 +30,7 @@ const FIELDS: readonly FarmField[] = [
 export function FarmDataForm() {
   const farm = useHerdStore((s) => s.farm);
   const saveFarm = useHerdStore((s) => s.saveFarm);
+  const canEdit = useCan("farm", "edit");
   const { addToast } = useToast();
   // Copied field by field so the payload carries no `headquarters` key.
   const [form, setForm] = useState<FarmRegistration>(() => ({
@@ -59,15 +61,18 @@ export function FarmDataForm() {
               id={`farm-${key}`}
               value={form[key]}
               onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
+              readOnly={!canEdit}
               className={mono ? "font-mono" : undefined}
             />
           </div>
         ))}
-        <div className="flex items-center gap-3 sm:col-span-2">
-          <Button type="submit" disabled={!hasChange} className="min-h-11 md:min-h-0">
-            Salvar
-          </Button>
-        </div>
+        {canEdit ? (
+          <div className="flex items-center gap-3 sm:col-span-2">
+            <Button type="submit" disabled={!hasChange} className="min-h-11 md:min-h-0">
+              Salvar
+            </Button>
+          </div>
+        ) : null}
       </form>
     </SectionCard>
   );

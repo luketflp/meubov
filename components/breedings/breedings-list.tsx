@@ -15,6 +15,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { HeartPulse } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import {
   recentBreedings,
   filterBreedings,
@@ -96,6 +97,7 @@ function forecastDistance(expectedIso: string, todayIso: string): string {
 export function BreedingsList() {
   const animals = useHerdStore((s) => s.animals);
   const semenBulls = useHerdStore((s) => s.semenBulls);
+  const canEdit = useCan("reproduction", "edit");
   const [filter, setFilter] = useState<BreedingFilter>("all");
   const rows = useMemo(() => recentBreedings(animals, semenBulls), [animals, semenBulls]);
   const shown = useMemo(() => filterBreedings(rows, filter), [rows, filter]);
@@ -185,7 +187,7 @@ export function BreedingsList() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      {awaitsDiagnosis(row) ? (
+                      {canEdit && awaitsDiagnosis(row) ? (
                         <RowDiagnosisDialog
                           dam={row.dam}
                           breeding={row.breeding}
@@ -230,7 +232,7 @@ export function BreedingsList() {
                     · {forecastDistance(row.outcome.expectedCalvingDate, today)}
                   </p>
                 )}
-                {awaitsDiagnosis(row) ? (
+                {canEdit && awaitsDiagnosis(row) ? (
                   <RowDiagnosisDialog dam={row.dam} breeding={row.breeding} variant="card" />
                 ) : null}
               </li>

@@ -8,7 +8,8 @@
  *
  * Rendered for EVERY female, with or without history: an empty record is where
  * the first breeding gets registered. Actions disappear once the animal leaves
- * the herd (sold, dead), the history stays readable.
+ * the herd (sold, dead) or for a user without Reprodução edit; the history
+ * stays readable.
  */
 import Link from "next/link";
 import type { Animal, Breeding, ReproductionRecord } from "@/lib/types";
@@ -27,6 +28,7 @@ import { RegisterCalvingDialog } from "@/components/animal/RegisterCalvingDialog
 import { bullDisplay } from "@/components/semen/helpers";
 import { ResultPill, BreedingPill } from "@/components/animal/reproduction-pills";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { animalByEarTag } from "@/lib/store/selectors";
 
 function EarTagLink({ earTag }: { earTag: string }) {
@@ -63,6 +65,7 @@ interface AnimalReproductionProps {
 }
 
 export function AnimalReproduction({ animal }: AnimalReproductionProps) {
+  const canEdit = useCan("reproduction", "edit");
   const record = animal.reproduction ?? EMPTY_RECORD;
   const current = currentDiagnosis(record);
   const breedings = [...record.breedings].sort((a, b) =>
@@ -81,7 +84,9 @@ export function AnimalReproduction({ animal }: AnimalReproductionProps) {
   return (
     <SectionCard
       title="Reprodução"
-      action={animal.active ? <RegisterBreedingDialog earTag={animal.earTag} /> : null}
+      action={
+        animal.active && canEdit ? <RegisterBreedingDialog earTag={animal.earTag} /> : null
+      }
     >
       <div className="space-y-5">
         <div className="flex flex-wrap items-center gap-2">
@@ -112,7 +117,7 @@ export function AnimalReproduction({ animal }: AnimalReproductionProps) {
         <div>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-ink">Coberturas</h3>
-            {animal.active && breedings.length > 0 ? (
+            {animal.active && canEdit && breedings.length > 0 ? (
               <RegisterDiagnosisDialog earTag={animal.earTag} record={record} />
             ) : null}
           </div>
@@ -136,7 +141,7 @@ export function AnimalReproduction({ animal }: AnimalReproductionProps) {
         <div>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-ink">Partos</h3>
-            {animal.active ? <RegisterCalvingDialog dam={animal} /> : null}
+            {animal.active && canEdit ? <RegisterCalvingDialog dam={animal} /> : null}
           </div>
           {calvings.length > 0 ? (
             <ul className="mt-2 divide-y divide-hairline">

@@ -9,8 +9,8 @@
  *
  * An inseminação is held back by the diagnoses of its cows, which nothing else
  * can remove once the Ultrassom's toast is gone: each of those cows gets a
- * "Limpar diagnóstico" here, and with every one cleared the delete is offered
- * again.
+ * "Limpar diagnóstico" here (for whoever may edit Reprodução), and with every
+ * one cleared the delete is offered again.
  */
 import { useState } from "react";
 import { Eraser } from "lucide-react";
@@ -18,6 +18,7 @@ import type { ManejoSession } from "@/lib/types";
 import { formatDate } from "@/lib/domain/dates";
 import { formatCurrency } from "@/lib/domain/format";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import type { BlockedAnimal, RevertBlockReason } from "@/lib/domain/manejoRevert";
 import { ResultPill } from "@/components/animal/reproduction-pills";
 import { Button } from "@/components/ui/button";
@@ -138,6 +139,7 @@ function DiagnosisBlockRow({ block, cleared, onCleared }: DiagnosisBlockRowProps
         ?.reproduction?.diagnoses.find((d) => d.breedingId === block.breedingId)?.result
   );
   const clearDiagnosis = useHerdStore((s) => s.clearDiagnosis);
+  const canClear = useCan("reproduction", "edit");
   const [clearing, setClearing] = useState(false);
 
   async function clear() {
@@ -162,17 +164,19 @@ function DiagnosisBlockRow({ block, cleared, onCleared }: DiagnosisBlockRowProps
       ) : (
         <>
           {result !== undefined && result !== "pending" ? <ResultPill result={result} /> : null}
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="ml-auto min-h-11 text-brand hover:text-brand md:min-h-8"
-            disabled={clearing}
-            onClick={() => void clear()}
-          >
-            <Eraser data-icon="inline-start" aria-hidden />
-            Limpar diagnóstico
-          </Button>
+          {canClear ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="ml-auto min-h-11 text-brand hover:text-brand md:min-h-8"
+              disabled={clearing}
+              onClick={() => void clear()}
+            >
+              <Eraser data-icon="inline-start" aria-hidden />
+              Limpar diagnóstico
+            </Button>
+          ) : null}
         </>
       )}
     </li>

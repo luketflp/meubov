@@ -21,6 +21,8 @@ import { deriveAnimalStatus, deriveTreatmentStatus, attentionReason } from "@/li
 import { breedingOutcome, type BreedingOutcome } from "@/lib/domain/reproduction";
 import { calculateAdg, herdAdgSamples } from "@/lib/domain/adg";
 import { ageInMonths, daysBetween } from "@/lib/domain/dates";
+import { FLOORS, type Permissions } from "@/lib/domain/permissions";
+import type { FarmOption } from "@/lib/store/useHerdStore";
 import { kgToArroba, currentWeight, totalWeightKg } from "@/lib/domain/weights";
 import {
   KG_PER_AU,
@@ -837,4 +839,16 @@ export function recentBreedings(animals: Animal[], semenBulls: SemenBull[]): Bre
 export function filterBreedings(rows: BreedingRow[], filter: BreedingFilter): BreedingRow[] {
   if (filter === "all") return rows;
   return rows.filter((row) => row.outcome.result === filter);
+}
+
+/**
+ * The levels the user holds on the active farm. Until the farm list is known
+ * (or when it failed to load) the floors apply, so the UI hides writes rather
+ * than offering buttons the server will refuse.
+ */
+export function selectActivePermissions(
+  farms: FarmOption[],
+  activeFarmId: number | null
+): Permissions {
+  return farms.find((farm) => farm.id === activeFarmId)?.permissions ?? FLOORS;
 }

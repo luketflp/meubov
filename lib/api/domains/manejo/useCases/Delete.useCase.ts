@@ -17,6 +17,7 @@ import {
   type RevertSession,
 } from "@/lib/domain/manejoRevert";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
+import { hasMoney } from "@/lib/domain/moneyRedaction";
 
 import { lockDiagnosedBreedings } from "../_shared/session";
 
@@ -36,9 +37,15 @@ export interface DeletedManejo {
 interface DeleteSessionUseCaseProps {
   farmId: number;
   id: string;
+  /** False for a member without Financeiro edit: a session with values stays. */
+  canEditFinance: boolean;
 }
 
-type DeleteSessionUseCaseResponse = DeletedManejo | { blocked: BlockedAnimal[] } | "session_not_found";
+type DeleteSessionUseCaseResponse =
+  | DeletedManejo
+  | { blocked: BlockedAnimal[] }
+  | "session_not_found"
+  | "finance_required";
 
 type CurrUseCase = _UseCase<DeleteSessionUseCaseProps, DeleteSessionUseCaseResponse>;
 
@@ -61,7 +68,7 @@ export class DeleteSessionUseCase implements CurrUseCase {
     this.repository = repo;
   }
 
-  public run: CurrUseCase["run"] = async ({ farmId, id }) => {
+  public run: CurrUseCase["run"] = async ({ farmId, id, canEditFinance }) => {
     return this.repository.transaction(async (tx) => {
       const [row] = await tx
         .select()
@@ -75,6 +82,18 @@ export class DeleteSessionUseCase implements CurrUseCase {
         )
         .for("update");
       if (!row) return "session_not_found";
+      // Deleting a priced venda, entrada or costed treatment takes money out of
+      // the financeiro, which only Financeiro edit may do.
+      if (
+        !canEditFinance &&
+        hasMoney({
+          pricePerArroba: row.pricePerArroba,
+          totalAmountBrl: row.totalAmountBrl,
+          planCostBrl: row.planCostBrl,
+        })
+      ) {
+        return "finance_required";
+      }
 
       const entries = await tx
         .select({

@@ -10,6 +10,7 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { TYPE_LABEL } from "@/components/calendar/helpers";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { animalByEarTag } from "@/lib/store/selectors";
+import { useCan } from "@/lib/store/usePermissions";
 import { cn } from "@/lib/utils";
 
 interface TreatmentRowProps {
@@ -32,6 +33,7 @@ export function TreatmentRow({
   const animal = useHerdStore((state) =>
     animalByEarTag(state.animals, treatment.animalEarTag)
   );
+  const canEdit = useCan("sanitary", "edit");
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5">
       <div className="min-w-0 flex-1">
@@ -56,7 +58,7 @@ export function TreatmentRow({
         </p>
       </div>
       <StatusPill status={status} />
-      {status !== "done" ? (
+      {canEdit && status !== "done" ? (
         <Button
           variant="outline"
           size="sm"
@@ -66,15 +68,17 @@ export function TreatmentRow({
           Marcar como feito
         </Button>
       ) : null}
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label={compact ? "Excluir tratamento deste animal" : "Excluir tratamento"}
-        className="size-11 shrink-0 text-ink-soft hover:text-overdue md:size-9"
-        onClick={() => onDelete(treatment)}
-      >
-        <Trash2 className="size-4" aria-hidden />
-      </Button>
+      {canEdit ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={compact ? "Excluir tratamento deste animal" : "Excluir tratamento"}
+          className="size-11 shrink-0 text-ink-soft hover:text-overdue md:size-9"
+          onClick={() => onDelete(treatment)}
+        >
+          <Trash2 className="size-4" aria-hidden />
+        </Button>
+      ) : null}
     </li>
   );
 }

@@ -25,6 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { invernadasWithSummary } from "@/lib/store/selectors";
 import { formatNumber } from "@/lib/domain/format";
 import type { Invernada } from "@/lib/types";
@@ -181,7 +182,11 @@ function EditInvernadaDialog({ invernada }: { invernada: Invernada }) {
   );
 }
 
-/** Fixed farm areas with their current logical lots, removal, and an add row. */
+/**
+ * Fixed farm areas with their current logical lots, removal, and an add row.
+ * Editing, removal and the add row belong to whoever may edit Lotes e Mapa;
+ * anyone else reads the table, which then has no Ações column.
+ */
 export function InvernadasSettings() {
   const invernadas = useHerdStore((s) => s.invernadas);
   const lots = useHerdStore((s) => s.lots);
@@ -189,6 +194,7 @@ export function InvernadasSettings() {
   const animals = useHerdStore((s) => s.animals);
   const addInvernada = useHerdStore((s) => s.addInvernada);
   const removeInvernada = useHerdStore((s) => s.removeInvernada);
+  const canEditLots = useCan("lots", "edit");
   const [removeError, showRemoveError] = useTemporaryMessage(3000);
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
@@ -271,9 +277,11 @@ export function InvernadasSettings() {
             <TableHead className="text-right">Hectares</TableHead>
             <TableHead>Lotes atuais</TableHead>
             <TableHead className="text-right">Cabeças</TableHead>
-            <TableHead className="w-20">
-              <span className="sr-only">Ações</span>
-            </TableHead>
+            {canEditLots ? (
+              <TableHead className="w-20">
+                <span className="sr-only">Ações</span>
+              </TableHead>
+            ) : null}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -291,70 +299,74 @@ export function InvernadasSettings() {
                   : currentLots.map((lot) => lot.name).join(", ")}
               </TableCell>
               <TableCell className="text-right font-mono">{formatNumber(headCount)}</TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end">
-                  <EditInvernadaDialog invernada={invernada} />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => onRemove(invernada)}
-                    aria-label={`Remover invernada ${invernada.code}`}
-                    className="min-h-11 min-w-11 text-ink-soft hover:text-overdue md:min-h-7 md:min-w-7"
-                  >
-                    <Trash2 aria-hidden />
-                  </Button>
-                </div>
-              </TableCell>
+              {canEditLots ? (
+                <TableCell className="text-right">
+                  <div className="flex justify-end">
+                    <EditInvernadaDialog invernada={invernada} />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => onRemove(invernada)}
+                      aria-label={`Remover invernada ${invernada.code}`}
+                      className="min-h-11 min-w-11 text-ink-soft hover:text-overdue md:min-h-7 md:min-w-7"
+                    >
+                      <Trash2 aria-hidden />
+                    </Button>
+                  </div>
+                </TableCell>
+              ) : null}
             </TableRow>
           ))}
         </TableBody>
       </Table>
       {removeError ? <p className="mt-3 text-sm text-overdue">{removeError}</p> : null}
-      <form
-        onSubmit={onAdd}
-        className="mt-4 flex flex-col gap-2 border-t border-hairline pt-4 sm:flex-row"
-      >
-        <Input
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          placeholder="Código"
-          aria-label="Número ou código da nova invernada"
-          className="font-mono sm:max-w-28"
-          autoCapitalize="characters"
-        />
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Nome (opcional)"
-          aria-label="Nome opcional da nova invernada"
-        />
-        <Input
-          value={grass}
-          onChange={(e) => setGrass(e.target.value)}
-          placeholder="Capim"
-          aria-label="Capim da nova invernada"
-        />
-        <Input
-          value={hectares}
-          onChange={(e) => setHectares(e.target.value)}
-          placeholder="Hectares"
-          aria-label="Hectares da nova invernada"
-          type="number"
-          min={0}
-          step="0.1"
-          inputMode="decimal"
-          className="font-mono sm:max-w-28"
-        />
-        <Button
-          type="submit"
-          variant="outline"
-          disabled={adding}
-          className="min-h-11 md:min-h-0"
+      {canEditLots ? (
+        <form
+          onSubmit={onAdd}
+          className="mt-4 flex flex-col gap-2 border-t border-hairline pt-4 sm:flex-row"
         >
-          {adding ? "Adicionando…" : "Adicionar"}
-        </Button>
-      </form>
+          <Input
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="Código"
+            aria-label="Número ou código da nova invernada"
+            className="font-mono sm:max-w-28"
+            autoCapitalize="characters"
+          />
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Nome (opcional)"
+            aria-label="Nome opcional da nova invernada"
+          />
+          <Input
+            value={grass}
+            onChange={(e) => setGrass(e.target.value)}
+            placeholder="Capim"
+            aria-label="Capim da nova invernada"
+          />
+          <Input
+            value={hectares}
+            onChange={(e) => setHectares(e.target.value)}
+            placeholder="Hectares"
+            aria-label="Hectares da nova invernada"
+            type="number"
+            min={0}
+            step="0.1"
+            inputMode="decimal"
+            className="font-mono sm:max-w-28"
+          />
+          <Button
+            type="submit"
+            variant="outline"
+            disabled={adding}
+            className="min-h-11 md:min-h-0"
+          >
+            {adding ? "Adicionando…" : "Adicionar"}
+          </Button>
+        </form>
+      ) : null}
       {formError ? <p className="mt-2 text-sm text-overdue">{formError}</p> : null}
     </SectionCard>
   );

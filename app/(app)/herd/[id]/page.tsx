@@ -8,9 +8,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, SearchX } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { todayISO } from "@/lib/domain/dates";
 import { animalById, withStatus, animalTreatments } from "@/lib/store/selectors";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
 import { AnimalHeader } from "@/components/animal/AnimalHeader";
 import { EditAnimalDialog } from "@/components/animal/EditAnimalDialog";
 import { WeightEvolution } from "@/components/animal/WeightEvolution";
@@ -39,6 +41,7 @@ export default function AnimalRecordPage() {
   const invernadas = useHerdStore((s) => s.invernadas);
   const lotPlacements = useHerdStore((s) => s.lotPlacements);
   const semenBulls = useHerdStore((s) => s.semenBulls);
+  const canEditHerd = useCan("herd", "edit");
 
   const animal = animalById(animals, params.id);
 
@@ -79,7 +82,7 @@ export default function AnimalRecordPage() {
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 md:px-8">
       <div className="flex items-center justify-between gap-3">
         <BackLink />
-        <EditAnimalDialog animal={animal} />
+        {canEditHerd ? <EditAnimalDialog animal={animal} /> : <ReadOnlyPill />}
       </div>
 
       <AnimalHeader

@@ -10,6 +10,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ChevronRight, ClipboardList } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { formatDate } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -84,6 +85,8 @@ export function ManejoHistory() {
   const animals = useHerdStore((s) => s.animals);
   const manejoSessions = useHerdStore((s) => s.manejoSessions);
   const [filter, setFilter] = useState<ManejoAction | typeof ALL>(ALL);
+  // Without Financeiro the server sends no values: the column would be all dashes.
+  const seeMoney = useCan("finance", "view");
 
   const sessions = useMemo(
     () => manejoHistory(treatments, animals, manejoSessions),
@@ -132,7 +135,7 @@ export function ManejoHistory() {
                   <TableHead>Manejo</TableHead>
                   <TableHead className="text-right">Animais</TableHead>
                   <TableHead>Responsável</TableHead>
-                  <TableHead className="text-right">Custo / Valor</TableHead>
+                  {seeMoney ? <TableHead className="text-right">Custo / Valor</TableHead> : null}
                   <TableHead className="w-16">
                     <span className="sr-only">Ações</span>
                   </TableHead>
@@ -156,9 +159,11 @@ export function ManejoHistory() {
                       {formatNumber(session.headCount)}
                     </TableCell>
                     <TableCell className="text-ink-soft">{session.responsible ?? "—"}</TableCell>
-                    <TableCell className="text-right font-mono text-ink">
-                      {session.amountBrl === null ? "—" : formatCurrency(session.amountBrl)}
-                    </TableCell>
+                    {seeMoney ? (
+                      <TableCell className="text-right font-mono text-ink">
+                        {session.amountBrl === null ? "—" : formatCurrency(session.amountBrl)}
+                      </TableCell>
+                    ) : null}
                     <TableCell className="text-right">
                       <span className="inline-flex items-center justify-end gap-0.5">
                         <ManejoRowMenu row={session} />
@@ -202,7 +207,7 @@ export function ManejoHistory() {
                     {headsLabel(session)}
                     {session.responsible ? ` · ${session.responsible}` : ""}
                   </p>
-                  {session.amountBrl !== null ? (
+                  {seeMoney && session.amountBrl !== null ? (
                     <p className="mt-1 text-xs text-ink-soft">
                       {isMovementAction(session.kind) ? "Valor" : "Custo total"}:{" "}
                       <span className="font-mono text-ink">

@@ -2,7 +2,9 @@
  * HerdRepository backed by the herd API (Eden Treaty over /api/herd).
  *
  * A 401 means the session expired between the server-side gate and hydration;
- * the browser is sent back to the landing page to sign in again. A 403 means
+ * the browser is sent back to the landing page to sign in again. A 409 means
+ * the user has no farm yet and a convite is waiting: /convites answers it before
+ * any farm is created. A 403 means
  * the stored active-farm id is no longer accessible (membership revoked or
  * superuser removed from the allowlist); clearing it and reloading lands the
  * user back on their default farm instead of every request failing.
@@ -19,6 +21,8 @@ export class ApiHerdRepository implements HerdRepository {
     if (error) {
       if (error.status === 401 && typeof window !== "undefined") {
         window.location.assign("/");
+      } else if (error.status === 409 && typeof window !== "undefined") {
+        window.location.assign("/convites");
       } else if (error.status === 403 && getActiveFarmId() !== null) {
         clearActiveFarmId();
         window.location.reload();

@@ -7,8 +7,9 @@ import { LogOut, Tractor } from "lucide-react";
 import { authClient } from "@/lib/auth/client";
 import { useSignOut } from "@/lib/auth/navigation";
 import { displayName, getInitials } from "@/lib/auth/user";
-import { NAV_ITEMS, activeChild, isActiveRoute } from "@/lib/nav";
+import { NAV_ITEMS, activeChild, isActiveRoute, visibleNav } from "@/lib/nav";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useActivePermissions } from "@/lib/store/usePermissions";
 import { cn } from "@/lib/utils";
 import { NELORE_HEAD_VIEWBOX, NeloreMark } from "@/components/ui/nelore-mark";
 import {
@@ -53,6 +54,8 @@ export function Sidebar() {
   const farms = useHerdStore((s) => s.farms);
   const activeFarmId = useHerdStore((s) => s.activeFarmId);
   const switchFarm = useHerdStore((s) => s.switchFarm);
+  const pendingInvites = useHerdStore((s) => s.pendingInvites);
+  const items = visibleNav(NAV_ITEMS, useActivePermissions());
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col bg-sidebar md:flex">
@@ -102,7 +105,7 @@ export function Sidebar() {
       )}
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5" aria-label="Navegação principal">
-        {NAV_ITEMS.map((item) => {
+        {items.map((item) => {
           const child = activeChild(pathname, item);
           // On a child route the child row takes the cream pill and the
           // parent is marked only by its brighter icon.
@@ -158,9 +161,13 @@ export function Sidebar() {
         <div className="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
           <span
             aria-hidden
-            className="flex size-7 shrink-0 items-center justify-center rounded-full bg-sidebar-active text-[11px] font-semibold text-sidebar-active-ink"
+            className="relative flex size-7 shrink-0 items-center justify-center rounded-full bg-sidebar-active text-[11px] font-semibold text-sidebar-active-ink"
           >
             {isPending ? "…" : getInitials(user?.name)}
+            {/* A convite is waiting: the Painel card says for which farm. */}
+            {pendingInvites.length > 0 ? (
+              <span className="absolute -top-px -right-px size-2.5 rounded-full bg-attention ring-2 ring-sidebar" />
+            ) : null}
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-sidebar-ink">

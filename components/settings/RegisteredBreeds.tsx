@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SectionCard } from "@/components/ui/section-card";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { activeAnimals } from "@/lib/store/selectors";
 import { formatNumber } from "@/lib/domain/format";
 import { useTemporaryMessage } from "./useTemporaryMessage";
@@ -17,6 +18,7 @@ export function RegisteredBreeds() {
   const animals = useHerdStore((s) => s.animals);
   const addBreed = useHerdStore((s) => s.addBreed);
   const removeBreed = useHerdStore((s) => s.removeBreed);
+  const canEdit = useCan("herd", "edit");
   const [name, setName] = useState("");
   const [error, showError] = useTemporaryMessage(3000);
 
@@ -48,35 +50,39 @@ export function RegisteredBreeds() {
           >
             {breed}
             <span className="font-mono text-ink-soft">{formatNumber(usageCount(breed))}</span>
-            <button
-              type="button"
-              onClick={() => onRemove(breed)}
-              aria-label={`Remover raça ${breed}`}
-              className="-mr-1.5 inline-flex min-h-11 min-w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:text-overdue md:min-h-5 md:min-w-5"
-            >
-              <X className="size-3.5" aria-hidden />
-            </button>
+            {canEdit ? (
+              <button
+                type="button"
+                onClick={() => onRemove(breed)}
+                aria-label={`Remover raça ${breed}`}
+                className="-mr-1.5 inline-flex min-h-11 min-w-9 items-center justify-center rounded-full text-ink-soft transition-colors hover:text-overdue md:min-h-5 md:min-w-5"
+              >
+                <X className="size-3.5" aria-hidden />
+              </button>
+            ) : null}
           </Badge>
         ))}
       </div>
       {error ? <p className="mt-3 text-sm text-overdue">{error}</p> : null}
-      <form onSubmit={onAdd} className="mt-4 flex flex-col gap-2 sm:flex-row">
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Nova raça"
-          aria-label="Nome da nova raça"
-          className="sm:max-w-56"
-        />
-        <Button
-          type="submit"
-          variant="outline"
-          disabled={name.trim() === ""}
-          className="min-h-11 md:min-h-0"
-        >
-          Adicionar
-        </Button>
-      </form>
+      {canEdit ? (
+        <form onSubmit={onAdd} className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Nova raça"
+            aria-label="Nome da nova raça"
+            className="sm:max-w-56"
+          />
+          <Button
+            type="submit"
+            variant="outline"
+            disabled={name.trim() === ""}
+            className="min-h-11 md:min-h-0"
+          >
+            Adicionar
+          </Button>
+        </form>
+      ) : null}
     </SectionCard>
   );
 }

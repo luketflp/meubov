@@ -10,12 +10,18 @@
  * travel inside the bull, the coberturas inside their dams. Deleting a purchase
  * asks nothing first — the server refuses it when its doses were already used,
  * and the toast says so.
+ *
+ * Editing the bull needs Reprodução edit; a purchase is an expense, so buying
+ * and deleting one need Financeiro edit on top. Every R$ — cost per dose, the
+ * valor total of each purchase and of all of them — shows only to whoever sees
+ * Financeiro.
  */
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, SearchX, Trash2 } from "lucide-react";
 import type { Animal, SemenBull, SemenPurchase } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { useToast } from "@/components/providers/Toasts";
 import { formatDate } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
@@ -30,6 +36,7 @@ import { awaitsDiagnosis } from "@/lib/domain/ultrasound";
 import { ResultPill } from "@/components/animal/reproduction-pills";
 import { ResumoCard, useHerdLookup } from "@/components/manejo/detail-shell";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
 import { SemenBullDialog } from "@/components/semen/semen-bull-dialog";
 import { SemenPurchaseDialog } from "@/components/semen/semen-purchase-dialog";
 import { TOUROS_TAB } from "@/components/semen/helpers";
@@ -69,10 +76,12 @@ interface BullResumoProps {
   bull: SemenBull;
   animals: Animal[];
   inseminations: BullInsemination[];
+  /** Financeiro at least view: the cost rows show. */
+  seeMoney: boolean;
 }
 
 /** Resumo do touro: stock on the left, cost and pregnancy rate on the right. */
-function BullResumo({ bull, animals, inseminations }: BullResumoProps) {
+function BullResumo({ bull, animals, inseminations, seeMoney }: BullResumoProps) {
   const stock = bullStock(bull, animals);
   const pregnancy = bullPregnancy(bull.id, animals);
   // Waiting for the ultrassom means being on the Ultrassom list: the dam's
@@ -81,6 +90,16 @@ function BullResumo({ bull, animals, inseminations }: BullResumoProps) {
     dam.reproduction ? awaitsDiagnosis(dam.reproduction, breeding, dam.active) : false
   ).length;
   const purchases = bull.purchases.length;
+  const pregnancyRow = {
+    label: "Taxa de prenhez",
+    value: pregnancy.rate === null ? "—" : `${formatNumber(pregnancy.rate * 100)}%`,
+    suffix:
+      pregnancy.rate === null
+        ? undefined
+        : `${formatNumber(pregnancy.pregnant)} de ${formatNumber(pregnancy.diagnosed)} ${
+            pregnancy.diagnosed === 1 ? "diagnosticada" : "diagnosticadas"
+          }`,
+  };
 
   return (
     <ResumoCard
@@ -109,36 +128,40 @@ function BullResumo({ bull, animals, inseminations }: BullResumoProps) {
             { label: "Usadas", value: dosesLabel(stock.used) },
           ],
         },
-        {
-          caption: "Custo e prenhez",
-          rows: [
-            {
-              label: "Custo médio por dose",
-              value: stock.avgCostPerDose === null ? "—" : formatCurrency(stock.avgCostPerDose),
-            },
-            {
-              label: "Total comprado",
-              value: purchases === 0 ? "—" : formatCurrency(stock.totalBrl),
-            },
-            {
-              label: "Taxa de prenhez",
-              value: pregnancy.rate === null ? "—" : `${formatNumber(pregnancy.rate * 100)}%`,
-              suffix:
-                pregnancy.rate === null
-                  ? undefined
-                  : `${formatNumber(pregnancy.pregnant)} de ${formatNumber(pregnancy.diagnosed)} ${
-                      pregnancy.diagnosed === 1 ? "diagnosticada" : "diagnosticadas"
-                    }`,
-            },
-          ],
-        },
+        seeMoney
+          ? {
+              caption: "Custo e prenhez",
+              rows: [
+                {
+                  label: "Custo médio por dose",
+                  value:
+                    stock.avgCostPerDose === null ? "—" : formatCurrency(stock.avgCostPerDose),
+                },
+                {
+                  label: "Total comprado",
+                  value:
+                    purchases === 0 || stock.totalBrl === null ? "—" : formatCurrency(stock.totalBrl),
+                },
+                pregnancyRow,
+              ],
+            }
+          : { caption: "Prenhez", rows: [pregnancyRow] },
       ]}
     />
   );
 }
 
+interface BullPurchasesProps {
+  bull: SemenBull;
+  animals: Animal[];
+  /** Financeiro at least view: valor total and por dose show. */
+  seeMoney: boolean;
+  /** Reprodução and Financeiro edit: each purchase has its delete. */
+  canRemove: boolean;
+}
+
 /** Compras: every purchase of the bull, newest first, each with its delete. */
-function BullPurchases({ bull, animals }: { bull: SemenBull; animals: Animal[] }) {
+function BullPurchases({ bull, animals, seeMoney, canRemove }: BullPurchasesProps) {
   const removeSemenPurchase = useHerdStore((s) => s.removeSemenPurchase);
   const { addToast } = useToast();
   const [removing, setRemoving] = useState(false);
@@ -171,18 +194,24 @@ function BullPurchases({ bull, animals }: { bull: SemenBull; animals: Animal[] }
     }
   }
 
-  const removeButton = (purchase: SemenPurchase) => (
-    <Button
-      variant="ghost"
-      size="icon"
-      aria-label={`Excluir compra de ${formatDate(purchase.date)}`}
-      disabled={removing}
-      className="size-11 shrink-0 text-ink-soft hover:text-overdue md:size-9"
-      onClick={() => onRemove(purchase)}
-    >
-      <Trash2 className="size-4" aria-hidden />
-    </Button>
-  );
+  const removeButton = (purchase: SemenPurchase) =>
+    canRemove ? (
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={`Excluir compra de ${formatDate(purchase.date)}`}
+        disabled={removing}
+        className="size-11 shrink-0 text-ink-soft hover:text-overdue md:size-9"
+        onClick={() => onRemove(purchase)}
+      >
+        <Trash2 className="size-4" aria-hidden />
+      </Button>
+    ) : null;
+  // Valor total and por dose of a purchase; null when they are not shown here.
+  const money = (purchase: SemenPurchase) =>
+    seeMoney && purchase.totalBrl !== undefined
+      ? { total: purchase.totalBrl, perDose: purchase.totalBrl / purchase.doses }
+      : null;
 
   return (
     <SectionCard title="Compras">
@@ -197,60 +226,89 @@ function BullPurchases({ bull, animals }: { bull: SemenBull; animals: Animal[] }
                 <TableRow>
                   <TableHead>Data</TableHead>
                   <TableHead className="text-right">Doses</TableHead>
-                  <TableHead className="text-right">Valor total</TableHead>
-                  <TableHead className="text-right">Por dose</TableHead>
+                  {seeMoney ? (
+                    <>
+                      <TableHead className="text-right">Valor total</TableHead>
+                      <TableHead className="text-right">Por dose</TableHead>
+                    </>
+                  ) : null}
                   <TableHead>Fornecedor</TableHead>
-                  <TableHead className="text-right">
-                    <span className="sr-only">Ações</span>
-                  </TableHead>
+                  {canRemove ? (
+                    <TableHead className="text-right">
+                      <span className="sr-only">Ações</span>
+                    </TableHead>
+                  ) : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {purchases.map((purchase) => (
-                  <TableRow key={purchase.id}>
-                    <TableCell className="font-mono text-ink">{formatDate(purchase.date)}</TableCell>
-                    <TableCell className="text-right font-mono text-ink">
-                      {formatNumber(purchase.doses)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-ink">
-                      {formatCurrency(purchase.totalBrl)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-ink">
-                      {formatCurrency(purchase.totalBrl / purchase.doses)}
-                    </TableCell>
-                    <TableCell className="text-ink">{purchase.seller ?? "—"}</TableCell>
-                    <TableCell className="text-right">{removeButton(purchase)}</TableCell>
-                  </TableRow>
-                ))}
+                {purchases.map((purchase) => {
+                  const value = money(purchase);
+                  return (
+                    <TableRow key={purchase.id}>
+                      <TableCell className="font-mono text-ink">
+                        {formatDate(purchase.date)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-ink">
+                        {formatNumber(purchase.doses)}
+                      </TableCell>
+                      {seeMoney ? (
+                        <>
+                          <TableCell className="text-right font-mono text-ink">
+                            {value === null ? "—" : formatCurrency(value.total)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-ink">
+                            {value === null ? "—" : formatCurrency(value.perDose)}
+                          </TableCell>
+                        </>
+                      ) : null}
+                      <TableCell className="text-ink">{purchase.seller ?? "—"}</TableCell>
+                      {canRemove ? (
+                        <TableCell className="text-right">{removeButton(purchase)}</TableCell>
+                      ) : null}
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
 
           {/* Mobile: one line per purchase */}
           <ul className="divide-y divide-hairline md:hidden">
-            {purchases.map((purchase) => (
-              <li key={purchase.id} className="flex items-center gap-3 py-2">
-                <div className="min-w-0 flex-1">
-                  <p className="flex items-baseline justify-between gap-2">
-                    <span className="font-mono text-sm text-ink">{formatDate(purchase.date)}</span>
-                    <span className="font-mono text-sm font-medium text-ink">
-                      {formatCurrency(purchase.totalBrl)}
-                    </span>
-                  </p>
-                  <p className="mt-0.5 text-xs text-ink-soft">
-                    <MonoDoses doses={purchase.doses} className="text-ink" /> ·{" "}
-                    <span className="font-mono text-ink">
-                      {formatCurrency(purchase.totalBrl / purchase.doses)}
-                    </span>{" "}
-                    por dose
-                  </p>
-                  {purchase.seller ? (
-                    <p className="mt-0.5 truncate text-xs text-ink-soft">{purchase.seller}</p>
-                  ) : null}
-                </div>
-                {removeButton(purchase)}
-              </li>
-            ))}
+            {purchases.map((purchase) => {
+              const value = money(purchase);
+              return (
+                <li key={purchase.id} className="flex items-center gap-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-baseline justify-between gap-2">
+                      <span className="font-mono text-sm text-ink">
+                        {formatDate(purchase.date)}
+                      </span>
+                      {value === null ? null : (
+                        <span className="font-mono text-sm font-medium text-ink">
+                          {formatCurrency(value.total)}
+                        </span>
+                      )}
+                    </p>
+                    <p className="mt-0.5 text-xs text-ink-soft">
+                      <MonoDoses doses={purchase.doses} className="text-ink" />
+                      {value === null ? null : (
+                        <>
+                          {" · "}
+                          <span className="font-mono text-ink">
+                            {formatCurrency(value.perDose)}
+                          </span>{" "}
+                          por dose
+                        </>
+                      )}
+                    </p>
+                    {purchase.seller ? (
+                      <p className="mt-0.5 truncate text-xs text-ink-soft">{purchase.seller}</p>
+                    ) : null}
+                  </div>
+                  {removeButton(purchase)}
+                </li>
+              );
+            })}
           </ul>
         </>
       )}
@@ -326,6 +384,10 @@ function BullInseminations({ rows }: { rows: BullInsemination[] }) {
 /** The bull's record once it is found: header, resumo, compras and inseminações. */
 function BullRecord({ bull }: { bull: SemenBull }) {
   const animals = useHerdStore((s) => s.animals);
+  const canEdit = useCan("reproduction", "edit");
+  const canEditFinance = useCan("finance", "edit");
+  const seeMoney = useCan("finance", "view");
+  const canBuy = canEdit && canEditFinance;
   const inseminations = useMemo(() => bullInseminations(bull.id, animals), [bull.id, animals]);
   const subtitle = [bull.breed, bull.central].filter(Boolean).join(" · ");
 
@@ -336,17 +398,31 @@ function BullRecord({ bull }: { bull: SemenBull }) {
         title={bull.name}
         subtitle={subtitle === "" ? undefined : subtitle}
         badges={
-          bull.code ? <span className="font-mono text-sm text-ink-soft">{bull.code}</span> : undefined
+          bull.code || !canEdit ? (
+            <>
+              {bull.code ? (
+                <span className="font-mono text-sm text-ink-soft">{bull.code}</span>
+              ) : null}
+              {canEdit ? null : <ReadOnlyPill />}
+            </>
+          ) : undefined
         }
         actions={
-          <>
-            <SemenBullDialog bull={bull} />
-            <SemenPurchaseDialog bull={bull} variant="header" />
-          </>
+          canEdit ? (
+            <>
+              <SemenBullDialog bull={bull} />
+              {canBuy ? <SemenPurchaseDialog bull={bull} variant="header" /> : null}
+            </>
+          ) : undefined
         }
       />
-      <BullResumo bull={bull} animals={animals} inseminations={inseminations} />
-      <BullPurchases bull={bull} animals={animals} />
+      <BullResumo
+        bull={bull}
+        animals={animals}
+        inseminations={inseminations}
+        seeMoney={seeMoney}
+      />
+      <BullPurchases bull={bull} animals={animals} seeMoney={seeMoney} canRemove={canBuy} />
       <BullInseminations rows={inseminations} />
     </>
   );

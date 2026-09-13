@@ -2,6 +2,8 @@
 
 import { useMemo } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
+import { RequireAccess } from "@/components/layout/RequireAccess";
 import { MarketNotice } from "@/components/finance/MarketNotice";
 import { FinanceKpis } from "@/components/finance/FinanceKpis";
 import { RevenueCostChart } from "@/components/finance/RevenueCostChart";
@@ -11,6 +13,7 @@ import { LivestockIndicators } from "@/components/finance/LivestockIndicators";
 import { CategorySalesTable } from "@/components/finance/CategorySalesTable";
 import { ExpensesList } from "@/components/finance/ExpensesList";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { activeAnimals } from "@/lib/store/selectors";
 import { useArrobaQuote } from "@/lib/data/useArrobaQuote";
 import { todayISO } from "@/lib/domain/dates";
@@ -33,7 +36,17 @@ import {
   totalCostLast12m,
 } from "@/lib/domain/economics";
 
+/** Opened by URL without Financeiro, the page is "Sem acesso a esta área", not a screen of zeros. */
 export default function FinancePage() {
+  return (
+    <RequireAccess area="finance" level="view">
+      <FinanceContent />
+    </RequireAccess>
+  );
+}
+
+function FinanceContent() {
+  const canEdit = useCan("finance", "edit");
   const animals = useHerdStore((state) => state.animals);
   const invernadas = useHerdStore((state) => state.invernadas);
   const movements = useHerdStore((state) => state.movements);
@@ -84,7 +97,11 @@ export default function FinancePage() {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 md:px-8">
-      <PageHeader title="Financeiro" subtitle="Indicadores da pecuária de corte" />
+      <PageHeader
+        title="Financeiro"
+        subtitle="Indicadores da pecuária de corte"
+        badges={canEdit ? undefined : <ReadOnlyPill />}
+      />
 
       <MarketNotice
         quoteLive={quote.live}

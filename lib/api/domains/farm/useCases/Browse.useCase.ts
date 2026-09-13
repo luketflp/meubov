@@ -2,6 +2,12 @@ import { and, asc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { farm, farmUsers } from "@/lib/db/schema";
+import {
+  resolvePermissions,
+  type FarmRole,
+  type MemberPreset,
+  type Permissions,
+} from "@/lib/domain/permissions";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
@@ -9,7 +15,12 @@ import type { RepositoryType } from "@/lib/api/@types/repoTypes";
 export interface FarmSummary {
   id: number;
   name: string;
-  role: "owner" | "member";
+  role: FarmRole;
+  preset: MemberPreset | null;
+  /** Resolved levels: the client never re-derives the Dono or superuser case. */
+  permissions: Permissions;
+  /** When the membership began; null for a superuser who is not a member. */
+  joinedAt: string | null;
 }
 
 interface BrowseFarmsUseCaseProps {
@@ -38,23 +49,47 @@ export class BrowseFarmsUseCase implements CurrUseCase {
   }
 
   public run: CurrUseCase["run"] = async ({ userId, superuser }) => {
+    const columns = {
+      id: farm.id,
+      name: farm.name,
+      role: farmUsers.role,
+      preset: farmUsers.preset,
+      permissions: farmUsers.permissions,
+      joinedAt: farmUsers.createdAt,
+    };
+
     if (superuser) {
       const rows = await this.repository
-        .select({ id: farm.id, name: farm.name, role: farmUsers.role })
+        .select(columns)
         .from(farm)
-        .leftJoin(
-          farmUsers,
-          and(eq(farmUsers.farmId, farm.id), eq(farmUsers.userId, userId))
-        )
+        .leftJoin(farmUsers, and(eq(farmUsers.farmId, farm.id), eq(farmUsers.userId, userId)))
         .orderBy(asc(farm.id));
-      return rows.map((row) => ({ ...row, role: row.role ?? "owner" }));
+      return rows.map((row) => {
+        const role = row.role ?? "owner";
+        return {
+          id: row.id,
+          name: row.name,
+          role,
+          preset: row.preset,
+          permissions: resolvePermissions({ role, permissions: row.permissions }, true),
+          joinedAt: row.joinedAt?.toISOString() ?? null,
+        };
+      });
     }
 
-    return this.repository
-      .select({ id: farm.id, name: farm.name, role: farmUsers.role })
+    const rows = await this.repository
+      .select(columns)
       .from(farmUsers)
       .innerJoin(farm, eq(farm.id, farmUsers.farmId))
       .where(eq(farmUsers.userId, userId))
       .orderBy(asc(farmUsers.createdAt));
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      role: row.role,
+      preset: row.preset,
+      permissions: resolvePermissions(row, false),
+      joinedAt: row.joinedAt.toISOString(),
+    }));
   };
 }

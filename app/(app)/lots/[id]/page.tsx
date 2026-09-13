@@ -9,10 +9,12 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, SearchX } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { formatDate, todayISO } from "@/lib/domain/dates";
 import { lotSummary, withStatus } from "@/lib/store/selectors";
 import { DEFAULT_SORT, sortHerd } from "@/components/herd/filters";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
 import { LotActions } from "@/components/lots/lot-actions";
 import { LotAnimalsCard } from "@/components/lots/lot-animals";
 import { LotSummaryCard } from "@/components/lots/lot-summary";
@@ -41,6 +43,7 @@ export default function LotRecordPage() {
   const treatments = useHerdStore((s) => s.treatments);
   const invernadas = useHerdStore((s) => s.invernadas);
   const lotPlacements = useHerdStore((s) => s.lotPlacements);
+  const canEditLots = useCan("lots", "edit");
 
   const today = todayISO();
   const summary = useMemo(
@@ -101,10 +104,11 @@ export default function LotRecordPage() {
         title={lot.name}
         subtitle={subtitle}
         badges={
-          lot.needsReview || !currentPlacement ? (
+          lot.needsReview || !currentPlacement || !canEditLots ? (
             <>
               {lot.needsReview ? <Badge variant="outline">Revisar cadastro</Badge> : null}
               {!currentPlacement ? <Badge variant="secondary">Encerrado</Badge> : null}
+              {canEditLots ? null : <ReadOnlyPill />}
             </>
           ) : undefined
         }

@@ -1,6 +1,5 @@
 /**
- * saveFarm: the sede is three-valued, so Settings can save the registration
- * fields without erasing the map view the farmer set from the map.
+ * saveFarm: the registration fields only; the sede has its own use case.
  *
  * The db mock is a chainable update stub that captures the column values the
  * service asks for and answers `returning()` with the stored row fixture.
@@ -57,58 +56,10 @@ beforeEach(() => {
 });
 
 describe("saveFarm", () => {
-  it("leaves the saved map view alone when the body carries no headquarters", async () => {
+  it("writes the registration fields and never the map view", async () => {
     await new SaveFarmUseCase().run({ farmId: 1, data: REGISTRATION });
 
     expect(state.columns).toEqual(REGISTRATION);
-    expect(state.columns).not.toHaveProperty("headquartersLat");
-    expect(state.columns).not.toHaveProperty("headquartersLng");
-    expect(state.columns).not.toHaveProperty("headquartersZoom");
-  });
-
-  it("writes latitude, longitude and zoom when a view is given", async () => {
-    await new SaveFarmUseCase().run({
-      farmId: 1,
-      data: {
-        ...REGISTRATION,
-        headquarters: { lat: -19.5, lng: -47.5, zoom: 16 },
-      },
-    });
-
-    expect(state.columns).toMatchObject({
-      headquartersLat: -19.5,
-      headquartersLng: -47.5,
-      headquartersZoom: 16,
-    });
-  });
-
-  it("stores a view without zoom as a null zoom, not as a missing column", async () => {
-    await new SaveFarmUseCase().run({
-      farmId: 1,
-      data: {
-        ...REGISTRATION,
-        headquarters: { lat: -19.5, lng: -47.5 },
-      },
-    });
-
-    expect(state.columns).toMatchObject({
-      headquartersLat: -19.5,
-      headquartersLng: -47.5,
-      headquartersZoom: null,
-    });
-  });
-
-  it("clears the view on an explicit null", async () => {
-    await new SaveFarmUseCase().run({
-      farmId: 1,
-      data: { ...REGISTRATION, headquarters: null },
-    });
-
-    expect(state.columns).toMatchObject({
-      headquartersLat: null,
-      headquartersLng: null,
-      headquartersZoom: null,
-    });
   });
 
   it("returns what the database holds, not what the caller sent", async () => {

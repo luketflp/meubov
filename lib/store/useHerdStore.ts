@@ -34,7 +34,10 @@ import { toast } from "sonner";
 import { type HerdRepository } from "@/lib/repository/HerdRepository";
 import { ApiHerdRepository } from "@/lib/repository/ApiHerdRepository";
 import { api } from "@/lib/api/client";
-import { setActiveFarmId } from "@/lib/api/activeFarm";
+import { clearActiveFarmId, setActiveFarmId } from "@/lib/api/activeFarm";
+import { can, type FarmRole, type MemberPreset, type Permissions } from "@/lib/domain/permissions";
+import { selectActivePermissions } from "@/lib/store/selectors";
+import type { MyInvite } from "@/lib/api/domains/invites/useCases/BrowseMine.useCase";
 import type { ImportAnimalPayload } from "@/lib/domain/herdImport";
 import type { ImportBirthPayload } from "@/lib/domain/birthImport";
 import type { BlockedAnimal } from "@/lib/domain/manejoRevert";
@@ -195,11 +198,16 @@ export interface InvernadaPatch {
   boundary?: [number, number][] | null;
 }
 
-/** A farm the user can switch to (from GET /farms). */
+/** A farm the user can switch to (from GET /farms), with what they may do in it. */
 export interface FarmOption {
   id: number;
   name: string;
-  role: "owner" | "member";
+  role: FarmRole;
+  preset: MemberPreset | null;
+  /** Resolved by the server: the Dono and superusers come back with every area at edit. */
+  permissions: Permissions;
+  /** When the membership began; null for a superuser who is not a member. */
+  joinedAt: string | null;
 }
 
 export interface HerdStore extends HerdData {
@@ -207,9 +215,15 @@ export interface HerdStore extends HerdData {
   /** Farms the user can access; the picker only renders with more than one. */
   farms: FarmOption[];
   activeFarmId: number | null;
+  /** Convites waiting for the signed-in e-mail (the Painel banner, the avatar dot). */
+  pendingInvites: MyInvite[];
   load: () => Promise<void>;
   /** Persists the choice and rehydrates the whole store from the new farm. */
   switchFarm: (farmId: number) => Promise<void>;
+  /** Re-reads the farm list and the herd after the caller's access changed. */
+  refreshAccess: () => Promise<void>;
+  /** Re-reads the convites after one was accepted or declined. */
+  refreshInvites: () => Promise<void>;
   /** Registers the animal via the API; false when the ear tag is taken. */
   addAnimal: (a: NewAnimal) => Promise<boolean>;
   /** Registers a batch all or nothing; lists the brincos taken when refused. */
@@ -359,13 +373,26 @@ export interface LotPatch {
 }
 
 /**
- * Signals an unexpected API failure: shows an error toast (important actions
- * only reach here) and throws. `action` is the pt-BR verb phrase shown to the
- * user, e.g. "cadastrar o animal".
+ * Signals an unexpected API failure and throws. A 403 is not a plain failure:
+ * `not_a_member` means the caller was removed from the farm, so the stored
+ * choice goes and the page reloads onto their default farm; `forbidden` means
+ * their levels changed while the page was open, so the farm list and the herd
+ * are re-read and the buttons follow. Anything else shows an error toast
+ * (important actions only reach here). `action` is the pt-BR verb phrase shown
+ * to the user, e.g. "cadastrar o animal".
  */
-function apiFail(action: string, status: number): never {
-  toast.error(`Não foi possível ${action}. Tente novamente.`);
-  throw new Error(`${action} failed (status ${status})`);
+function apiFail(action: string, error: { status: number; value?: unknown }): never {
+  const code = (error.value as { error?: string } | null | undefined)?.error;
+  if (error.status === 403 && code === "not_a_member") {
+    clearActiveFarmId();
+    window.location.reload();
+  } else if (error.status === 403 && code === "forbidden") {
+    toast.error("Seu acesso a esta fazenda mudou.");
+    void useHerdStore.getState().refreshAccess().catch(() => {});
+  } else {
+    toast.error(`Não foi possível ${action}. Tente novamente.`);
+  }
+  throw new Error(`${action} failed (status ${error.status})`);
 }
 
 /** Default repository; swap the implementation here to change the backend. */
@@ -472,16 +499,36 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   loaded: false,
   farms: [],
   activeFarmId: null,
+  pendingInvites: [],
 
   load: async () => {
     if (get().loaded) return;
-    const [data, farmsRes] = await Promise.all([repository.load(), api.farms.get()]);
+    const [data, farmsRes, invitesRes] = await Promise.all([
+      repository.load(),
+      api.farms.get(),
+      api.invites.get(),
+    ]);
     set({
       ...data,
       farms: farmsRes.data?.farms ?? [],
       activeFarmId: farmsRes.data?.activeFarmId ?? null,
+      pendingInvites: invitesRes.data?.invites ?? [],
       loaded: true,
     });
+  },
+
+  refreshAccess: async () => {
+    const [data, farmsRes] = await Promise.all([repository.load(), api.farms.get()]);
+    set({
+      ...data,
+      farms: farmsRes.data?.farms ?? get().farms,
+      activeFarmId: farmsRes.data?.activeFarmId ?? get().activeFarmId,
+    });
+  },
+
+  refreshInvites: async () => {
+    const { data } = await api.invites.get();
+    set({ pendingInvites: data?.invites ?? [] });
   },
 
   switchFarm: async (farmId) => {
@@ -498,7 +545,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const { data, error } = await api.animals.post({ ...a, earTag });
     if (error) {
       if (error.status === 409) return false;
-      apiFail("cadastrar o animal", error.status);
+      apiFail("cadastrar o animal", error);
     }
     const animal = data as Animal;
     set((s) => ({ animals: [...s.animals, animal] }));
@@ -514,7 +561,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
         const detail = error.value as { earTags?: string[] };
         return { duplicates: detail.earTags ?? [] };
       }
-      apiFail("cadastrar os animais", error.status);
+      apiFail("cadastrar os animais", error);
     }
     const created = data as Animal[];
     set((s) => ({ animals: [...s.animals, ...created] }));
@@ -541,7 +588,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
         );
         throw new Error("importar o rebanho failed: lot_invernada_conflict");
       }
-      apiFail("importar o rebanho", error.status);
+      apiFail("importar o rebanho", error);
     }
     const result = data as {
       imported: Animal[];
@@ -570,7 +617,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
         toast.error("Um dos lotes escolhidos não está mais numa invernada. Escolha de novo.");
         throw new Error("importar os nascimentos failed: lot_not_found");
       }
-      apiFail("importar os nascimentos", error.status);
+      apiFail("importar os nascimentos", error);
     }
     const summary = data as ImportBirthsSummary;
     // Same as importHerd: the write already committed, so a failed refresh must
@@ -585,7 +632,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   completeTreatments: async (ids) => {
     const { data, error } = await api.treatments.complete.post({ ids });
-    if (error) apiFail("concluir os tratamentos", error.status);
+    if (error) apiFail("concluir os tratamentos", error);
     const idSet = new Set(data.ids);
     set((s) => ({
       treatments: s.treatments.map((t) =>
@@ -596,7 +643,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   scheduleTreatments: async (input) => {
     const { data, error } = await api.treatments.schedule.post(input);
-    if (error) apiFail("agendar os tratamentos", error.status);
+    if (error) apiFail("agendar os tratamentos", error);
     const created = data.treatments as Treatment[];
     set((s) => ({ treatments: [...s.treatments, ...created] }));
     return created.length;
@@ -604,7 +651,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   deleteTreatment: async (id, scope = "batch") => {
     const { data, error } = await api.treatments({ id }).delete(undefined, { query: { scope } });
-    if (error) apiFail("excluir o tratamento", error.status);
+    if (error) apiFail("excluir o tratamento", error);
     const removed = new Set((data as { ids: string[] }).ids);
     set((s) => ({ treatments: s.treatments.filter((t) => !removed.has(t.id)) }));
     return removed.size;
@@ -612,7 +659,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   startManejoSession: async (input) => {
     const { data, error } = await api.manejo.post(input);
-    if (error) apiFail("iniciar o manejo", error.status);
+    if (error) apiFail("iniciar o manejo", error);
     const session = data as ManejoSession;
     set((s) => ({ manejoSessions: [...s.manejoSessions, session] }));
     return session.id;
@@ -632,7 +679,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
         }
         return false; // otherwise stale UI: pass already recorded
       }
-      apiFail("concluir o animal no manejo", response.error.status);
+      apiFail("concluir o animal no manejo", response.error);
     }
     const result = response.data as {
       entry: ManejoSessionAnimal;
@@ -683,7 +730,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const { data, error } = await api.manejo({ id: sessionId }).animals({ animalId }).skip.post({ notes });
     if (error) {
       if (error.status === CONFLICT) return;
-      apiFail("pular o animal no manejo", error.status);
+      apiFail("pular o animal no manejo", error);
     }
     const entry = data as ManejoSessionAnimal;
     set((s) => ({
@@ -699,7 +746,8 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
         const detail = error.value as { error?: string; breedingId?: string };
         if (detail.error === "has_diagnosis") {
           // The cobertura of that pass was already diagnosed: clearing the
-          // diagnosis is what lets the undo through, so the toast offers it.
+          // diagnosis is what lets the undo through, so the toast offers it to
+          // whoever may edit Reprodução.
           const clearAndRetry = async (breedingId: string) => {
             try {
               await get().clearDiagnosis(earTag, breedingId);
@@ -709,9 +757,14 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
             }
           };
           const breedingId = detail.breedingId;
+          const canClear = can(
+            selectActivePermissions(get().farms, get().activeFarmId),
+            "reproduction",
+            "edit"
+          );
           toast.error(
             "Essa vaca já tem diagnóstico.",
-            breedingId === undefined
+            breedingId === undefined || !canClear
               ? undefined
               : {
                   duration: ACTION_TOAST_MS,
@@ -724,7 +777,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
         }
         return; // otherwise stale UI: pass already reverted
       }
-      apiFail("desfazer o registro do animal", error.status);
+      apiFail("desfazer o registro do animal", error);
     }
     const result = data as {
       entry: ManejoSessionAnimal;
@@ -802,7 +855,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const { data, error } = await api
       .manejo({ id: sessionId })["carcass-yield"]
       .post({ carcassYieldPct });
-    if (error) apiFail("definir o rendimento de carcaça", error.status);
+    if (error) apiFail("definir o rendimento de carcaça", error);
     const result = data as {
       carcassYieldPct: number;
       amounts: { earTag: string; amountBrl: number }[];
@@ -826,7 +879,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   closeManejoSession: async (sessionId) => {
     const { error } = await api.manejo({ id: sessionId }).close.post();
-    if (error) apiFail("encerrar o manejo", error.status);
+    if (error) apiFail("encerrar o manejo", error);
     set((s) => ({
       manejoSessions: s.manejoSessions.map((m) =>
         m.id === sessionId ? { ...m, status: "closed" as const } : m
@@ -841,7 +894,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       if (response.error.status === CONFLICT) {
         return (response.error.value as { blocked: BlockedAnimal[] }).blocked;
       }
-      apiFail("excluir o manejo", response.error.status);
+      apiFail("excluir o manejo", response.error);
     }
     const result = response.data as DeletedManejo;
     const removedTreatments = new Set(result.treatmentIds);
@@ -894,7 +947,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   recordWeighing: async (earTag, w) => {
     const id = animalIdByEarTag(get().animals, earTag);
     const { data, error } = await api.animals({ id }).weighings.post(w);
-    if (error) apiFail("registrar a pesagem", error.status);
+    if (error) apiFail("registrar a pesagem", error);
     const weighing = data as Weighing;
     set((s) => ({
       animals: s.animals.map((a) =>
@@ -909,7 +962,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const { data, error } = await api.manejo({ id: sessionId }).animals.post(animal);
     if (error) {
       if (error.status === CONFLICT) return false; // ear tag already in use
-      apiFail("registrar o animal na entrada", error.status);
+      apiFail("registrar o animal na entrada", error);
     }
     const result = data as { entry: ManejoSessionAnimal; animal: Animal };
     set((s) => ({
@@ -925,7 +978,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   deleteWeighingGroup: async (date, earTags) => {
     const { data, error } = await api.weighings.delete({ date, earTags });
-    if (error) apiFail("excluir a pesagem", error.status);
+    if (error) apiFail("excluir a pesagem", error);
     const affected = new Set(earTags);
     set((s) => ({
       animals: s.animals.map((a) =>
@@ -939,7 +992,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   addBreed: async (name) => {
     const { error } = await api.breeds.post({ name });
-    if (error) apiFail("cadastrar a raça", error.status);
+    if (error) apiFail("cadastrar a raça", error);
     set((s) => (s.breeds.includes(name) ? s : { breeds: [...s.breeds, name] }));
   },
 
@@ -947,7 +1000,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const { error } = await api.breeds({ name }).delete();
     if (error) {
       if (error.status === 409) return false;
-      apiFail("remover a raça", error.status);
+      apiFail("remover a raça", error);
     }
     set((s) => ({ breeds: s.breeds.filter((b) => b !== name) }));
     return true;
@@ -957,7 +1010,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const { data, error } = await api.lots.post(l);
     if (error) {
       if (error.status === CONFLICT) throw new Error("duplicate_lot_name");
-      apiFail("criar o lote", error.status);
+      apiFail("criar o lote", error);
     }
     const result = data as { lot: Lot; placement: LotPlacement };
     set((s) => ({
@@ -971,7 +1024,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const { data, error } = await api.lots({ id }).patch(patch);
     if (error) {
       if (error.status === CONFLICT) throw new Error("duplicate_lot_name");
-      apiFail("salvar o lote", error.status);
+      apiFail("salvar o lote", error);
     }
     // The API returns the complete logical group after applying the patch.
     const lot = data as Lot;
@@ -982,7 +1035,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const { data, error } = await api.lots({ id }).delete();
     if (error) {
       if (error.status === CONFLICT) return false;
-      apiFail("excluir o lote", error.status);
+      apiFail("excluir o lote", error);
     }
     // The lot stays in the store carrying deletedAt: history still needs its
     // name. Every list and picker filters it out from here on.
@@ -1006,7 +1059,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   moveLot: async (id, input) => {
     const { data, error } = await api.lots({ id }).placements.post(input);
-    if (error) apiFail("mover o lote", error.status);
+    if (error) apiFail("mover o lote", error);
     const result = data as {
       placement: LotPlacement;
       previousPlacement: LotPlacement;
@@ -1035,7 +1088,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   archiveLot: async (id, input) => {
     const { data, error } = await api.lots({ id }).archive.post(input);
-    if (error) apiFail("encerrar o lote", error.status);
+    if (error) apiFail("encerrar o lote", error);
     const result = data as { previousPlacement: LotPlacement };
     set((s) => {
       const retained = s.lotPlacements
@@ -1053,7 +1106,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   addInvernada: async (input) => {
     const { data, error } = await api.invernadas.post(input);
-    if (error) apiFail("cadastrar a invernada", error.status);
+    if (error) apiFail("cadastrar a invernada", error);
     const invernada = data as Invernada;
     set((s) => ({ invernadas: [...s.invernadas, invernada] }));
     return invernada;
@@ -1061,7 +1114,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   updateInvernada: async (id, patch) => {
     const { data, error } = await api.invernadas({ id }).patch(patch);
-    if (error) apiFail("salvar a invernada", error.status);
+    if (error) apiFail("salvar a invernada", error);
     const invernada = data as Invernada;
     set((s) => ({
       invernadas: s.invernadas.map((item) => (item.id === id ? invernada : item)),
@@ -1072,7 +1125,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const { error } = await api.invernadas({ id }).delete();
     if (error) {
       if (error.status === 409) return false;
-      apiFail("remover a invernada", error.status);
+      apiFail("remover a invernada", error);
     }
     set((s) => ({ invernadas: s.invernadas.filter((item) => item.id !== id) }));
     return true;
@@ -1081,26 +1134,19 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   saveFarm: async (d) => {
     // No `headquarters` key: the server keeps the saved map view.
     const { data, error } = await api.farm.put(d);
-    if (error) apiFail("salvar os dados da fazenda", error.status);
+    if (error) apiFail("salvar os dados da fazenda", error);
     set({ farm: { ...(data as FarmData) } });
   },
 
   saveHeadquarters: async (view) => {
-    const { name, municipality, stateRegistration, manager } = get().farm;
-    const { data, error } = await api.farm.put({
-      name,
-      municipality,
-      stateRegistration,
-      manager,
-      headquarters: view,
-    });
-    if (error) apiFail("salvar a sede no mapa", error.status);
+    const { data, error } = await api.farm.headquarters.put({ headquarters: view });
+    if (error) apiFail("salvar a sede no mapa", error);
     set({ farm: { ...(data as FarmData) } });
   },
 
   addProtocol: async (p, generateSchedule) => {
     const { data, error } = await api.protocols.post({ protocol: p, generateSchedule });
-    if (error) apiFail("criar o protocolo", error.status);
+    if (error) apiFail("criar o protocolo", error);
     const { protocol, treatments } = data as {
       protocol: HealthProtocol;
       treatments: Treatment[];
@@ -1113,20 +1159,20 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   removeProtocol: async (id) => {
     const { error } = await api.protocols({ id }).delete();
-    if (error) apiFail("remover o protocolo", error.status);
+    if (error) apiFail("remover o protocolo", error);
     set((s) => ({ protocols: s.protocols.filter((p) => p.id !== id) }));
   },
 
   addExpense: async (e) => {
     const { data, error } = await api.expenses.post(e);
-    if (error) apiFail("lançar a despesa", error.status);
+    if (error) apiFail("lançar a despesa", error);
     const expense = data as Expense;
     set((s) => ({ expenses: [...s.expenses, expense] }));
   },
 
   removeExpense: async (id) => {
     const { error } = await api.expenses({ id }).delete();
-    if (error) apiFail("remover a despesa", error.status);
+    if (error) apiFail("remover a despesa", error);
     set((s) => ({ expenses: s.expenses.filter((e) => e.id !== id) }));
   },
 
@@ -1134,7 +1180,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const { data, error } = await api.categories.post(c);
     if (error) {
       if (error.status === 409) return false;
-      apiFail("criar a categoria", error.status);
+      apiFail("criar a categoria", error);
     }
     const category = data as CustomCategory;
     set((s) => ({ customCategories: [...s.customCategories, category] }));
@@ -1145,7 +1191,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const { error } = await api.categories({ id }).delete();
     if (error) {
       if (error.status === 409) return false;
-      apiFail("remover a categoria", error.status);
+      apiFail("remover a categoria", error);
     }
     set((s) => ({ customCategories: s.customCategories.filter((c) => c.id !== id) }));
     return true;
@@ -1162,7 +1208,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
         await reloadHerd(set);
         return false;
       }
-      apiFail("registrar a cobertura", error.status);
+      apiFail("registrar a cobertura", error);
     }
     // With a semen bull the server replaced bullEarTag: keep its record, not the input.
     const breeding = data as Breeding;
@@ -1178,7 +1224,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   recordDiagnosis: async (earTag, input) => {
     const id = animalIdByEarTag(get().animals, earTag);
     const { data, error } = await api.animals({ id }).diagnoses.post(input);
-    if (error) apiFail("registrar o diagnóstico", error.status);
+    if (error) apiFail("registrar o diagnóstico", error);
     const diagnosis = data as PregnancyDiagnosis;
     set((s) => ({
       animals: withReproduction(s.animals, earTag, (r) => ({
@@ -1195,7 +1241,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   clearDiagnosis: async (earTag, breedingId) => {
     const id = animalIdByEarTag(get().animals, earTag);
     const { error } = await api.animals({ id }).diagnoses({ breedingId }).delete();
-    if (error) apiFail("desfazer o diagnóstico", error.status);
+    if (error) apiFail("desfazer o diagnóstico", error);
     set((s) => ({
       animals: withReproduction(s.animals, earTag, (r) => ({
         ...r,
@@ -1208,7 +1254,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const { data, error } = await api["semen-bulls"].post(input);
     if (error) {
       if (error.status === CONFLICT) return "duplicate";
-      apiFail("cadastrar o touro", error.status);
+      apiFail("cadastrar o touro", error);
     }
     const result = data as { bull: SemenBull; expense?: Expense };
     const expense = result.expense;
@@ -1223,7 +1269,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const { data, error } = await api["semen-bulls"]({ id }).patch(patch);
     if (error) {
       if (error.status === CONFLICT) return false;
-      apiFail("salvar o touro", error.status);
+      apiFail("salvar o touro", error);
     }
     // The API returns the whole bull, purchases included.
     const bull = data as SemenBull;
@@ -1235,7 +1281,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   addSemenPurchase: async (bullId, input) => {
     const { data, error } = await api["semen-bulls"]({ id: bullId }).purchases.post(input);
-    if (error) apiFail("registrar a compra de sêmen", error.status);
+    if (error) apiFail("registrar a compra de sêmen", error);
     const { purchase, expense } = data as { purchase: SemenPurchase; expense: Expense };
     set((s) => ({
       semenBulls: withPurchases(s.semenBulls, bullId, (purchases) =>
@@ -1256,7 +1302,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
         await reloadHerd(set);
         return false;
       }
-      apiFail("excluir a compra de sêmen", error.status);
+      apiFail("excluir a compra de sêmen", error);
     }
     // The purchase's expense went with it, unless it had been removed before.
     const { expenseId } = data as { id: string; expenseId: string | null };
@@ -1280,7 +1326,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       .calvings.post({ ...input, calfEarTag });
     if (error) {
       if (error.status === 409) return false;
-      apiFail("registrar o parto", error.status);
+      apiFail("registrar o parto", error);
     }
     const { calving, calf } = data as { calving: Calving; calf: Animal };
     set((s) => ({
@@ -1300,7 +1346,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const { data, error } = await api.animals({ id }).patch(patch);
     if (error) {
       if (error.status === CONFLICT) return false;
-      apiFail("salvar o animal", error.status);
+      apiFail("salvar o animal", error);
     }
     const { changes } = data as { earTag: string; changes: Partial<Animal> };
     const newTag = changes.earTag ?? earTag;
@@ -1333,7 +1379,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       date: input.date,
       notes: notes ? notes : undefined,
     });
-    if (error) apiFail("dar baixa no animal", error.status);
+    if (error) apiFail("dar baixa no animal", error);
     set((s) => ({
       animals: s.animals.map((a) =>
         a.earTag === earTag

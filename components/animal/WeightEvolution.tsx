@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * "Weight evolution" section: line chart of the weighings, ADG summary
  * and the new weighing form beside it (stacked on mobile).
@@ -6,6 +8,7 @@ import { Scale } from "lucide-react";
 import type { Animal } from "@/lib/types";
 import { formatDate } from "@/lib/domain/dates";
 import { formatNumber } from "@/lib/domain/format";
+import { useCan } from "@/lib/store/usePermissions";
 import { SectionCard } from "@/components/ui/section-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LineChart } from "@/components/charts/line-chart";
@@ -22,12 +25,17 @@ interface WeightEvolutionProps {
 }
 
 export function WeightEvolution({ animal, adg }: WeightEvolutionProps) {
+  const canEditHerd = useCan("herd", "edit");
   const weighings = animal.weighings;
   const points = weighings.map((w) => ({ label: shortDate(w.date), value: w.weightKg }));
 
   return (
     <SectionCard title="Evolução de peso">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+      <div
+        className={
+          canEditHerd ? "grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]" : "grid gap-6"
+        }
+      >
         <div className="min-w-0">
           {points.length > 0 ? (
             <>
@@ -65,7 +73,7 @@ export function WeightEvolution({ animal, adg }: WeightEvolutionProps) {
           )}
         </div>
 
-        <WeighingForm earTag={animal.earTag} />
+        {canEditHerd ? <WeighingForm earTag={animal.earTag} /> : null}
       </div>
     </SectionCard>
   );
