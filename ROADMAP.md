@@ -53,9 +53,15 @@ e tira os valores em R$ de quem não tem Financeiro. Conta nova com convite
 pendente cai em `/convites` sem ganhar fazenda vazia, e o celular ganhou a troca
 de fazenda no "Mais".
 
-Ficou de fora: limite de usuários por plano, envio e verificação de e-mail,
-transferência de dono, histórico de quem mudou o quê e criar uma segunda
-fazenda.
+Desde 13/09/2026 a troca de fazenda também cria uma nova (nome, município e,
+se quiser, as raças, categorias e protocolos da fazenda aberta), e
+Configurações > Fazendas lista todas as fazendas da conta: o dono exclui a sua,
+menos a última. A exclusão é lógica (`farm.deleted_at`) e some para todos na
+hora. Uma fazenda sem animais mostra Primeiros passos no Painel.
+
+Ficou de fora: limite de usuários e de fazendas por plano, envio e verificação
+de e-mail, transferência de dono, histórico de quem mudou o quê, mover animais
+entre fazendas e restaurar uma fazenda excluída pela tela.
 
 ## 4. Autenticação incompleta
 

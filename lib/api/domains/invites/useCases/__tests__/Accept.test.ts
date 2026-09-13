@@ -120,6 +120,33 @@ describe("acceptInvite", () => {
   });
 
   describe("the inviter's authority is re-checked", () => {
+    it("excludes a deleted farm from the inviter's-authority check", async () => {
+      state.returning = [[invite]];
+      state.selectResults = [[authorizedInviter]];
+      await new AcceptInviteUseCase().run({
+        inviteId: 3,
+        userId: "u-zeca",
+        email: "zeca@hotmail.com",
+        now,
+      });
+      const { sql } = renderSql(state.wheres[1] as Parameters<typeof renderSql>[0]);
+      expect(sql).toContain('"farm"."deleted_at" is null');
+    });
+
+    it("refuses when the invite's farm was deleted", async () => {
+      state.returning = [[invite]];
+      // The innerJoin to farm, gated by isNull(deletedAt), drops the row.
+      state.selectResults = [[]];
+      const result = await new AcceptInviteUseCase().run({
+        inviteId: 3,
+        userId: "u-zeca",
+        email: "zeca@hotmail.com",
+        now,
+      });
+      expect(result).toBe("not_found");
+      expect(state.inserts).toEqual([]);
+    });
+
     it("refuses when the inviter was demoted below the convite's levels", async () => {
       state.returning = [[{ ...invite, permissions: FULL_PERMISSIONS }]];
       state.selectResults = [

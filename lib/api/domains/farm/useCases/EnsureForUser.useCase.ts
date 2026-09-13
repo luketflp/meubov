@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { farm, farmUsers } from "@/lib/db/schema";
@@ -25,7 +25,7 @@ type CurrUseCase = _UseCase<
  * The per-user advisory lock makes concurrent first requests (e.g. two tabs
  * hydrating at once) create exactly one farm.
  *
- * Returns the id of the user's first farm, creating an empty farm (with the
+ * Returns the id of the user's first live farm, creating an empty farm (with the
  * user as owner) when none exists. Field defaults mirror the empty FarmData
  * the store starts with.
  */
@@ -43,7 +43,8 @@ export class EnsureFarmForUserUseCase implements CurrUseCase {
       const memberships = await tx
         .select({ farmId: farmUsers.farmId })
         .from(farmUsers)
-        .where(sql`${farmUsers.userId} = ${userId}`)
+        .innerJoin(farm, eq(farm.id, farmUsers.farmId))
+        .where(and(eq(farmUsers.userId, userId), isNull(farm.deletedAt)))
         .orderBy(farmUsers.createdAt)
         .limit(1);
       if (memberships.length > 0) return memberships[0].farmId;

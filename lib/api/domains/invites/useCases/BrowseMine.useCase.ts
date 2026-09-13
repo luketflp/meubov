@@ -1,4 +1,4 @@
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, asc, eq, gt, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { farm, farmInvites, farmUsers, user } from "@/lib/db/schema";
@@ -63,14 +63,16 @@ export class BrowseMyInvitesUseCase implements CurrUseCase {
           and(
             eq(farmInvites.email, email),
             eq(farmInvites.status, "pending"),
-            gt(farmInvites.expiresAt, now)
+            gt(farmInvites.expiresAt, now),
+            isNull(farm.deletedAt)
           )
         )
         .orderBy(asc(farmInvites.createdAt)),
       this.repository
         .select({ farmId: farmUsers.farmId })
         .from(farmUsers)
-        .where(eq(farmUsers.userId, userId))
+        .innerJoin(farm, eq(farm.id, farmUsers.farmId))
+        .where(and(eq(farmUsers.userId, userId), isNull(farm.deletedAt)))
         .limit(1),
     ]);
 

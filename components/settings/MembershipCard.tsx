@@ -9,6 +9,7 @@ import { LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
 import { clearActiveFarmId } from "@/lib/api/activeFarm";
+import { farmLabel } from "@/lib/domain/farms";
 import { formatInstantDate } from "@/lib/domain/invites";
 import { roleLabel } from "@/lib/domain/permissions";
 import { useHerdStore } from "@/lib/store/useHerdStore";
@@ -33,7 +34,7 @@ export function MembershipCard() {
 
   const farm = farms.find((option) => option.id === activeFarmId);
   if (!farm || farm.role === "owner") return null;
-  const farmName = farm.name.trim() || `Fazenda #${farm.id}`;
+  const farmName = farmLabel(farm);
 
   async function leave() {
     setBusy(true);

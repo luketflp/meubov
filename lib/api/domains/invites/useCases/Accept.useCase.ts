@@ -1,7 +1,7 @@
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { farmInvites, farmUsers, user, type FarmInviteRow } from "@/lib/db/schema";
+import { farm, farmInvites, farmUsers, user, type FarmInviteRow } from "@/lib/db/schema";
 import { can, canGrant, parsePermissions, resolvePermissions } from "@/lib/domain/permissions";
 import { isSuperuser } from "@/lib/auth/superuser";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
@@ -83,10 +83,11 @@ export class AcceptInviteUseCase implements CurrUseCase {
    * Whether whoever sent this convite still holds the authority to: a
    * superuser or the Dono always does; a member needs Equipe edit and every
    * area of the convite's levels within their own. A convite with no inviter
-   * on record (the account was deleted) or whose inviter left the farm
-   * refuses too — the gap this closes is a Gerente inviting an e-mail they
-   * control, getting demoted or removed, then accepting the old convite to
-   * regain levels the Dono took away.
+   * on record (the account was deleted), whose inviter left the farm, or
+   * whose farm was deleted meanwhile (the `farm` join, gated by
+   * `isNull(farm.deletedAt)`) refuses too — the gap this closes is a Gerente
+   * inviting an e-mail they control, getting demoted or removed, then
+   * accepting the old convite to regain levels the Dono took away.
    */
   private async inviterStillGrants(tx: Tx, invite: FarmInviteRow): Promise<boolean> {
     if (invite.invitedByUserId === null) return false;
@@ -95,7 +96,8 @@ export class AcceptInviteUseCase implements CurrUseCase {
       .select({ email: user.email, role: farmUsers.role, permissions: farmUsers.permissions })
       .from(user)
       .leftJoin(farmUsers, and(eq(farmUsers.farmId, invite.farmId), eq(farmUsers.userId, user.id)))
-      .where(eq(user.id, invite.invitedByUserId))
+      .innerJoin(farm, eq(farm.id, invite.farmId))
+      .where(and(eq(user.id, invite.invitedByUserId), isNull(farm.deletedAt)))
       .limit(1);
     if (!inviter) return false;
     if (isSuperuser(inviter.email) || inviter.role === "owner") return true;

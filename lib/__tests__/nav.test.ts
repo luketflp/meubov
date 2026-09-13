@@ -70,13 +70,17 @@ describe("visibleNav", () => {
     expect(items.map((item) => item.href)).toEqual(NAV_ITEMS.map((item) => item.href));
     expect(items.find((item) => item.href === "/settings")?.children).toEqual([
       { label: "Equipe", href: "/settings/equipe", area: "team" },
+      { label: "Fazendas", href: "/settings/fazendas" },
     ]);
   });
 
   it("hides Financeiro and Equipe from a vaqueiro", () => {
     const items = visibleNav(NAV_ITEMS, PRESETS.vaqueiro);
     expect(items.map((item) => item.href)).not.toContain("/finance");
-    expect(items.find((item) => item.href === "/settings")?.children).toBeUndefined();
+    // Fazendas belongs to the account, not to the open farm: nobody is gated out.
+    expect(items.find((item) => item.href === "/settings")?.children).toEqual([
+      { label: "Fazendas", href: "/settings/fazendas" },
+    ]);
   });
 
   it("keeps Financeiro for a consultor, who sees values", () => {

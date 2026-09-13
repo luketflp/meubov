@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { state } = vi.hoisted(() => ({
   state: {
     rows: [] as Record<string, unknown>[],
+    wheres: [] as unknown[],
   },
 }));
 
@@ -28,7 +29,8 @@ vi.mock("@/lib/db", () => ({
         innerJoin() {
           return builder;
         },
-        where() {
+        where(condition: unknown) {
+          state.wheres.push(condition);
           return builder;
         },
         orderBy() {
@@ -46,11 +48,14 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
+import type { SQL } from "drizzle-orm";
+import { renderSql } from "@/lib/api/__tests__/dbStub";
 import { BrowseFarmsUseCase } from "../Browse.useCase";
 import { FULL_PERMISSIONS, PRESETS } from "@/lib/domain/permissions";
 
 beforeEach(() => {
   state.rows = [];
+  state.wheres = [];
 });
 
 describe("browseFarms", () => {
@@ -59,6 +64,7 @@ describe("browseFarms", () => {
       {
         id: 1,
         name: "Fazenda A",
+        municipality: "Sorriso - MT",
         role: "member",
         preset: "vaqueiro",
         permissions: PRESETS.vaqueiro,
@@ -72,6 +78,7 @@ describe("browseFarms", () => {
       {
         id: 1,
         name: "Fazenda A",
+        municipality: "Sorriso - MT",
         role: "member",
         preset: "vaqueiro",
         permissions: PRESETS.vaqueiro,
@@ -85,6 +92,7 @@ describe("browseFarms", () => {
       {
         id: 2,
         name: "Fazenda B",
+        municipality: "Sorriso - MT",
         role: "owner",
         preset: null,
         permissions: null,
@@ -99,7 +107,15 @@ describe("browseFarms", () => {
 
   it("defaults a superuser's non-member farm to owner, full permissions and a null joinedAt", async () => {
     state.rows = [
-      { id: 3, name: "Fazenda C", role: null, preset: null, permissions: null, joinedAt: null },
+      {
+        id: 3,
+        name: "Fazenda C",
+        municipality: "Sorriso - MT",
+        role: null,
+        preset: null,
+        permissions: null,
+        joinedAt: null,
+      },
     ];
 
     const result = await new BrowseFarmsUseCase().run({ userId: "root", superuser: true });
@@ -108,6 +124,7 @@ describe("browseFarms", () => {
       {
         id: 3,
         name: "Fazenda C",
+        municipality: "Sorriso - MT",
         role: "owner",
         preset: null,
         permissions: FULL_PERMISSIONS,
@@ -121,6 +138,7 @@ describe("browseFarms", () => {
       {
         id: 4,
         name: "Fazenda D",
+        municipality: "Sorriso - MT",
         role: "member",
         preset: "consultor",
         permissions: PRESETS.consultor,
@@ -134,11 +152,22 @@ describe("browseFarms", () => {
       {
         id: 4,
         name: "Fazenda D",
+        municipality: "Sorriso - MT",
         role: "member",
         preset: "consultor",
         permissions: FULL_PERMISSIONS,
         joinedAt: "2024-02-02T00:00:00.000Z",
       },
     ]);
+  });
+
+  it("skips deleted farms for a member", async () => {
+    await new BrowseFarmsUseCase().run({ userId: "u1", superuser: false });
+    expect(renderSql(state.wheres[0] as SQL).sql).toContain('"farm"."deleted_at" is null');
+  });
+
+  it("skips deleted farms for a superuser too", async () => {
+    await new BrowseFarmsUseCase().run({ userId: "root", superuser: true });
+    expect(renderSql(state.wheres[0] as SQL).sql).toContain('"farm"."deleted_at" is null');
   });
 });

@@ -113,6 +113,13 @@
       "when": 1789307766984,
       "tag": "0015_farm-members-permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1789318360242,
+      "tag": "0016_farm-soft-delete",
+      "breakpoints": true
     }
   ]
 }

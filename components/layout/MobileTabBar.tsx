@@ -5,13 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Ellipsis, LogOut } from "lucide-react";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { FarmSwitcher } from "@/components/farms/FarmSwitcher";
 import { roleLabel } from "@/lib/domain/permissions";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useActivePermissions } from "@/lib/store/usePermissions";
@@ -56,7 +50,6 @@ export function MobileTabBar() {
   const [moreOpen, setMoreOpen] = useState(false);
   const farms = useHerdStore((s) => s.farms);
   const activeFarmId = useHerdStore((s) => s.activeFarmId);
-  const switchFarm = useHerdStore((s) => s.switchFarm);
   const activeFarm = farms.find((farm) => farm.id === activeFarmId);
   const items = visibleNav(NAV_ITEMS, useActivePermissions());
   const tabs = items.slice(0, PRIMARY_TAB_COUNT);
@@ -103,35 +96,16 @@ export function MobileTabBar() {
               <DialogTitle className="font-heading">Mais opções</DialogTitle>
               <DialogDescription>Outras áreas do MeuBov</DialogDescription>
             </DialogHeader>
-            {/* The sidebar's switcher, for the phone: a vaqueiro may belong to two farms. */}
-            {farms.length > 1 ? (
-              <div className="grid gap-1.5 border-b border-hairline pb-3">
-                <Label htmlFor="mobile-farm">Fazenda</Label>
-                <Select
-                  value={activeFarmId === null ? undefined : String(activeFarmId)}
-                  onValueChange={(value) => {
-                    setMoreOpen(false);
-                    void switchFarm(Number(value));
-                  }}
-                >
-                  <SelectTrigger id="mobile-farm" className="min-h-11 w-full">
-                    <SelectValue placeholder="Fazenda" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {farms.map((farm) => (
-                      <SelectItem key={farm.id} value={String(farm.id)}>
-                        {farm.name.trim() || `Fazenda #${farm.id}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {activeFarm ? (
-                  <p className="text-xs text-ink-soft">
-                    Você é {roleLabel(activeFarm.role, activeFarm.preset)} nesta fazenda
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
+            {/* The sidebar's switcher, for the phone, with the same Nova fazenda and Gerenciar fazendas. */}
+            <div className="grid gap-1.5 border-b border-hairline pb-3">
+              <Label htmlFor="mobile-farm">Fazenda</Label>
+              <FarmSwitcher variant="field" id="mobile-farm" onNavigate={() => setMoreOpen(false)} />
+              {activeFarm ? (
+                <p className="text-xs text-ink-soft">
+                  Você é {roleLabel(activeFarm.role, activeFarm.preset)} nesta fazenda
+                </p>
+              ) : null}
+            </div>
             <div className="flex flex-col gap-1">
               {/* Primary tabs already sit in the bar, so only their children are listed here. */}
               {items.map((item, index) => (

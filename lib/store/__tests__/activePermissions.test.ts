@@ -6,6 +6,7 @@ const farms = [
   {
     id: 1,
     name: "Sítio Boa Vista",
+    municipality: "Uberaba",
     role: "owner" as const,
     preset: null,
     permissions: PRESETS.gerente,
@@ -14,6 +15,7 @@ const farms = [
   {
     id: 7,
     name: "Fazenda Maranata",
+    municipality: "Barretos",
     role: "member" as const,
     preset: "vaqueiro" as const,
     permissions: PRESETS.vaqueiro,

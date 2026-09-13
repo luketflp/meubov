@@ -34,7 +34,7 @@ import { toast } from "sonner";
 import { type HerdRepository } from "@/lib/repository/HerdRepository";
 import { ApiHerdRepository } from "@/lib/repository/ApiHerdRepository";
 import { api } from "@/lib/api/client";
-import { clearActiveFarmId, setActiveFarmId } from "@/lib/api/activeFarm";
+import { clearActiveFarmId, getActiveFarmId, setActiveFarmId } from "@/lib/api/activeFarm";
 import { can, type FarmRole, type MemberPreset, type Permissions } from "@/lib/domain/permissions";
 import { selectActivePermissions } from "@/lib/store/selectors";
 import type { MyInvite } from "@/lib/api/domains/invites/useCases/BrowseMine.useCase";
@@ -202,6 +202,7 @@ export interface InvernadaPatch {
 export interface FarmOption {
   id: number;
   name: string;
+  municipality: string;
   role: FarmRole;
   preset: MemberPreset | null;
   /** Resolved by the server: the Dono and superusers come back with every area at edit. */
@@ -210,9 +211,16 @@ export interface FarmOption {
   joinedAt: string | null;
 }
 
+/** What the Nova fazenda dialog sends: `copy` starts it from the open farm's setup. */
+export interface NewFarmInput {
+  name: string;
+  municipality: string;
+  copy: boolean;
+}
+
 export interface HerdStore extends HerdData {
   loaded: boolean;
-  /** Farms the user can access; the picker only renders with more than one. */
+  /** Farms the user can access; the switcher lists them all, even just one. */
   farms: FarmOption[];
   activeFarmId: number | null;
   /** Convites waiting for the signed-in e-mail (the Painel banner, the avatar dot). */
@@ -222,6 +230,17 @@ export interface HerdStore extends HerdData {
   switchFarm: (farmId: number) => Promise<void>;
   /** Re-reads the farm list and the herd after the caller's access changed. */
   refreshAccess: () => Promise<void>;
+  /**
+   * Creates a farm the caller owns, starting from the open farm's raças,
+   * categorias and protocolos when `copy` is on, and opens it. Resolves the new
+   * id; throws after a toast when the server refused.
+   */
+  createFarm: (input: NewFarmInput) => Promise<number>;
+  /**
+   * Deletes a farm the caller owns. When it was the open farm the store moves
+   * to the default one; throws after a toast when the server refused.
+   */
+  deleteFarm: (farmId: number) => Promise<void>;
   /** Re-reads the convites after one was accepted or declined. */
   refreshInvites: () => Promise<void>;
   /** Registers the animal via the API; false when the ear tag is taken. */
@@ -403,6 +422,13 @@ function apiFail(action: string, error: { status: number; value?: unknown }): ne
   throw new Error(`${action} failed (status ${error.status})`);
 }
 
+/** What a refused DELETE /farms/:id tells the Dono. */
+const DELETE_FARM_ERRORS: Record<string, string> = {
+  farm_not_found: "Esta fazenda já foi excluída.",
+  not_owner: "Só o dono pode excluir a fazenda.",
+  last_farm: "Crie ou entre em outra fazenda antes de excluir esta.",
+};
+
 /** Default repository; swap the implementation here to change the backend. */
 const repository: HerdRepository = new ApiHerdRepository();
 
@@ -516,10 +542,17 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       api.farms.get(),
       api.invites.get(),
     ]);
+    const activeFarmId = farmsRes.data?.activeFarmId;
+    // A member who never switched farms has no stored choice, so nothing sends
+    // x-farm-id and every request keeps resolving to whatever farm the server
+    // falls back to. Pinning what it resolved here means a farm that gets
+    // deleted or a membership that gets removed answers 403 not_a_member on the
+    // next request, instead of silently landing on the next live farm.
+    if (getActiveFarmId() === null && activeFarmId != null) setActiveFarmId(activeFarmId);
     set({
       ...data,
       farms: farmsRes.data?.farms ?? [],
-      activeFarmId: farmsRes.data?.activeFarmId ?? null,
+      activeFarmId: activeFarmId ?? null,
       pendingInvites: invitesRes.data?.invites ?? [],
       loaded: true,
     });
@@ -527,10 +560,15 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   refreshAccess: async () => {
     const [data, farmsRes] = await Promise.all([repository.load(), api.farms.get()]);
+    const activeFarmId = farmsRes.data?.activeFarmId;
+    // Same pin as load (see its comment) — refreshAccess runs after deleteFarm
+    // clears the stored farm, after an accepted convite and after a forbidden
+    // answer, so it must pin too.
+    if (getActiveFarmId() === null && activeFarmId != null) setActiveFarmId(activeFarmId);
     set({
       ...data,
       farms: farmsRes.data?.farms ?? get().farms,
-      activeFarmId: farmsRes.data?.activeFarmId ?? get().activeFarmId,
+      activeFarmId: activeFarmId ?? get().activeFarmId,
     });
   },
 
@@ -545,6 +583,43 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     set({ loaded: false });
     const data = await repository.load();
     set({ ...data, activeFarmId: farmId, loaded: true });
+  },
+
+  createFarm: async ({ name, municipality, copy }) => {
+    const source = get().activeFarmId;
+    const { data, error } = await api.farms.post({
+      name,
+      municipality,
+      copyFromFarmId: copy && source !== null ? source : undefined,
+    });
+    if (error || !data) {
+      toast.error("Não foi possível criar a fazenda.");
+      throw new Error(`create farm failed (status ${error?.status})`);
+    }
+    setActiveFarmId(data.farmId);
+    set({ loaded: false });
+    const [herd, farmsRes] = await Promise.all([repository.load(), api.farms.get()]);
+    set({
+      ...herd,
+      farms: farmsRes.data?.farms ?? get().farms,
+      activeFarmId: data.farmId,
+      loaded: true,
+    });
+    return data.farmId;
+  },
+
+  deleteFarm: async (farmId) => {
+    const { error } = await api.farms({ id: farmId }).delete();
+    if (error) {
+      const code = (error.value as { error?: string } | null | undefined)?.error ?? "";
+      toast.error(DELETE_FARM_ERRORS[code] ?? "Não foi possível excluir a fazenda.");
+      if (code === "farm_not_found") await get().refreshAccess();
+      throw new Error(`delete farm failed (status ${error.status})`);
+    }
+    // Without a stored choice the server answers with the default farm, and
+    // refreshAccess takes the herd and the list from there.
+    if (farmId === get().activeFarmId) clearActiveFarmId();
+    await get().refreshAccess();
   },
 
   addAnimal: async (a) => {

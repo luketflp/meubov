@@ -8,6 +8,7 @@ import { useState } from "react";
 import { MailPlus } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
+import { farmLabel } from "@/lib/domain/farms";
 import { expiresInSentence } from "@/lib/domain/invites";
 import { PRESET_LABEL, accessSummary } from "@/lib/domain/permissions";
 import { useHerdStore } from "@/lib/store/useHerdStore";
@@ -51,7 +52,7 @@ export function PendingInviteBanner() {
   return (
     <div className="space-y-3">
       {invites.map((invite) => {
-        const farmName = invite.farmName.trim() || `Fazenda #${invite.farmId}`;
+        const farmName = farmLabel({ id: invite.farmId, name: invite.farmName });
         return (
           <section
             key={invite.id}

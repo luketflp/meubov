@@ -9,6 +9,7 @@ const { state } = vi.hoisted(() => ({
     inserts: [] as unknown[],
     deletes: 0,
     returning: [] as unknown[][],
+    wheres: [] as unknown[],
   },
 }));
 
@@ -16,12 +17,15 @@ vi.mock("@/lib/db", async () => ({
   db: (await import("@/lib/api/__tests__/dbStub")).createDbStub(state),
 }));
 
+import type { SQL } from "drizzle-orm";
+import { renderSql } from "@/lib/api/__tests__/dbStub";
 import { BrowseMyInvitesUseCase } from "../BrowseMine.useCase";
 
 const now = new Date("2026-09-12T15:00:00Z");
 
 beforeEach(() => {
   state.selectResults = [];
+  state.wheres = [];
 });
 
 describe("browseMyInvites", () => {
@@ -67,5 +71,20 @@ describe("browseMyInvites", () => {
     state.selectResults = [[], [{ farmId: 2 }]];
     const result = await new BrowseMyInvitesUseCase().run({ userId: "u", email: "u@x.com", now });
     expect(result).toEqual({ invites: [], hasFarm: true });
+  });
+
+  it("counts only live farms as having a farm", async () => {
+    state.selectResults = [[], []];
+    await new BrowseMyInvitesUseCase().run({ userId: "u-zeca", email: "zeca@hotmail.com", now });
+    const membership = renderSql(state.wheres[1] as SQL);
+    expect(membership.sql).toContain('"farm"."deleted_at" is null');
+    expect(membership.params).toContain("u-zeca");
+  });
+
+  it("hides convites of a deleted farm", async () => {
+    state.selectResults = [[], []];
+    await new BrowseMyInvitesUseCase().run({ userId: "u-zeca", email: "zeca@hotmail.com", now });
+    const invites = renderSql(state.wheres[0] as SQL);
+    expect(invites.sql).toContain('"farm"."deleted_at" is null');
   });
 });

@@ -91,6 +91,7 @@ export const SESSION_ONLY_ROUTES: readonly string[] = [
   "POST /api/herd/invites/:id/accept",
   "POST /api/herd/invites/:id/decline",
   "POST /api/herd/farms",
+  "DELETE /api/herd/farms/:id",
 ];
 
 /** Elysia's route pattern as the table spells it: "/api/herd/" becomes "/api/herd". */

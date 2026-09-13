@@ -5,11 +5,17 @@
  * The db mock is a chainable select stub: `from()` captures the table, and
  * `limit()` resolves with the farm_invites, farm_users or farm fixture
  * depending on which table the query targeted (recognized by a column only
- * that table has). The test app mounts under /api/herd so its routes hit real
- * keys of ROUTE_REQUIREMENTS.
+ * that table has). `innerJoin()` is a pass-through no-op — the plugin joins to
+ * `farm` to filter out deleted farms, but this stub doesn't model that;
+ * `where()` still records its raw condition onto `state.wheres`, in call
+ * order, so a test can render one with `renderSql` and assert on the SQL it
+ * produces (e.g. the `deleted_at is null` filter). The test app mounts under
+ * /api/herd so its routes hit real keys of ROUTE_REQUIREMENTS.
  */
 import { Elysia } from "elysia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { SQL } from "drizzle-orm";
+import { renderSql } from "@/lib/api/__tests__/dbStub";
 import { FULL_PERMISSIONS, PRESETS } from "@/lib/domain/permissions";
 
 const { state, getSession, ensureFarmForUser } = vi.hoisted(() => ({
@@ -17,6 +23,7 @@ const { state, getSession, ensureFarmForUser } = vi.hoisted(() => ({
     farmUsersRows: [] as Record<string, unknown>[],
     farmRows: [] as Record<string, unknown>[],
     inviteRows: [] as Record<string, unknown>[],
+    wheres: [] as unknown[],
   },
   getSession: vi.fn(),
   ensureFarmForUser: vi.fn(),
@@ -37,7 +44,11 @@ vi.mock("@/lib/db", () => ({
           table = t;
           return builder;
         },
-        where() {
+        innerJoin() {
+          return builder;
+        },
+        where(condition: unknown) {
+          state.wheres.push(condition);
           return builder;
         },
         orderBy() {
@@ -88,6 +99,7 @@ describe("farmPlugin", () => {
     state.farmUsersRows = [];
     state.farmRows = [];
     state.inviteRows = [];
+    state.wheres = [];
     getSession.mockReset();
     ensureFarmForUser.mockReset();
   });
@@ -250,5 +262,40 @@ describe("farmPlugin", () => {
     const response = await call("/unlisted", { headers: { "x-farm-id": "7" } });
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: "forbidden", area: null });
+  });
+
+  it("skips deleted farms in the x-farm-id header membership query", async () => {
+    signIn("user@meubov.test");
+    state.farmUsersRows = [{ role: "member", preset: null, permissions: null }];
+    await whoami({ "x-farm-id": "7" });
+    expect(renderSql(state.wheres[0] as SQL).sql).toContain('"farm"."deleted_at" is null');
+  });
+
+  it("skips deleted farms in the default-farm membership query", async () => {
+    signIn("user@meubov.test");
+    state.farmUsersRows = [{ farmId: 7, role: "member", preset: null, permissions: null }];
+    await whoami();
+    expect(renderSql(state.wheres[0] as SQL).sql).toContain('"farm"."deleted_at" is null');
+  });
+
+  it("skips deleted farms in the pending-convite check", async () => {
+    signIn("user@meubov.test");
+    state.inviteRows = [{ id: 5 }];
+    await whoami();
+    expect(renderSql(state.wheres[1] as SQL).sql).toContain('"farm"."deleted_at" is null');
+  });
+
+  it("checks the farm exists and isn't deleted for a superuser's header target", async () => {
+    signIn(SUPER_EMAIL);
+    state.farmRows = [{ id: 42 }];
+    await whoami({ "x-farm-id": "42" });
+    expect(renderSql(state.wheres[1] as SQL).sql).toContain('"farm"."deleted_at" is null');
+  });
+
+  it("skips deleted farms in the superuser no-header fallback to the first farm", async () => {
+    signIn(SUPER_EMAIL);
+    state.farmRows = [{ id: 3 }];
+    await whoami();
+    expect(renderSql(state.wheres[1] as SQL).sql).toContain('"farm"."deleted_at" is null');
   });
 });

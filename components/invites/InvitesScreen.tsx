@@ -13,6 +13,9 @@ import { api } from "@/lib/api/client";
 import { setActiveFarmId } from "@/lib/api/activeFarm";
 import type { MyInvites } from "@/lib/api/domains/invites/useCases/BrowseMine.useCase";
 import { useSignOut } from "@/lib/auth/navigation";
+import { farmLabel } from "@/lib/domain/farms";
+import type { NewFarmInput } from "@/lib/store/useHerdStore";
+import { FIRST_FARM_DESCRIPTION, NewFarmDialog } from "@/components/farms/NewFarmDialog";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NELORE_HEAD_VIEWBOX, NeloreMark } from "@/components/ui/nelore-mark";
@@ -23,6 +26,7 @@ export function InvitesScreen({ email }: { email: string }) {
   const [mine, setMine] = useState<MyInvites | null>(null);
   const [declinedFarm, setDeclinedFarm] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     void api.invites.get().then(({ data, error }) => {
@@ -63,14 +67,19 @@ export function InvitesScreen({ email }: { email: string }) {
     setMine((current) => current && { ...current, invites: current.invites.filter((i) => i.id !== id) });
   }
 
-  async function createFarm() {
-    setBusy(true);
-    const { data, error } = await api.farms.post();
+  // No herd store runs here: the new farm is stored as active and the app reloads into it.
+  async function createFarm(input: NewFarmInput) {
+    const { data, error } = await api.farms.post({
+      name: input.name,
+      municipality: input.municipality,
+    });
     if (error || !data) {
-      setBusy(false);
       toast.error("Não foi possível criar a fazenda.");
-      return;
+      throw new Error(`create farm failed (status ${error?.status})`);
     }
+    // Keep the button disabled through the redirect: the dialog closes before
+    // window.location.assign completes, and POST /farms is not idempotent.
+    setBusy(true);
     enter(data.farmId);
   }
 
@@ -111,7 +120,7 @@ export function InvitesScreen({ email }: { email: string }) {
                 invite={invite}
                 busy={busy}
                 onAccept={() => accept(invite.id)}
-                onDecline={() => decline(invite.id, invite.farmName.trim() || `Fazenda #${invite.farmId}`)}
+                onDecline={() => decline(invite.id, farmLabel({ id: invite.farmId, name: invite.farmName }))}
               />
             ))}
           </>
@@ -133,7 +142,7 @@ export function InvitesScreen({ email }: { email: string }) {
                 <Link href="/dashboard">Ir para o painel</Link>
               </Button>
             ) : (
-              <Button type="button" className="min-h-11 w-full" onClick={createFarm} disabled={busy}>
+              <Button type="button" className="min-h-11 w-full" onClick={() => setCreating(true)} disabled={busy}>
                 <Plus aria-hidden />
                 Criar minha fazenda
               </Button>
@@ -152,6 +161,14 @@ export function InvitesScreen({ email }: { email: string }) {
           </button>
         </p>
       </div>
+
+      <NewFarmDialog
+        open={creating}
+        onOpenChange={setCreating}
+        source={null}
+        description={FIRST_FARM_DESCRIPTION}
+        onSubmit={createFarm}
+      />
     </main>
   );
 }

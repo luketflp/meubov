@@ -4,7 +4,9 @@
  * Routes opting in with `{ farm: true }` get `user`, `farmId`, `farmRole`,
  * `preset`, `permissions` and `superuser`. The active farm is the optional
  * `x-farm-id` header (403 unless the user is a member of that farm) or the
- * user's oldest membership. A user with no membership but a pending convite
+ * user's oldest membership. A deleted farm counts as no farm at all: its
+ * members get 403 not_a_member, as a removed member does. A user with no
+ * membership but a pending convite
  * gets 409 `pending_invites`, so the client sends them to /convites before any
  * farm exists for them; any other user with no farm gets one lazily via
  * EnsureFarmForUserUseCase. E-mails in the SUPERUSER_EMAILS allowlist bypass
@@ -18,7 +20,7 @@
  * itself) so routes don't need to combine two macros.
  */
 import { Elysia } from "elysia";
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, asc, eq, gt, isNull } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { isSuperuser } from "@/lib/auth/superuser";
 import { db } from "@/lib/db";
@@ -84,14 +86,21 @@ export const farmPlugin = new Elysia({ name: "farm" }).macro({
             permissions: farmUsers.permissions,
           })
           .from(farmUsers)
-          .where(and(eq(farmUsers.farmId, farmId), eq(farmUsers.userId, user.id)))
+          .innerJoin(farm, eq(farm.id, farmUsers.farmId))
+          .where(
+            and(
+              eq(farmUsers.farmId, farmId),
+              eq(farmUsers.userId, user.id),
+              isNull(farm.deletedAt)
+            )
+          )
           .limit(1);
         if (membership) return enter({ farmId, ...membership });
         if (!superuser) return status(403, { error: "not_a_member" });
         const [target] = await db
           .select({ id: farm.id })
           .from(farm)
-          .where(eq(farm.id, farmId))
+          .where(and(eq(farm.id, farmId), isNull(farm.deletedAt)))
           .limit(1);
         if (!target) return status(404, { error: "farm_not_found" });
         return enter({ farmId, ...OWNER });
@@ -105,7 +114,8 @@ export const farmPlugin = new Elysia({ name: "farm" }).macro({
           permissions: farmUsers.permissions,
         })
         .from(farmUsers)
-        .where(eq(farmUsers.userId, user.id))
+        .innerJoin(farm, eq(farm.id, farmUsers.farmId))
+        .where(and(eq(farmUsers.userId, user.id), isNull(farm.deletedAt)))
         .orderBy(asc(farmUsers.createdAt))
         .limit(1);
       if (membership) return enter(membership);
@@ -114,6 +124,7 @@ export const farmPlugin = new Elysia({ name: "farm" }).macro({
         const [firstFarm] = await db
           .select({ id: farm.id })
           .from(farm)
+          .where(isNull(farm.deletedAt))
           .orderBy(asc(farm.id))
           .limit(1);
         if (firstFarm) return enter({ farmId: firstFarm.id, ...OWNER });
@@ -121,11 +132,13 @@ export const farmPlugin = new Elysia({ name: "farm" }).macro({
         const [invite] = await db
           .select({ id: farmInvites.id })
           .from(farmInvites)
+          .innerJoin(farm, eq(farm.id, farmInvites.farmId))
           .where(
             and(
               eq(farmInvites.email, normalizeEmail(user.email)),
               eq(farmInvites.status, "pending"),
-              gt(farmInvites.expiresAt, new Date())
+              gt(farmInvites.expiresAt, new Date()),
+              isNull(farm.deletedAt)
             )
           )
           .limit(1);

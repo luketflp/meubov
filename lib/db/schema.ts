@@ -173,6 +173,12 @@ export const farm = pgTable("farm", {
   headquartersLat: numeric("headquarters_lat", { mode: "number" }),
   headquartersLng: numeric("headquarters_lng", { mode: "number" }),
   headquartersZoom: integer("headquarters_zoom"),
+  /**
+   * Set when the Dono deletes the farm. Its rows stay; every lookup that turns
+   * a user into a farm (the farm macro, the farm list, the lazy first farm)
+   * skips it from then on.
+   */
+  deletedAt: timestamp("deleted_at"),
 });
 
 /** Membership of a user in a farm (a user can join many farms). */

@@ -7,7 +7,8 @@
  * `returning()` after either resolves to the next entry of `returning`.
  * `insert(...).values(...)` also chains `.onConflictDoNothing()`, which
  * resolves to nothing and never touches `returning`.
- * `delete()` counts. `transaction(run)` runs `run` against the same handle.
+ * `delete()` counts. `execute()` (an advisory lock) resolves to no rows.
+ * `transaction(run)` runs `run` against the same handle.
  *
  * An `insert(...).values(...).returning()` rejects with the next entry of
  * `insertErrors` instead, when that queue is non-empty — for a test simulating
@@ -97,6 +98,7 @@ export function createDbStub(state: DbStubState) {
         return thenable({ returning, onConflictDoNothing }, () => undefined);
       },
     }),
+    execute: () => Promise.resolve({ rows: [] }),
     delete: () => ({
       where: (condition: unknown) => {
         recordWhere(condition);

@@ -36,6 +36,7 @@ import { AdgChart } from "@/components/dashboard/AdgChart";
 import { AnimalsNeedingAttention } from "@/components/dashboard/AnimalsNeedingAttention";
 import { OpenManejoSessions } from "@/components/manejo/open-sessions";
 import { PendingInviteBanner } from "@/components/invites/PendingInviteBanner";
+import { FirstStepsCard } from "@/components/dashboard/FirstStepsCard";
 import { useCan } from "@/lib/store/usePermissions";
 import {
   UpcomingTreatments,
@@ -131,9 +132,14 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 md:px-8 md:py-8">
-      <PageHeader title="Painel" subtitle={`${farm.name} · ${farm.municipality}`} />
+      <PageHeader
+        title="Painel"
+        subtitle={[farm.name, farm.municipality].filter((part) => part.trim() !== "").join(" · ")}
+      />
 
       <PendingInviteBanner />
+
+      <FirstStepsCard />
 
       <div className="space-y-2">
         <DashboardKpisRow

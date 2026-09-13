@@ -58,7 +58,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
     label: "Configurações",
     href: "/settings",
     icon: Settings,
-    children: [{ label: "Equipe", href: "/settings/equipe", area: "team" }],
+    children: [
+      { label: "Equipe", href: "/settings/equipe", area: "team" },
+      { label: "Fazendas", href: "/settings/fazendas" },
+    ],
   },
 ];
 

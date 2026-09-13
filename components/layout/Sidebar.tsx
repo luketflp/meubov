@@ -3,7 +3,7 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut, Tractor } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { authClient } from "@/lib/auth/client";
 import { useSignOut } from "@/lib/auth/navigation";
 import { displayName, getInitials } from "@/lib/auth/user";
@@ -12,13 +12,7 @@ import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useActivePermissions } from "@/lib/store/usePermissions";
 import { cn } from "@/lib/utils";
 import { NELORE_HEAD_VIEWBOX, NeloreMark } from "@/components/ui/nelore-mark";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { FarmSwitcher } from "@/components/farms/FarmSwitcher";
 
 /**
  * Brand-green rail: the only dark surface in the app, so navigation reads as
@@ -51,9 +45,6 @@ export function Sidebar() {
   const signOut = useSignOut();
   const { data: session, isPending } = authClient.useSession();
   const user = session?.user;
-  const farms = useHerdStore((s) => s.farms);
-  const activeFarmId = useHerdStore((s) => s.activeFarmId);
-  const switchFarm = useHerdStore((s) => s.switchFarm);
   const pendingInvites = useHerdStore((s) => s.pendingInvites);
   const items = visibleNav(NAV_ITEMS, useActivePermissions());
 
@@ -77,32 +68,9 @@ export function Sidebar() {
         <p className="font-heading text-lg leading-none font-semibold text-sidebar-ink">MeuBov</p>
       </div>
 
-      {farms.length > 1 && (
-        <div className="px-2.5 pb-3">
-          <Select
-            value={activeFarmId === null ? undefined : String(activeFarmId)}
-            onValueChange={(value) => void switchFarm(Number(value))}
-          >
-            <SelectTrigger
-              aria-label="Selecionar fazenda"
-              className="w-full rounded-lg border-sidebar-line/60 bg-sidebar-hover text-sidebar-ink shadow-none hover:bg-sidebar-hover [&_svg]:text-sidebar-ink-soft"
-            >
-              {/* One flex child so the trigger's justify-between only separates it from the chevron. */}
-              <span className="flex min-w-0 items-center gap-2">
-                <Tractor className="size-4 shrink-0" aria-hidden />
-                <SelectValue placeholder="Fazenda" />
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              {farms.map((f) => (
-                <SelectItem key={f.id} value={String(f.id)}>
-                  {f.name.trim() || `Fazenda #${f.id}`}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+      <div className="px-2.5 pb-3">
+        <FarmSwitcher variant="rail" />
+      </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5" aria-label="Navegação principal">
         {items.map((item) => {
