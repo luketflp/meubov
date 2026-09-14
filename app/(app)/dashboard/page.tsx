@@ -36,7 +36,7 @@ import { AdgChart } from "@/components/dashboard/AdgChart";
 import { AnimalsNeedingAttention } from "@/components/dashboard/AnimalsNeedingAttention";
 import { OpenManejoSessions } from "@/components/manejo/open-sessions";
 import { PendingInviteBanner } from "@/components/invites/PendingInviteBanner";
-import { FirstStepsCard } from "@/components/dashboard/FirstStepsCard";
+import { FirstStepsBanner } from "@/components/dashboard/FirstStepsBanner";
 import { useCan } from "@/lib/store/usePermissions";
 import {
   UpcomingTreatments,
@@ -139,7 +139,7 @@ export default function DashboardPage() {
 
       <PendingInviteBanner />
 
-      <FirstStepsCard />
+      <FirstStepsBanner />
 
       <div className="space-y-2">
         <DashboardKpisRow

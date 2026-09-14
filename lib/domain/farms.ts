@@ -55,6 +55,13 @@ export function confirmsFarmName(typed: string, label: string): boolean {
   return typed.trim() !== "" && normalize(typed) === normalize(label);
 }
 
+/** "a", "a e b", "a, b e c": how a sentence lists things in Portuguese. */
+function listPt(parts: readonly string[]): string {
+  return parts.length === 1
+    ? parts[0]
+    : `${parts.slice(0, -1).join(", ")} e ${parts[parts.length - 1]}`;
+}
+
 function counted(count: number, singular: string, plural: string): string | null {
   if (count === 0) return null;
   return `${count} ${count === 1 ? singular : plural}`;
@@ -76,9 +83,7 @@ export function copySummary(counts: {
     counted(counts.protocols, "protocolo sanitário", "protocolos sanitários"),
   ].filter((part): part is string => part !== null);
   if (parts.length === 0) return null;
-  const list =
-    parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} e ${parts[parts.length - 1]}`;
-  return `Traz ${list}.`;
+  return `Traz ${listPt(parts)}.`;
 }
 
 export type FirstStepId = "headquarters" | "invernada" | "animal";
@@ -111,4 +116,23 @@ export function firstSteps(
  */
 export function showFirstSteps(animals: readonly Animal[]): boolean {
   return animals.length === 0;
+}
+
+/** How the Painel banner names each pending step, and whether the phrase is plural. */
+const STEP_PHRASES: Record<FirstStepId, { phrase: string; plural: boolean }> = {
+  headquarters: { phrase: "a sede no mapa", plural: false },
+  invernada: { phrase: "as invernadas", plural: true },
+  animal: { phrase: "os animais", plural: true },
+};
+
+/**
+ * What the Painel banner says is still missing: "Faltam as invernadas e os
+ * animais." A lone step sets the verb's number; two or more are plural. Null
+ * when every step is done.
+ */
+export function missingStepsSentence(steps: readonly FirstStep[]): string | null {
+  const pending = steps.filter((step) => !step.done).map((step) => STEP_PHRASES[step.id]);
+  if (pending.length === 0) return null;
+  const verb = pending.length === 1 && !pending[0].plural ? "Falta" : "Faltam";
+  return `${verb} ${listPt(pending.map((item) => item.phrase))}.`;
 }

@@ -6,6 +6,8 @@ interface SectionCardProps {
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  /** Anchor for links and scrolling to this card. */
+  id?: string;
   /**
    * Heading level for the card title. Defaults to `"h2"`; pass `"h1"` when the
    * card holds the page's primary heading (e.g. the login/signup screens, which
@@ -19,10 +21,11 @@ export function SectionCard({
   action,
   children,
   className,
+  id,
   titleAs: Heading = "h2",
 }: SectionCardProps) {
   return (
-    <section className={cn("rounded-lg border border-hairline bg-panel", className)}>
+    <section id={id} className={cn("rounded-lg border border-hairline bg-panel", className)}>
       <header className="flex items-center justify-between gap-2 border-b border-hairline px-4 py-3">
         <Heading className="font-heading text-base font-semibold text-ink">{title}</Heading>
         {action ? <div className="shrink-0">{action}</div> : null}

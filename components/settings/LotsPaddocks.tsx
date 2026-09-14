@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { Fence, MapPinPlus, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SectionCard } from "@/components/ui/section-card";
@@ -28,6 +30,7 @@ import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
 import { invernadasWithSummary } from "@/lib/store/selectors";
 import { formatNumber } from "@/lib/domain/format";
+import { stepHref } from "@/lib/domain/mapSetup";
 import type { Invernada } from "@/lib/types";
 import { useTemporaryMessage } from "./useTemporaryMessage";
 
@@ -35,6 +38,12 @@ import { useTemporaryMessage } from "./useTemporaryMessage";
 function formatHectares(hectares: number): string {
   return formatNumber(hectares, Number.isInteger(hectares) ? 0 : 1);
 }
+
+/** The Invernadas card's anchor: Primeiros passos scrolls here. */
+export const INVERNADAS_SECTION_ID = "invernadas";
+
+/** The new invernada's Código, focused by Primeiros passos and again after each add. */
+export const NEW_INVERNADA_CODE_ID = "invernada-nova-codigo";
 
 function EditInvernadaDialog({ invernada }: { invernada: Invernada }) {
   const updateInvernada = useHerdStore((s) => s.updateInvernada);
@@ -183,9 +192,10 @@ function EditInvernadaDialog({ invernada }: { invernada: Invernada }) {
 }
 
 /**
- * Fixed farm areas with their current logical lots, removal, and an add row.
- * Editing, removal and the add row belong to whoever may edit Lotes e Mapa;
- * anyone else reads the table, which then has no Ações column.
+ * Fixed farm areas with their current logical lots, removal, and the Nova
+ * invernada form. Editing, removal, the form and the "Desenhar no mapa" link
+ * belong to whoever may edit Lotes e Mapa; anyone else reads the table, which
+ * then has no Ações column.
  */
 export function InvernadasSettings() {
   const invernadas = useHerdStore((s) => s.invernadas);
@@ -202,6 +212,7 @@ export function InvernadasSettings() {
   const [hectares, setHectares] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const codeInput = useRef<HTMLInputElement>(null);
 
   const summaries = invernadasWithSummary(
     invernadas,
@@ -255,6 +266,7 @@ export function InvernadasSettings() {
       setGrass("");
       setHectares("");
       setFormError(null);
+      codeInput.current?.focus();
     } catch {
       setFormError("Não foi possível criar a invernada. Confira se o código já existe.");
     } finally {
@@ -263,108 +275,151 @@ export function InvernadasSettings() {
   }
 
   return (
-    <SectionCard title="Invernadas">
+    <SectionCard id={INVERNADAS_SECTION_ID} title="Invernadas" className="scroll-mt-6">
       <p className="mb-4 text-sm text-ink-soft">
         A invernada é uma área física fixa da fazenda. Seu código permanece o
         mesmo quando os lotes de animais mudam de lugar.
       </p>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Código</TableHead>
-            <TableHead>Nome</TableHead>
-            <TableHead>Capim</TableHead>
-            <TableHead className="text-right">Hectares</TableHead>
-            <TableHead>Lotes atuais</TableHead>
-            <TableHead className="text-right">Cabeças</TableHead>
-            {canEditLots ? (
-              <TableHead className="w-20">
-                <span className="sr-only">Ações</span>
-              </TableHead>
-            ) : null}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {summaries.map(({ invernada, lots: currentLots, headCount }) => (
-            <TableRow key={invernada.id}>
-              <TableCell className="font-mono font-medium">{invernada.code}</TableCell>
-              <TableCell className="text-ink-soft">{invernada.name || "—"}</TableCell>
-              <TableCell className="text-ink-soft">{invernada.grass}</TableCell>
-              <TableCell className="text-right font-mono">
-                {formatHectares(invernada.hectares)}
-              </TableCell>
-              <TableCell className="max-w-52 text-ink-soft">
-                {currentLots.length === 0
-                  ? "Vazia"
-                  : currentLots.map((lot) => lot.name).join(", ")}
-              </TableCell>
-              <TableCell className="text-right font-mono">{formatNumber(headCount)}</TableCell>
+      {summaries.length === 0 ? (
+        <EmptyState
+          icon={Fence}
+          title="Nenhuma invernada ainda"
+          description={
+            canEditLots
+              ? "Cadastre cada pasto abaixo, com o código que a equipe usa no campo."
+              : "As invernadas da fazenda aparecem aqui quando forem cadastradas."
+          }
+          className="py-7"
+        />
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Código</TableHead>
+              <TableHead>Nome</TableHead>
+              <TableHead>Capim</TableHead>
+              <TableHead className="text-right">Hectares</TableHead>
+              <TableHead>Lotes atuais</TableHead>
+              <TableHead className="text-right">Cabeças</TableHead>
               {canEditLots ? (
-                <TableCell className="text-right">
-                  <div className="flex justify-end">
-                    <EditInvernadaDialog invernada={invernada} />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => onRemove(invernada)}
-                      aria-label={`Remover invernada ${invernada.code}`}
-                      className="min-h-11 min-w-11 text-ink-soft hover:text-overdue md:min-h-7 md:min-w-7"
-                    >
-                      <Trash2 aria-hidden />
-                    </Button>
-                  </div>
-                </TableCell>
+                <TableHead className="w-20">
+                  <span className="sr-only">Ações</span>
+                </TableHead>
               ) : null}
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {summaries.map(({ invernada, lots: currentLots, headCount }) => (
+              <TableRow key={invernada.id}>
+                <TableCell className="font-mono font-medium">{invernada.code}</TableCell>
+                <TableCell className="text-ink-soft">
+                  <span className="block">{invernada.name || "—"}</span>
+                  {canEditLots && invernada.boundary === undefined ? (
+                    <span className="mt-0.5 flex items-center gap-1 text-xs">
+                      Sem contorno ·
+                      <Link
+                        href={stepHref({ kind: "invernada", invernadaId: invernada.id })}
+                        className="inline-flex items-center gap-1 font-medium text-brand hover:underline"
+                      >
+                        <MapPinPlus aria-hidden className="size-[13px]" />
+                        Desenhar no mapa
+                      </Link>
+                    </span>
+                  ) : null}
+                </TableCell>
+                <TableCell className="text-ink-soft">{invernada.grass}</TableCell>
+                <TableCell className="text-right font-mono">
+                  {formatHectares(invernada.hectares)}
+                </TableCell>
+                <TableCell className="max-w-52 text-ink-soft">
+                  {currentLots.length === 0
+                    ? "Vazia"
+                    : currentLots.map((lot) => lot.name).join(", ")}
+                </TableCell>
+                <TableCell className="text-right font-mono">{formatNumber(headCount)}</TableCell>
+                {canEditLots ? (
+                  <TableCell className="text-right">
+                    <div className="flex justify-end">
+                      <EditInvernadaDialog invernada={invernada} />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => onRemove(invernada)}
+                        aria-label={`Remover invernada ${invernada.code}`}
+                        className="min-h-11 min-w-11 text-ink-soft hover:text-overdue md:min-h-7 md:min-w-7"
+                      >
+                        <Trash2 aria-hidden />
+                      </Button>
+                    </div>
+                  </TableCell>
+                ) : null}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
       {removeError ? <p className="mt-3 text-sm text-overdue">{removeError}</p> : null}
       {canEditLots ? (
-        <form
-          onSubmit={onAdd}
-          className="mt-4 flex flex-col gap-2 border-t border-hairline pt-4 sm:flex-row"
-        >
-          <Input
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="Código"
-            aria-label="Número ou código da nova invernada"
-            className="font-mono sm:max-w-28"
-            autoCapitalize="characters"
-          />
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Nome (opcional)"
-            aria-label="Nome opcional da nova invernada"
-          />
-          <Input
-            value={grass}
-            onChange={(e) => setGrass(e.target.value)}
-            placeholder="Capim"
-            aria-label="Capim da nova invernada"
-          />
-          <Input
-            value={hectares}
-            onChange={(e) => setHectares(e.target.value)}
-            placeholder="Hectares"
-            aria-label="Hectares da nova invernada"
-            type="number"
-            min={0}
-            step="0.1"
-            inputMode="decimal"
-            className="font-mono sm:max-w-28"
-          />
-          <Button
-            type="submit"
-            variant="outline"
-            disabled={adding}
-            className="min-h-11 md:min-h-0"
-          >
-            {adding ? "Adicionando…" : "Adicionar"}
-          </Button>
+        <form onSubmit={onAdd} className="mt-4 border-t border-hairline pt-4">
+          <p className="mb-3 text-sm font-medium text-ink">Nova invernada</p>
+          <div className="grid grid-cols-2 gap-3 sm:flex sm:items-end sm:gap-2">
+            <div className="grid gap-1.5 sm:w-24 sm:shrink-0">
+              <Label htmlFor={NEW_INVERNADA_CODE_ID}>Código</Label>
+              <Input
+                id={NEW_INVERNADA_CODE_ID}
+                ref={codeInput}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="Ex.: 03"
+                className="min-h-11 font-mono md:min-h-0"
+                autoCapitalize="characters"
+              />
+            </div>
+            <div className="grid min-w-0 gap-1.5 sm:flex-1">
+              <Label htmlFor="invernada-nova-nome">Nome (opcional)</Label>
+              <Input
+                id="invernada-nova-nome"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ex.: Sede"
+                className="min-h-11 md:min-h-0"
+              />
+            </div>
+            <div className="grid min-w-0 gap-1.5 sm:flex-1">
+              <Label htmlFor="invernada-nova-capim">Capim</Label>
+              <Input
+                id="invernada-nova-capim"
+                value={grass}
+                onChange={(e) => setGrass(e.target.value)}
+                placeholder="Ex.: Braquiária"
+                className="min-h-11 md:min-h-0"
+              />
+            </div>
+            <div className="grid gap-1.5 sm:w-24 sm:shrink-0">
+              <Label htmlFor="invernada-nova-hectares">Hectares</Label>
+              <Input
+                id="invernada-nova-hectares"
+                value={hectares}
+                onChange={(e) => setHectares(e.target.value)}
+                placeholder="0"
+                type="number"
+                min={0}
+                step="0.1"
+                inputMode="decimal"
+                className="min-h-11 font-mono md:min-h-0"
+              />
+            </div>
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={adding}
+              className="col-span-2 min-h-11 md:min-h-0"
+            >
+              <Plus aria-hidden />
+              {adding ? "Adicionando…" : "Adicionar"}
+            </Button>
+          </div>
         </form>
       ) : null}
       {formError ? <p className="mt-2 text-sm text-overdue">{formError}</p> : null}

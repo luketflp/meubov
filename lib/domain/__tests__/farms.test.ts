@@ -7,6 +7,7 @@ import {
   deleteVerdict,
   farmLabel,
   firstSteps,
+  missingStepsSentence,
   showFirstSteps,
   validateNewFarm,
 } from "@/lib/domain/farms";
@@ -158,5 +159,37 @@ describe("showFirstSteps", () => {
 
   it("hides it once any animal exists, active or not", () => {
     expect(showFirstSteps([animal])).toBe(false);
+  });
+});
+
+describe("missingStepsSentence", () => {
+  const steps = (headquarters: boolean, invernada: boolean, animal: boolean) => [
+    { id: "headquarters" as const, done: headquarters },
+    { id: "invernada" as const, done: invernada },
+    { id: "animal" as const, done: animal },
+  ];
+
+  it("lists every step on a brand-new farm", () => {
+    expect(missingStepsSentence(steps(false, false, false))).toBe(
+      "Faltam a sede no mapa, as invernadas e os animais."
+    );
+  });
+
+  it("joins two steps with e", () => {
+    expect(missingStepsSentence(steps(false, true, false))).toBe(
+      "Faltam a sede no mapa e os animais."
+    );
+  });
+
+  it("agrees with a lone singular step", () => {
+    expect(missingStepsSentence(steps(false, true, true))).toBe("Falta a sede no mapa.");
+  });
+
+  it("agrees with a lone plural step", () => {
+    expect(missingStepsSentence(steps(true, true, false))).toBe("Faltam os animais.");
+  });
+
+  it("is null when nothing is missing", () => {
+    expect(missingStepsSentence(steps(true, true, true))).toBeNull();
   });
 });

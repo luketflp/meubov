@@ -38,9 +38,10 @@ export function InvitesScreen({ email }: { email: string }) {
     });
   }, []);
 
-  function enter(farmId: number) {
+  /** Stores the farm as active and reloads the app into `path`. */
+  function enter(farmId: number, path: "/dashboard" | "/settings") {
     setActiveFarmId(farmId);
-    window.location.assign("/dashboard");
+    window.location.assign(path);
   }
 
   async function accept(id: number) {
@@ -52,7 +53,7 @@ export function InvitesScreen({ email }: { email: string }) {
       setMine((current) => current && { ...current, invites: current.invites.filter((i) => i.id !== id) });
       return;
     }
-    enter(data.farmId);
+    enter(data.farmId, "/dashboard");
   }
 
   async function decline(id: number, farmName: string) {
@@ -67,7 +68,7 @@ export function InvitesScreen({ email }: { email: string }) {
     setMine((current) => current && { ...current, invites: current.invites.filter((i) => i.id !== id) });
   }
 
-  // No herd store runs here: the new farm is stored as active and the app reloads into it.
+  // No herd store runs here: the new farm is stored as active and the app reloads into its Configurações.
   async function createFarm(input: NewFarmInput) {
     const { data, error } = await api.farms.post({
       name: input.name,
@@ -80,7 +81,7 @@ export function InvitesScreen({ email }: { email: string }) {
     // Keep the button disabled through the redirect: the dialog closes before
     // window.location.assign completes, and POST /farms is not idempotent.
     setBusy(true);
-    enter(data.farmId);
+    enter(data.farmId, "/settings");
   }
 
   const count = mine?.invites.length ?? 0;

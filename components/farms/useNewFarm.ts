@@ -2,8 +2,8 @@
 
 /**
  * Everything the Nova fazenda dialog needs inside the app: the open farm's
- * setup to offer, and a submit that creates the farm, opens its Painel and says
- * so. /convites wires the dialog by hand instead — no herd store runs there.
+ * setup to offer, and a submit that creates the farm, opens its Configurações
+ * (where Primeiros passos wait) and says so. /convites wires the dialog by hand instead — no herd store runs there.
  */
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -36,7 +36,7 @@ export function useNewFarm(): {
   async function onSubmit(input: NewFarmInput) {
     await createFarm(input);
     toast.success(`${input.name.trim()} criada`);
-    router.push("/dashboard");
+    router.push("/settings");
   }
 
   return { source, description: NEW_FARM_DESCRIPTION, onSubmit };

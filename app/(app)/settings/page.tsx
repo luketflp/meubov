@@ -2,6 +2,7 @@
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { FarmDataForm } from "@/components/settings/FarmDataForm";
+import { FirstStepsCard } from "@/components/settings/FirstStepsCard";
 import { HerdCategories } from "@/components/settings/HerdCategories";
 import { RegisteredBreeds } from "@/components/settings/RegisteredBreeds";
 import { InvernadasSettings } from "@/components/settings/LotsPaddocks";
@@ -15,6 +16,7 @@ export default function SettingsPage() {
           title="Configurações"
           subtitle="Dados da fazenda, categorias, raças e invernadas"
         />
+        <FirstStepsCard />
         <FarmDataForm />
         <HerdCategories />
         <RegisteredBreeds />
