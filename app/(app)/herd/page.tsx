@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo } from "react";
 import { SearchX } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
@@ -11,23 +11,30 @@ import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/herd/FilterBar";
 import { HerdTable } from "@/components/herd/HerdTable";
+import { HerdPagination } from "@/components/herd/HerdPagination";
 import { AnimalCard } from "@/components/herd/AnimalCard";
 import { AddAnimalsButton } from "@/components/herd/AddAnimalsButton";
 import { ImportHerdDialog } from "@/components/herd/ImportHerdDialog";
+import { useHerdView } from "@/components/herd/useHerdView";
+import { paginate } from "@/components/herd/pagination";
 import {
-  INITIAL_FILTERS,
-  DEFAULT_SORT,
+  LOT_ALL,
   filterHerd,
   sortHerd,
-  nextSort,
   herdSubtitle,
   hasActiveFilter,
-  type SortColumn,
-  type HerdFilters,
-  type HerdSort,
 } from "@/components/herd/filters";
 
+// The view lives in the URL query, which useSearchParams reads inside a Suspense boundary.
 export default function HerdPage() {
+  return (
+    <Suspense fallback={null}>
+      <HerdScreen />
+    </Suspense>
+  );
+}
+
+function HerdScreen() {
   const animals = useHerdStore((state) => state.animals);
   const treatments = useHerdStore((state) => state.treatments);
   const lots = useHerdStore((state) => state.lots);
@@ -36,8 +43,8 @@ export default function HerdPage() {
   const canEdit = useCan("herd", "edit");
   const canEditLots = useCan("lots", "edit");
 
-  const [filters, setFilters] = useState<HerdFilters>(INITIAL_FILTERS);
-  const [sort, setSort] = useState<HerdSort>(DEFAULT_SORT);
+  const { view, searchText, setFilters, sortBy, goToPage, setPageSize, replaceView } =
+    useHerdView();
 
   const derived = useMemo(
     () => withStatus(activeAnimals(animals), treatments, todayISO()),
@@ -66,18 +73,29 @@ export default function HerdPage() {
     );
   }, [invernadas, lotPlacements]);
 
+  // A link to a lot that no longer exists shows the whole herd.
+  const lotId = lotNames.has(view.filters.lotId) ? view.filters.lotId : LOT_ALL;
+  const filters = useMemo(() => ({ ...view.filters, lotId }), [view.filters, lotId]);
+
   const filtered = useMemo(() => filterHerd(derived, filters), [derived, filters]);
 
   const sorted = useMemo(
-    () => sortHerd(filtered, sort, lotNames),
-    [filtered, sort, lotNames]
+    () => sortHerd(filtered, view.sort, lotNames),
+    [filtered, view.sort, lotNames]
   );
 
-  const filterActive = hasActiveFilter(filters);
+  const current = useMemo(
+    () => paginate(sorted, view.page, view.pageSize),
+    [sorted, view.page, view.pageSize]
+  );
 
-  const sortBy = (column: SortColumn): void => {
-    setSort((current) => nextSort(current, column));
-  };
+  // A stale link (that lot, or a page past the end) is rewritten to the view on screen.
+  useEffect(() => {
+    if (current.page === view.page && lotId === view.filters.lotId) return;
+    replaceView({ ...view, filters, page: current.page });
+  }, [current.page, lotId, view, filters, replaceView]);
+
+  const filterActive = hasActiveFilter(filters);
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 pt-6 md:px-8">
@@ -96,7 +114,7 @@ export default function HerdPage() {
         }
       />
 
-      <FilterBar filters={filters} lots={lots} onChange={setFilters} />
+      <FilterBar filters={{ ...filters, search: searchText }} lots={lots} onChange={setFilters} />
 
       {sorted.length === 0 ? (
         <div className="rounded-xl border border-hairline bg-panel">
@@ -110,16 +128,16 @@ export default function HerdPage() {
         <>
           <div className="hidden md:block">
             <HerdTable
-              items={sorted}
+              items={current.items}
               lotNames={lotNames}
               invernadaNames={invernadaNames}
-              sort={sort}
+              sort={view.sort}
               onSort={sortBy}
             />
           </div>
 
           <ul className="flex flex-col gap-2 md:hidden">
-            {sorted.map((item) => (
+            {current.items.map((item) => (
               <AnimalCard
                 key={item.animal.id}
                 item={item}
@@ -128,6 +146,13 @@ export default function HerdPage() {
               />
             ))}
           </ul>
+
+          <HerdPagination
+            page={current}
+            pageSize={view.pageSize}
+            onPageChange={goToPage}
+            onPageSizeChange={setPageSize}
+          />
         </>
       )}
     </div>

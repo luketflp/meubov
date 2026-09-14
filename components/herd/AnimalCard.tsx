@@ -21,6 +21,10 @@ export function AnimalCard({ item, lotName, invernadaName }: AnimalCardProps) {
       <Link
         href={`/herd/${animal.id}`}
         aria-label={`Abrir ficha do animal ${animal.earTag}`}
+        onClick={(event) => {
+          // A double tap on the pager must not open the card that scrolled under it.
+          if (event.detail > 1) event.preventDefault();
+        }}
         className="flex min-h-11 flex-col gap-1.5 rounded-xl border border-hairline bg-panel p-4 transition-colors active:bg-surface"
       >
         <div className="flex items-center justify-between gap-2">

@@ -92,7 +92,12 @@ export function HerdTable({ items, lotNames, invernadaNames, sort, onSort }: Her
             <TableRow
               key={animal.id}
               tabIndex={0}
-              onClick={() => goToRecord(animal.id)}
+              onClick={(event) => {
+                // The second click of a double click on the pager lands here
+                // once the new page has scrolled up: it must not open an animal.
+                if (event.detail > 1) return;
+                goToRecord(animal.id);
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") goToRecord(animal.id);
               }}
