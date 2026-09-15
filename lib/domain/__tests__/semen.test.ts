@@ -3,6 +3,7 @@ import type { Animal, Breeding, PregnancyDiagnosis, SemenPurchase } from "@/lib/
 import {
   bullInseminations,
   bullPregnancy,
+  bullRemovalBlock,
   bullStock,
   canRemovePurchase,
   dosesUsed,
@@ -138,6 +139,27 @@ describe("canRemovePurchase", () => {
 
   it("refuses an unknown purchase", () => {
     expect(canRemovePurchase(bull, "p-9", [])).toBe(false);
+  });
+});
+
+describe("bullRemovalBlock", () => {
+  it("lets a bull go when no cobertura used a dose and no inseminação lists it", () => {
+    const animals = [cow("B-001", [breeding("b1", "2026-05-01", "bull-2")])];
+    const sessions = [
+      makeManejoSession({ semenBullIds: ["bull-2"] }),
+      makeManejoSession({ id: "s-2", status: "closed", semenBullIds: ["bull-1"] }),
+    ];
+    expect(bullRemovalBlock("bull-1", animals, sessions)).toBeNull();
+  });
+
+  it("names the doses used, sold dams included", () => {
+    const animals = [cow("B-002", [breeding("b3", "2026-07-01", "bull-1")], [], { active: false })];
+    expect(bullRemovalBlock("bull-1", animals, [])).toBe("doses_used");
+  });
+
+  it("names an open inseminação that lists the bull", () => {
+    const sessions = [makeManejoSession({ semenBullIds: ["bull-2", "bull-1"] })];
+    expect(bullRemovalBlock("bull-1", [], sessions)).toBe("open_insemination");
   });
 });
 

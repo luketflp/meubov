@@ -108,6 +108,28 @@ export function canRemovePurchase(bull: SemenBull, purchaseId: string, animals: 
   return bought - purchase.doses >= used;
 }
 
+/** Why a bull cannot be deleted; null when nothing holds it. */
+export type BullRemovalBlock = "doses_used" | "open_insemination";
+
+/**
+ * What keeps a bull from being deleted: a cobertura that used one of its doses
+ * (sold dams included — the record must keep naming the bull), or an open
+ * inseminação that still offers it at the brete. Null when it can go with its
+ * purchases. The server checks the same two things under the bull's lock.
+ */
+export function bullRemovalBlock(
+  bullId: string,
+  animals: Animal[],
+  sessions: ManejoSession[]
+): BullRemovalBlock | null {
+  if (dosesUsed(bullId, animals) > 0) return "doses_used";
+  const offered = sessions.some(
+    (session) =>
+      session.status === "open" && (session.semenBullIds ?? []).includes(bullId)
+  );
+  return offered ? "open_insemination" : null;
+}
+
 /* -------------------------------------------------------------------------- */
 /* The bull's page                                                            */
 /* -------------------------------------------------------------------------- */

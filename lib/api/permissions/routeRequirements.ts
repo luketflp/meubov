@@ -51,6 +51,8 @@ export const ROUTE_REQUIREMENTS: Readonly<Record<string, RouteRequirement>> = {
   // A new bull may bring its first purchase; the controller asks Financeiro for that.
   "POST /api/herd/semen-bulls": edit("reproduction"),
   "PATCH /api/herd/semen-bulls/:id": edit("reproduction"),
+  // Deleting a bull takes its purchases along; the controller asks Financeiro for their expenses.
+  "DELETE /api/herd/semen-bulls/:id": edit("reproduction"),
   // A purchase is a Reprodução expense: writing or deleting one moves money.
   "POST /api/herd/semen-bulls/:id/purchases": edit("reproduction", "finance"),
   "DELETE /api/herd/semen-bulls/:id/purchases/:purchaseId": edit("reproduction", "finance"),

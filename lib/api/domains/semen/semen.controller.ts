@@ -5,7 +5,8 @@
  * used a dose, so there is no route to set it. Every purchase also writes a
  * Reprodução expense, returned alongside so the client can merge Financeiro.
  * That makes a purchase money: the purchase routes ask Financeiro edit in the
- * route table, a new bull asks it here when it brings its first purchase, and
+ * route table, a new bull asks it here when it brings its first purchase, a
+ * bull delete asks it here when its purchases still have their expenses, and
  * a member who does not see Financeiro gets the bull back without the totals.
  */
 import { Elysia } from "elysia";
@@ -16,6 +17,7 @@ import { can } from "@/lib/domain/permissions";
 
 import { AddBullUseCase } from "./useCases/AddBull.useCase";
 import { AddPurchaseUseCase } from "./useCases/AddPurchase.useCase";
+import { DeleteBullUseCase } from "./useCases/DeleteBull.useCase";
 import { DeletePurchaseUseCase } from "./useCases/DeletePurchase.useCase";
 import { UpdateBullUseCase } from "./useCases/UpdateBull.useCase";
 import {
@@ -54,6 +56,25 @@ export const semenController = new Elysia({ prefix: "/semen-bulls" })
       return can(permissions, "finance", "view") ? result : redactSemenBull(result);
     },
     { farm: true, body: SemenBullPatchBody }
+  )
+  .delete(
+    "/:id",
+    async ({ farmId, permissions, params, status }) => {
+      const result = await new DeleteBullUseCase().run({
+        farmId,
+        id: params.id,
+        canRemoveExpenses: can(permissions, "finance", "edit"),
+      });
+      if (result === "not_found") return status(404, { error: result });
+      if (result === "finance_forbidden") {
+        return status(403, { error: "forbidden", area: "finance" });
+      }
+      if (result === "doses_used" || result === "open_insemination") {
+        return status(409, { error: result });
+      }
+      return result;
+    },
+    { farm: true }
   )
   .post(
     "/:id/purchases",

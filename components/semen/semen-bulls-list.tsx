@@ -13,16 +13,19 @@
  *
  * "Novo touro" needs Reprodução edit; "Registrar compra" writes an expense, so
  * it needs Financeiro edit on top, and the cost per dose shows only to whoever
- * sees Financeiro.
+ * sees Financeiro. Excluir takes the bull's purchases and their expenses
+ * along, so with a purchase it asks Financeiro edit as well.
  */
 import { useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import { Dna } from "lucide-react";
+import type { SemenBull } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
 import { formatDate } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
 import { bullStock } from "@/lib/domain/semen";
+import { DeleteSemenBullButton } from "@/components/semen/delete-semen-bull-button";
 import { semenBullHref } from "@/components/semen/helpers";
 import { SemenBullDialog } from "@/components/semen/semen-bull-dialog";
 import { SemenPurchaseDialog } from "@/components/semen/semen-purchase-dialog";
@@ -62,6 +65,8 @@ export function SemenBullsList() {
   const canEditFinance = useCan("finance", "edit");
   const seeMoney = useCan("finance", "view");
   const canBuy = canEdit && canEditFinance;
+  const canDelete = (bull: SemenBull) =>
+    canEdit && (bull.purchases.length === 0 || canEditFinance);
   // A bull registered here is appended unsorted; the list reads by name.
   const rows = useMemo(
     () =>
@@ -105,7 +110,7 @@ export function SemenBullsList() {
                     <TableHead className="text-right">Custo médio por dose</TableHead>
                   ) : null}
                   <TableHead>Última compra</TableHead>
-                  {canBuy ? (
+                  {canEdit ? (
                     <TableHead className="text-right">
                       <span className="sr-only">Ações</span>
                     </TableHead>
@@ -139,9 +144,14 @@ export function SemenBullsList() {
                     <TableCell className="font-mono text-ink">
                       {stock.lastPurchase === null ? "—" : formatDate(stock.lastPurchase)}
                     </TableCell>
-                    {canBuy ? (
+                    {canEdit ? (
                       <TableCell className="text-right">
-                        <SemenPurchaseDialog bull={bull} variant="row" />
+                        <div className="flex items-center justify-end gap-1">
+                          {canBuy ? <SemenPurchaseDialog bull={bull} variant="row" /> : null}
+                          {canDelete(bull) ? (
+                            <DeleteSemenBullButton bull={bull} variant="row" />
+                          ) : null}
+                        </div>
                       </TableCell>
                     ) : null}
                   </TableRow>
@@ -160,7 +170,10 @@ export function SemenBullsList() {
                     <Link href={semenBullHref(bull.id)} className={nameLinkClass}>
                       {bull.name}
                     </Link>
-                    <StockPill left={stock.left} />
+                    <div className="flex items-center gap-2">
+                      <StockPill left={stock.left} />
+                      {canDelete(bull) ? <DeleteSemenBullButton bull={bull} variant="card" /> : null}
+                    </div>
                   </div>
                   {identity.length > 0 ? (
                     <p className="mt-1 text-xs text-ink-soft">{identity}</p>

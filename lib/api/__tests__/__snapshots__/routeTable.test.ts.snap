@@ -14,6 +14,7 @@ exports[`herd API route table > exposes exactly the documented routes 1`] = `
   "DELETE /api/herd/lots/:id",
   "DELETE /api/herd/manejo/:id",
   "DELETE /api/herd/protocols/:id",
+  "DELETE /api/herd/semen-bulls/:id",
   "DELETE /api/herd/semen-bulls/:id/purchases/:purchaseId",
   "DELETE /api/herd/treatments/:id",
   "DELETE /api/herd/weighings",

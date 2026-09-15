@@ -36,6 +36,7 @@ import { ApiHerdRepository } from "@/lib/repository/ApiHerdRepository";
 import { api } from "@/lib/api/client";
 import { clearActiveFarmId, getActiveFarmId, setActiveFarmId } from "@/lib/api/activeFarm";
 import { can, type FarmRole, type MemberPreset, type Permissions } from "@/lib/domain/permissions";
+import type { BullRemovalBlock } from "@/lib/domain/semen";
 import { selectActivePermissions } from "@/lib/store/selectors";
 import type { MyInvite } from "@/lib/api/domains/invites/useCases/BrowseMine.useCase";
 import type { ImportAnimalPayload } from "@/lib/domain/herdImport";
@@ -366,6 +367,12 @@ export interface HerdStore extends HerdData {
    * reloaded, since the store's count was behind the server's.
    */
   removeSemenPurchase: (bullId: string, purchaseId: string) => Promise<boolean>;
+  /**
+   * Deletes a bull with its purchases and their expenses. Null once it is
+   * gone; otherwise what the server found holding it (409), after which the
+   * herd is reloaded, since the store's picture was behind the server's.
+   */
+  removeSemenBull: (id: string) => Promise<BullRemovalBlock | null>;
   /** Records a calving; false when the calf's ear tag is already in use. */
   recordCalving: (earTag: string, input: NewCalving) => Promise<boolean>;
   /** Edits an animal's registration fields (category/breed/birth/lot). */
@@ -1456,6 +1463,27 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
         : {}),
     }));
     return true;
+  },
+
+  removeSemenBull: async (id) => {
+    const { data, error } = await api["semen-bulls"]({ id }).delete();
+    if (error) {
+      const detail = error.value as { error?: string };
+      if (
+        error.status === CONFLICT &&
+        (detail.error === "doses_used" || detail.error === "open_insemination")
+      ) {
+        await reloadHerd(set);
+        return detail.error;
+      }
+      apiFail("excluir o touro", error);
+    }
+    const { expenseIds } = data as { id: string; expenseIds: string[] };
+    set((s) => ({
+      semenBulls: s.semenBulls.filter((b) => b.id !== id),
+      expenses: s.expenses.filter((e) => !expenseIds.includes(e.id)),
+    }));
+    return null;
   },
 
   recordCalving: async (earTag, input) => {

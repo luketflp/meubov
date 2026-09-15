@@ -57,6 +57,11 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
       "sanitary",
     ],
   },
+  "DELETE /api/herd/semen-bulls/:id": {
+    "edit": [
+      "reproduction",
+    ],
+  },
   "DELETE /api/herd/semen-bulls/:id/purchases/:purchaseId": {
     "edit": [
       "reproduction",

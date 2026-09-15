@@ -12,12 +12,15 @@
  * and the toast says so.
  *
  * Editing the bull needs Reprodução edit; a purchase is an expense, so buying
- * and deleting one need Financeiro edit on top. Every R$ — cost per dose, the
- * valor total of each purchase and of all of them — shows only to whoever sees
+ * and deleting one need Financeiro edit on top, as does deleting the bull once
+ * it has a purchase — its purchases and their expenses go with it, and the
+ * farmer lands back on the Touros tab. Every R$ — cost per dose, the valor
+ * total of each purchase and of all of them — shows only to whoever sees
  * Financeiro.
  */
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, SearchX, Trash2 } from "lucide-react";
 import type { Animal, SemenBull, SemenPurchase } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
@@ -37,6 +40,7 @@ import { ResultPill } from "@/components/animal/reproduction-pills";
 import { ResumoCard, useHerdLookup } from "@/components/manejo/detail-shell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
+import { DeleteSemenBullButton } from "@/components/semen/delete-semen-bull-button";
 import { SemenBullDialog } from "@/components/semen/semen-bull-dialog";
 import { SemenPurchaseDialog } from "@/components/semen/semen-purchase-dialog";
 import { dosesLabel, TOUROS_TAB } from "@/components/semen/helpers";
@@ -388,6 +392,8 @@ function BullRecord({ bull }: { bull: SemenBull }) {
   const canEditFinance = useCan("finance", "edit");
   const seeMoney = useCan("finance", "view");
   const canBuy = canEdit && canEditFinance;
+  const canDelete = canEdit && (bull.purchases.length === 0 || canEditFinance);
+  const router = useRouter();
   const inseminations = useMemo(() => bullInseminations(bull.id, animals), [bull.id, animals]);
   const subtitle = [bull.breed, bull.central].filter(Boolean).join(" · ");
 
@@ -412,6 +418,13 @@ function BullRecord({ bull }: { bull: SemenBull }) {
             <>
               <SemenBullDialog bull={bull} />
               {canBuy ? <SemenPurchaseDialog bull={bull} variant="header" /> : null}
+              {canDelete ? (
+                <DeleteSemenBullButton
+                  bull={bull}
+                  variant="header"
+                  onDeleted={() => router.replace(TOUROS_TAB)}
+                />
+              ) : null}
             </>
           ) : undefined
         }
