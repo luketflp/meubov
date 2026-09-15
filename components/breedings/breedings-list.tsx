@@ -2,9 +2,9 @@
 
 /**
  * Reprodução log: every breeding on the farm, newest first, joining the dam to
- * the bull and to what became of the cobertura — its diagnosis and, when
- * pregnant, the calving it forecasts. Table on desktop, stacked cards on
- * mobile — the same shape the Nascimentos log uses.
+ * the lote she is in today, to the bull and to what became of the cobertura —
+ * its diagnosis and, when pregnant, the calving it forecasts. Table on
+ * desktop, stacked cards on mobile — the same shape the Nascimentos log uses.
  *
  * The rows come straight from the herd store: a breeding already travels
  * inside its dam's reproduction record, so this screen needs no request of its
@@ -84,6 +84,24 @@ function BullTag({ row }: { row: BreedingRow }) {
   );
 }
 
+/**
+ * The lote the dam is in today, linked to its ficha. A deleted lot keeps its
+ * name in the snapshot, so it still prints; only an id that resolves to nothing
+ * falls back to a dash.
+ */
+function LotTag({ lotId, lotNames }: { lotId: string; lotNames: ReadonlyMap<string, string> }) {
+  const name = lotNames.get(lotId);
+  if (name === undefined) return <span className="text-ink-soft">—</span>;
+  return (
+    <Link
+      href={`/lots/${lotId}`}
+      className="font-medium text-ink underline-offset-2 hover:underline"
+    >
+      {name}
+    </Link>
+  );
+}
+
 /** Whether the row still takes a diagnosis: no result yet, dam still on the farm. */
 function awaitsDiagnosis(row: BreedingRow): boolean {
   return row.outcome.result === "pending" && row.dam.active;
@@ -97,10 +115,12 @@ function forecastDistance(expectedIso: string, todayIso: string): string {
 export function BreedingsList() {
   const animals = useHerdStore((s) => s.animals);
   const semenBulls = useHerdStore((s) => s.semenBulls);
+  const lots = useHerdStore((s) => s.lots);
   const canEdit = useCan("reproduction", "edit");
   const [filter, setFilter] = useState<BreedingFilter>("all");
   const rows = useMemo(() => recentBreedings(animals, semenBulls), [animals, semenBulls]);
   const shown = useMemo(() => filterBreedings(rows, filter), [rows, filter]);
+  const lotNames = useMemo(() => new Map(lots.map((lot) => [lot.id, lot.name])), [lots]);
   const today = todayISO();
 
   return (
@@ -142,6 +162,7 @@ export function BreedingsList() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Data</TableHead>
+                  <TableHead>Lote</TableHead>
                   <TableHead>Matriz</TableHead>
                   <TableHead>Tipo</TableHead>
                   <TableHead>Touro</TableHead>
@@ -157,6 +178,9 @@ export function BreedingsList() {
                   <TableRow key={row.key}>
                     <TableCell className="font-mono text-ink">
                       {formatDate(row.breeding.date)}
+                    </TableCell>
+                    <TableCell>
+                      <LotTag lotId={row.dam.lotId} lotNames={lotNames} />
                     </TableCell>
                     <TableCell>
                       <Link href={`/herd/${row.dam.id}`} className={linkClass}>
@@ -209,9 +233,14 @@ export function BreedingsList() {
                 className="rounded-lg border border-hairline bg-surface p-4"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <Link href={`/herd/${row.dam.id}`} className={linkClass}>
-                    {row.dam.earTag}
-                  </Link>
+                  <span className="flex min-w-0 items-baseline gap-2">
+                    <Link href={`/herd/${row.dam.id}`} className={linkClass}>
+                      {row.dam.earTag}
+                    </Link>
+                    <span className="truncate text-xs text-ink-soft">
+                      <LotTag lotId={row.dam.lotId} lotNames={lotNames} />
+                    </span>
+                  </span>
                   <span className="font-mono text-xs text-ink-soft">
                     {formatDate(row.breeding.date)}
                   </span>
