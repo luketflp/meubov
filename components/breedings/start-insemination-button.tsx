@@ -3,7 +3,7 @@
 /**
  * "Iniciar inseminação" on the Reprodução screen. The inseminação is a manejo,
  * so this is the "Iniciar manejo" dialog opened straight in insemination mode:
- * pick the lote and the touro principal, then pass the cows at the brete.
+ * pick the lote and the touros, then pass the cows at the brete.
  */
 import { Syringe } from "lucide-react";
 import { RegisterManejoDialog } from "@/components/manejo/register-manejo-dialog";

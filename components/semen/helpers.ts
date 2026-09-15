@@ -1,9 +1,11 @@
 /**
  * Where a semen bull lives in the app and how a cobertura names it. The Touros
  * tab, the bull's page, the Coberturas list and the dam's ficha all read these,
- * so a bull reads and links the same everywhere.
+ * so a bull reads and links the same everywhere. Also the one wording of a
+ * count of doses, and the notice when the touros picked cannot cover the cows.
  */
 import type { Breeding, SemenBull } from "@/lib/types";
+import { formatNumber } from "@/lib/domain/format";
 
 /** The Touros tab of Reprodução. */
 export const TOUROS_TAB = "/reproducao?tab=touros";
@@ -37,4 +39,27 @@ export function bullDisplay(
   return bull
     ? { label: bull.name, href: semenBullHref(bull.id) }
     : { label: breeding.bullEarTag, href: null };
+}
+
+/** "dose" or "doses", agreeing with the count. */
+export function dosesNoun(doses: number): string {
+  return doses === 1 ? "dose" : "doses";
+}
+
+/** "1 dose", "1.200 doses". */
+export function dosesLabel(doses: number): string {
+  return `${formatNumber(doses)} ${dosesNoun(doses)}`;
+}
+
+/**
+ * "Tufão da Serra tem 19 doses para 32 vacas. Escolha mais um touro ou pule as
+ * últimas no brete." while the touros picked for an inseminação have fewer
+ * doses together than cows; more than one bull reads "Os touros escolhidos
+ * têm…". Null while the doses cover the cows, or with no touro picked.
+ */
+export function shortDosesMessage(names: string[], left: number, cows: number): string | null {
+  if (names.length === 0 || cows <= left) return null;
+  const who = names.length === 1 ? `${names[0]} tem` : "Os touros escolhidos têm";
+  const cowsNoun = cows === 1 ? "vaca" : "vacas";
+  return `${who} ${dosesLabel(left)} para ${formatNumber(cows)} ${cowsNoun}. Escolha mais um touro ou pule as últimas no brete.`;
 }

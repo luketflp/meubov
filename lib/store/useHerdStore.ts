@@ -72,8 +72,8 @@ export interface NewManejoSession {
   carcassYieldPct?: number;
   /** Closed price of the batch, or the purchase total of an entry. */
   totalAmountBrl?: number;
-  /** Touro principal of an inseminação session. */
-  semenBullId?: string;
+  /** Touros of an inseminação session, in the order picked. */
+  semenBullIds?: string[];
   notes?: string;
 }
 

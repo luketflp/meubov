@@ -7,6 +7,7 @@ import {
   canRemovePurchase,
   dosesUsed,
   eligibleForInsemination,
+  inseminationBulls,
   predominantLotId,
   purchaseExpenseNotes,
   sessionDosesByBull,
@@ -360,5 +361,25 @@ describe("predominantLotId", () => {
     expect(predominantLotId(["D", "X", "Y"], animals)).toBe("lot-3");
     expect(predominantLotId(["X"], animals)).toBeNull();
     expect(predominantLotId([], animals)).toBeNull();
+  });
+});
+
+describe("inseminationBulls", () => {
+  const tufao = makeSemenBull({ id: "sb-1", name: "Tufão da Serra" });
+  const diamante = makeSemenBull({ id: "sb-2", name: "Diamante MB" });
+
+  it("lists the touros of the session in the order picked", () => {
+    const session = makeManejoSession({ semenBullIds: ["sb-2", "sb-1"] });
+    expect(inseminationBulls(session, [tufao, diamante])).toEqual([diamante, tufao]);
+  });
+
+  it("skips a touro the store no longer has", () => {
+    const session = makeManejoSession({ semenBullIds: ["sb-9", "sb-1"] });
+    expect(inseminationBulls(session, [tufao, diamante])).toEqual([tufao]);
+  });
+
+  it("is empty for a session without touros", () => {
+    expect(inseminationBulls(makeManejoSession(), [tufao])).toEqual([]);
+    expect(inseminationBulls(makeManejoSession({ semenBullIds: [] }), [tufao])).toEqual([]);
   });
 });

@@ -251,8 +251,11 @@ export interface ManejoSession {
   carcassYieldPct?: number;
   /** Closed price in BRL: a sale sold as one lot, or an entry's purchase total. */
   totalAmountBrl?: number;
-  /** Touro principal of an inseminação: pre-selected for every cow at the brete. */
-  semenBullId?: string;
+  /**
+   * Touros of an inseminação, in the order picked: the brete offers these and
+   * no other, with the first one already marked for every cow.
+   */
+  semenBullIds?: string[];
   notes?: string;
   /**
    * Set by the server when it stripped the session's values for a member

@@ -57,8 +57,8 @@ export const NewManejoSessionBody = t.Object({
   carcassYieldPct: t.Optional(t.Number({ exclusiveMinimum: 0, maximum: 100 })),
   /** Closed price of the batch, or the purchase total of an entry. */
   totalAmountBrl: t.Optional(t.Number({ exclusiveMinimum: 0 })),
-  /** Touro principal of an inseminação; the route requires it for that kind. */
-  semenBullId: t.Optional(t.String({ minLength: 1 })),
+  /** Touros of an inseminação, in the order picked; the route requires at least one for that kind. */
+  semenBullIds: t.Optional(t.Array(t.String({ minLength: 1 }))),
   notes: t.Optional(t.String()),
 });
 
@@ -88,7 +88,7 @@ export const EntryAnimalBody = t.Object({
 /** Body of POST /manejo/:id/animals/:animalId/complete (ManejoPassData). */
 export const ManejoPassBody = t.Object({
   weightKg: t.Optional(t.Number({ exclusiveMinimum: 0 })),
-  /** Bull whose dose an inseminação pass uses; the session's touro principal when absent. */
+  /** Bull whose dose an inseminação pass uses; the session's first touro when absent. */
   semenBullId: t.Optional(t.String({ minLength: 1 })),
   notes: t.Optional(t.String()),
 });

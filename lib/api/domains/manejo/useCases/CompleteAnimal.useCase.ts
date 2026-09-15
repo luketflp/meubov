@@ -99,7 +99,7 @@ export class CompleteAnimalUseCase implements CurrUseCase {
           destinationLotId: session.destinationLotId ?? undefined,
           pricePerArroba: session.pricePerArroba ?? undefined,
           carcassYieldPct: session.carcassYieldPct ?? undefined,
-          semenBullId: session.semenBullId ?? undefined,
+          semenBullIds: session.semenBullIds ?? undefined,
         },
         data
       );

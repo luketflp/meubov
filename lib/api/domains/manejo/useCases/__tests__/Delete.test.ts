@@ -234,7 +234,7 @@ const INSEMINATION_ROW = {
   counterparty: null,
   pricePerArroba: null,
   carcassYieldPct: null,
-  semenBullId: "bull-1",
+  semenBullIds: ["bull-1"],
 };
 
 /** One chute entry of the inseminação, as the entries query returns it. */

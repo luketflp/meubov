@@ -34,6 +34,7 @@ import {
 } from "@/lib/domain/weights";
 import { formatArroba, formatCurrency, formatKg, formatPercent } from "@/lib/domain/format";
 import { saleAmount } from "@/lib/domain/movements";
+import { inseminationBulls } from "@/lib/domain/semen";
 import { EntryChuteForm } from "@/components/manejo/entry-chute-form";
 import {
   DosesUsedToday,
@@ -127,7 +128,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
   const destinationName = lots.find((l) => l.id === session.destinationLotId)?.name;
   const bullName = (bullId: string | undefined) =>
     semenBulls.find((bull) => bull.id === bullId)?.name;
-  const mainBullName = bullName(session.semenBullId);
+  const sessionBulls = inseminationBulls(session, semenBulls);
   // A venda per arroba pays the carcass: its chute stays held until the modal
   // collects the rendimento the R$/@ applies to. Only someone who may set it is
   // held; anyone else runs the chute on the default rendimento, and the passes
@@ -212,7 +213,11 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
               }${session.treatment?.responsible ? ` · ${session.treatment.responsible}` : ""}`
             : isInsemination
               ? `Manejo de ${formatDate(session.date)}${
-                  mainBullName ? ` · touro principal ${mainBullName}` : ""
+                  sessionBulls.length > 0
+                    ? ` · ${sessionBulls.length === 1 ? "touro" : "touros"} ${sessionBulls
+                        .map((bull) => bull.name)
+                        .join(", ")}`
+                    : ""
                 }`
               : `${formatDate(session.date)} · ${movementSubtitle(session, destinationName)}`
         }

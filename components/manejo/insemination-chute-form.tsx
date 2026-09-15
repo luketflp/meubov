@@ -2,30 +2,30 @@
 
 /**
  * Inseminação chute form: the cow in the brete takes one dose. The operator
- * picks the bull on a chip — the touro principal comes marked, and the pick
- * stays from cow to cow, so a morning with one bull is one tap per cow — then
- * taps "Inseminar" or "Pular". Each chip reads the bull's doses left live from
- * the store; when the picked bull runs out the pick drops and a notice asks for
- * another, instead of the server refusing the next cow.
+ * picks the bull on a chip — the chips are the touros picked when the
+ * inseminação opened, the first comes marked, and the pick stays from cow to
+ * cow, so a morning with one bull is one tap per cow — then taps "Inseminar"
+ * or "Pular". Each chip reads the bull's doses left live from the store; when
+ * the picked bull runs out the pick drops and a notice asks for another, or
+ * says the touros are over, instead of the server refusing the next cow.
  *
  * Also here, for the runner and the record: the "Doses usadas hoje" line, the
  * cobertura a pass recorded and the title with the lote of the cows.
  */
 import { useMemo, useState, type FormEvent } from "react";
-import { Check, CheckCircle2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import type { Animal, Breeding, Lot, ManejoSession, ManejoSessionAnimal } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { CATEGORY_LABEL } from "@/lib/domain/labels";
-import { predominantLotId, sessionDosesByBull } from "@/lib/domain/semen";
+import { inseminationBulls, predominantLotId, sessionDosesByBull } from "@/lib/domain/semen";
 import { formatNumber } from "@/lib/domain/format";
 import { AttentionNotice } from "@/components/semen/attention-notice";
-import { LOW_STOCK_DOSES, MonoDoses } from "@/components/semen/stock-pill";
+import { BULL_CHIP_GRID, BullChip } from "@/components/semen/bull-chip";
 import { useSemenStock } from "@/components/semen/use-semen-stock";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SectionCard } from "@/components/ui/section-card";
-import { cn } from "@/lib/utils";
 
 /** "Inseminação · Matrizes com cria": the manejo and the lote most of its cows are in now. */
 export function inseminationTitle(session: ManejoSession, animals: Animal[], lots: Lot[]): string {
@@ -79,15 +79,18 @@ export function InseminationChuteForm({ session, entry, onDone }: InseminationCh
   const lots = useHerdStore((s) => s.lots);
   const completeManejoAnimal = useHerdStore((s) => s.completeManejoAnimal);
   const skipManejoAnimal = useHerdStore((s) => s.skipManejoAnimal);
-  const { bulls, dosesLeft } = useSemenStock();
+  const { bulls: registered, dosesLeft } = useSemenStock();
+  // The touros picked when the inseminação opened: the brete offers no other.
+  const bulls = useMemo(() => inseminationBulls(session, registered), [session, registered]);
 
-  const [pickedId, setPickedId] = useState<string | null>(session.semenBullId ?? null);
+  const [pickedId, setPickedId] = useState<string | null>(session.semenBullIds?.[0] ?? null);
   const [note, setNote] = useState("");
   /** True while a pass is in flight — a chute action must not double-fire. */
   const [busy, setBusy] = useState(false);
 
   const picked = bulls.find((bull) => bull.id === pickedId);
   const soldOut = picked !== undefined && dosesLeft(picked.id) <= 0 ? picked : undefined;
+  const allOut = bulls.length > 0 && bulls.every((bull) => dosesLeft(bull.id) <= 0);
   const bullId = picked !== undefined && soldOut === undefined ? picked.id : null;
   const lotName = lots.find((lot) => lot.id === cow?.lotId)?.name;
 
@@ -140,45 +143,27 @@ export function InseminationChuteForm({ session, entry, onDone }: InseminationCh
 
         <fieldset className="grid gap-1.5">
           <legend className="mb-1.5 text-sm font-medium text-ink">Touro</legend>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-            {bulls.map((bull) => {
-              const left = dosesLeft(bull.id);
-              const selected = bull.id === bullId;
-              return (
-                <button
-                  key={bull.id}
-                  type="button"
-                  aria-pressed={selected}
-                  disabled={left <= 0}
-                  onClick={() => setPickedId(bull.id)}
-                  className={cn(
-                    "flex min-h-11 flex-col items-start justify-center rounded-lg border px-3 py-1.5 text-left transition-colors sm:flex-row sm:items-center sm:gap-2.5",
-                    selected
-                      ? "border-brand bg-brand-soft ring-1 ring-brand"
-                      : "border-hairline bg-panel hover:bg-surface",
-                    "disabled:cursor-not-allowed disabled:bg-surface disabled:opacity-50"
-                  )}
-                >
-                  <span className="inline-flex items-center gap-1.5 text-sm font-medium text-ink">
-                    {selected ? <Check className="size-4 text-brand" aria-hidden /> : null}
-                    {bull.name}
-                  </span>
-                  <span
-                    className={cn(
-                      "text-xs whitespace-nowrap",
-                      // Amber at the Touros tab's low-stock mark.
-                      left > 0 && left <= LOW_STOCK_DOSES
-                        ? "font-medium text-attention"
-                        : "text-ink-soft"
-                    )}
-                  >
-                    {left <= 0 ? "sem doses" : <MonoDoses doses={left} />}
-                  </span>
-                </button>
-              );
-            })}
+          <div className={BULL_CHIP_GRID}>
+            {bulls.map((bull) => (
+              <BullChip
+                key={bull.id}
+                bull={bull}
+                left={dosesLeft(bull.id)}
+                selected={bull.id === bullId}
+                onClick={() => setPickedId(bull.id)}
+              />
+            ))}
           </div>
-          {soldOut ? (
+          {bulls.length === 0 ? (
+            <AttentionNotice className="mt-1">
+              Os touros desta inseminação não estão mais cadastrados.
+            </AttentionNotice>
+          ) : allOut ? (
+            <AttentionNotice className="mt-1">
+              {bulls.length === 1 ? `${bulls[0].name} acabou.` : "Os touros desta inseminação acabaram."}{" "}
+              Pule as vacas que faltam ou registre uma compra na aba Touros.
+            </AttentionNotice>
+          ) : soldOut ? (
             <AttentionNotice className="mt-1">
               {soldOut.name} acabou. Escolha outro touro para continuar.
             </AttentionNotice>

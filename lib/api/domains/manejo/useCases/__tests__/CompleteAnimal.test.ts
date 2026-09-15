@@ -84,7 +84,7 @@ const SESSION_ROW = {
   pricePerArroba: null,
   carcassYieldPct: null,
   totalAmountBrl: null,
-  semenBullId: "bull-1",
+  semenBullIds: ["bull-1", "bull-2"],
   notes: null,
   planType: null,
   planName: null,
@@ -184,7 +184,7 @@ describe("completeAnimal — inseminação", () => {
     });
   });
 
-  it("falls back to the touro principal, named by the bull when it has no code", async () => {
+  it("falls back to the first touro of the session, named by the bull when it has no code", async () => {
     state.selectResults = passRows();
     lockBullStock.mockResolvedValue({ bull: BULL_ROW, bought: 10, used: 9, left: 1 });
 

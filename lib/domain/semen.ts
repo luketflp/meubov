@@ -169,6 +169,19 @@ export function bullInseminations(bullId: string, animals: Animal[]): BullInsemi
 /* -------------------------------------------------------------------------- */
 
 /**
+ * The touros of an inseminação as registered, in the order picked; one the
+ * store no longer has is skipped. Empty for any other session.
+ */
+export function inseminationBulls(
+  session: Pick<ManejoSession, "semenBullIds">,
+  bulls: SemenBull[]
+): SemenBull[] {
+  return (session.semenBullIds ?? []).flatMap(
+    (bullId) => bulls.find((bull) => bull.id === bullId) ?? []
+  );
+}
+
+/**
  * Doses one inseminação used, per bull id: each done pass counts once for the
  * bull of the cobertura it recorded (`breedingId`). A pass whose cobertura is
  * gone, or names no registered bull, counts for nobody.

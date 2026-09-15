@@ -50,9 +50,9 @@ export const manejoController = new Elysia({ prefix: "/manejo" })
       ) {
         return status(422, { error: "destination_required" });
       }
-      // The touro principal is what every cow of an inseminação starts with.
-      if (body.kind === "insemination" && body.semenBullId === undefined) {
-        return status(422, { error: "semen_bull_required" });
+      // An inseminação is opened with the touros the brete will offer.
+      if (body.kind === "insemination" && (body.semenBullIds?.length ?? 0) === 0) {
+        return status(422, { error: "semen_bulls_required" });
       }
       // A venda or entrada is opened with its price by whoever holds the money.
       if (startNeedsFinance(body) && !can(permissions, "finance", "edit")) {

@@ -60,7 +60,7 @@ const INSEMINATION = {
   kind: "insemination" as const,
   earTags: ["V-01", "V-02"],
   weighing: false,
-  semenBullId: "bull-1",
+  semenBullIds: ["bull-1", "bull-2"],
 };
 
 const COWS = [
@@ -75,15 +75,18 @@ beforeEach(() => {
 });
 
 describe("startSession — inseminação", () => {
-  it("opens the session with its touro principal and every cow pending", async () => {
-    state.selectResults = [COWS, [{ id: "bull-1" }]];
+  it("opens the session with its touros, in the order picked, and every cow pending", async () => {
+    state.selectResults = [COWS, [{ id: "bull-2" }, { id: "bull-1" }]];
 
     const result = await new StartSessionUseCase().run({ farmId: 7, input: INSEMINATION });
 
-    expect(state.inserts[0][0]).toMatchObject({ kind: "insemination", semenBullId: "bull-1" });
+    expect(state.inserts[0][0]).toMatchObject({
+      kind: "insemination",
+      semenBullIds: ["bull-1", "bull-2"],
+    });
     expect(result).toMatchObject({
       kind: "insemination",
-      semenBullId: "bull-1",
+      semenBullIds: ["bull-1", "bull-2"],
       animals: [
         { earTag: "V-01", outcome: "pending" },
         { earTag: "V-02", outcome: "pending" },
@@ -91,10 +94,34 @@ describe("startSession — inseminação", () => {
     });
   });
 
-  it("refuses a bull that is not of this farm", async () => {
-    state.selectResults = [COWS, []];
+  it("keeps a touro picked twice once", async () => {
+    state.selectResults = [COWS, [{ id: "bull-1" }]];
+
+    const result = await new StartSessionUseCase().run({
+      farmId: 7,
+      input: { ...INSEMINATION, semenBullIds: ["bull-1", "bull-1"] },
+    });
+
+    expect(state.inserts[0][0]).toMatchObject({ semenBullIds: ["bull-1"] });
+    expect(result).toMatchObject({ semenBullIds: ["bull-1"] });
+  });
+
+  it("refuses a bull that is not of this farm, even beside one that is", async () => {
+    state.selectResults = [COWS, [{ id: "bull-1" }]];
 
     const result = await new StartSessionUseCase().run({ farmId: 7, input: INSEMINATION });
+
+    expect(result).toBe("bull_not_found");
+    expect(state.inserts).toEqual([]);
+  });
+
+  it("refuses an inseminação without a touro", async () => {
+    state.selectResults = [COWS];
+
+    const result = await new StartSessionUseCase().run({
+      farmId: 7,
+      input: { ...INSEMINATION, semenBullIds: [] },
+    });
 
     expect(result).toBe("bull_not_found");
     expect(state.inserts).toEqual([]);
@@ -103,7 +130,7 @@ describe("startSession — inseminação", () => {
   it("refuses a line with a male in it", async () => {
     state.selectResults = [
       [COWS[0], { id: "a-9", earTag: "T-09", sex: "male" }],
-      [{ id: "bull-1" }],
+      [{ id: "bull-1" }, { id: "bull-2" }],
     ];
 
     const result = await new StartSessionUseCase().run({
@@ -125,8 +152,8 @@ describe("startSession — inseminação", () => {
 
     // One select: the herd. No bull lookup, and the male is welcome on the scale.
     expect(state.selects).toBe(1);
-    expect(state.inserts[0][0].semenBullId).toBeUndefined();
+    expect(state.inserts[0][0].semenBullIds).toBeUndefined();
     expect(result).toMatchObject({ kind: "weighing" });
-    expect(result).not.toHaveProperty("semenBullId", "bull-1");
+    expect(result).not.toHaveProperty("semenBullIds", ["bull-1", "bull-2"]);
   });
 });

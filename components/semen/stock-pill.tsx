@@ -4,24 +4,14 @@
  * reads a bull's stock through it, so a glance down the column tells which
  * semen to buy.
  *
- * Also the one wording of a count of doses, as text or with the count in mono,
- * that every screen of semen uses.
+ * Also a count of doses with the number in mono, for running text.
  */
 import { formatNumber } from "@/lib/domain/format";
+import { dosesLabel, dosesNoun } from "@/components/semen/helpers";
 import { cn } from "@/lib/utils";
 
 /** At or below this many doses left, the stock asks for a purchase. */
 export const LOW_STOCK_DOSES = 10;
-
-/** "dose" or "doses", agreeing with the count. */
-function dosesNoun(doses: number): string {
-  return doses === 1 ? "dose" : "doses";
-}
-
-/** "1 dose", "1.200 doses". */
-export function dosesLabel(doses: number): string {
-  return `${formatNumber(doses)} ${dosesNoun(doses)}`;
-}
 
 /** {@link dosesLabel} for running text: the count in mono, the word as the text around it. */
 export function MonoDoses({ doses, className }: { doses: number; className?: string }) {

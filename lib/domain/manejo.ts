@@ -60,8 +60,8 @@ export interface PassContext {
   pricePerArroba?: number;
   /** Rendimento de carcaça (%) pricing the arrobas of a venda. */
   carcassYieldPct?: number;
-  /** Touro principal of an inseminação, used when the pass picks no bull. */
-  semenBullId?: string;
+  /** Touros of an inseminação; the first is used when the pass picks no bull. */
+  semenBullIds?: string[];
 }
 
 /** Default session name when there is no sanitary plan (weighing-only). */
@@ -95,7 +95,7 @@ export function sessionName(
  * closed as one lot has no per-animal value, only the session total.
  *
  * An inseminação records one IATF cobertura per cow, with the bull picked at the
- * brete or, when the pass names none, the session's touro principal. Without
+ * brete or, when the pass names none, the first touro of the session. Without
  * either there is no dose to take, so no cobertura.
  */
 export function buildPassEffects(
@@ -133,7 +133,7 @@ export function buildPassEffects(
     }
   }
   if (session.kind === "insemination") {
-    const semenBullId = data.semenBullId || session.semenBullId;
+    const semenBullId = data.semenBullId || session.semenBullIds?.[0];
     if (semenBullId) {
       effects.breeding = { date: session.date, type: "timedAI", semenBullId };
     }

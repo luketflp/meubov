@@ -121,7 +121,7 @@ describe("manejoHistory", () => {
       name: "Inseminação",
       weighing: false,
       pricePerArroba: undefined,
-      semenBullId: "bull-1",
+      semenBullIds: ["bull-1"],
       animals: [
         { earTag: "BR-001", outcome: "done", breedingId: "br-1" },
         { earTag: "BR-002", outcome: "skipped" },
@@ -239,17 +239,21 @@ describe("validateManejo", () => {
     pricing: "perArroba",
     pricePerArroba: "",
     totalAmountBrl: "",
-    semenBullId: "bull-1",
+    semenBullIds: ["bull-1"],
     ...overrides,
   });
 
-  it("accepts an inseminação with a touro principal and a cow, without a product name", () => {
+  it("accepts an inseminação with a touro and a cow, without a product name", () => {
     expect(validateManejo(fields())).toEqual({});
   });
 
-  it("asks for the touro principal of an inseminação", () => {
-    expect(validateManejo(fields({ semenBullId: "" }))).toEqual({
-      semenBullId: "Selecione o touro principal.",
+  it("accepts an inseminação with more than one touro", () => {
+    expect(validateManejo(fields({ semenBullIds: ["bull-1", "bull-2"] }))).toEqual({});
+  });
+
+  it("asks for at least one touro on an inseminação", () => {
+    expect(validateManejo(fields({ semenBullIds: [] }))).toEqual({
+      semenBullIds: "Selecione ao menos um touro.",
     });
   });
 
@@ -260,7 +264,7 @@ describe("validateManejo", () => {
   });
 
   it("keeps asking for an animal on the other kinds, with no bull needed", () => {
-    expect(validateManejo(fields({ action: "weighing", earTags: [], semenBullId: "" }))).toEqual({
+    expect(validateManejo(fields({ action: "weighing", earTags: [], semenBullIds: [] }))).toEqual({
       earTags: "Selecione ao menos um animal.",
     });
   });

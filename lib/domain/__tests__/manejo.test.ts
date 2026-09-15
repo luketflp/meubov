@@ -151,7 +151,7 @@ describe("buildPassEffects on an inseminação", () => {
     date: "2026-08-02",
     kind: "insemination" as const,
     weighing: false,
-    semenBullId: "bull-1",
+    semenBullIds: ["bull-1", "bull-3"],
   };
 
   it("records an IATF cobertura with the bull picked at the brete", () => {
@@ -163,7 +163,7 @@ describe("buildPassEffects on an inseminação", () => {
     });
   });
 
-  it("falls back to the touro principal when the pass names no bull", () => {
+  it("falls back to the first touro of the session when the pass names no bull", () => {
     expect(buildPassEffects(insemination, {}).breeding).toEqual({
       date: "2026-08-02",
       type: "timedAI",
@@ -172,8 +172,8 @@ describe("buildPassEffects on an inseminação", () => {
   });
 
   it("records no cobertura without any bull", () => {
-    const effects = buildPassEffects({ ...insemination, semenBullId: undefined }, {});
-    expect(effects.breeding).toBeUndefined();
+    expect(buildPassEffects({ ...insemination, semenBullIds: undefined }, {}).breeding).toBeUndefined();
+    expect(buildPassEffects({ ...insemination, semenBullIds: [] }, {}).breeding).toBeUndefined();
   });
 
   it("weighs only when the session weighs", () => {
@@ -192,11 +192,11 @@ describe("buildPassEffects on an inseminação", () => {
 
   it("never records a cobertura on the other kinds", () => {
     expect(
-      buildPassEffects({ ...session, semenBullId: "bull-1" }, { semenBullId: "bull-1" }).breeding
+      buildPassEffects({ ...session, semenBullIds: ["bull-1"] }, { semenBullId: "bull-1" }).breeding
     ).toBeUndefined();
     expect(
       buildPassEffects(
-        { date: "2026-08-02", kind: "weighing", weighing: true, semenBullId: "bull-1" },
+        { date: "2026-08-02", kind: "weighing", weighing: true, semenBullIds: ["bull-1"] },
         { weightKg: 300, semenBullId: "bull-1" }
       ).breeding
     ).toBeUndefined();

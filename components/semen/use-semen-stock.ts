@@ -1,8 +1,8 @@
 /**
  * The registered semen bulls and the doses each has left, live from the store.
  * Counted once per change of the herd, not once per bull per render: every
- * screen that lists bulls with their doses (the brete's chips, "Touro
- * principal", the cobertura's bull select, "Registrar compra") reads it here.
+ * screen that lists bulls with their doses (the brete's chips, "Touros" of an
+ * inseminação, the cobertura's bull select, "Registrar compra") reads it here.
  */
 import { useMemo } from "react";
 import type { SemenBull } from "@/lib/types";

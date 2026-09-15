@@ -600,8 +600,8 @@ export const manejoSessions = pgTable(
     carcassYieldPct: numeric("carcass_yield_pct", { mode: "number" }),
     /** Closed price in BRL: a sale sold as one lot, or an entry's purchase total. */
     totalAmountBrl: numeric("total_amount_brl", { mode: "number" }),
-    /** Touro principal of an insemination, pre-selected for every cow. */
-    semenBullId: text("semen_bull_id").references(() => semenBulls.id),
+    /** Touros of an insemination, in the order picked; the first is pre-selected for every cow. */
+    semenBullIds: jsonb("semen_bull_ids").$type<string[]>(),
     planType: treatmentTypeEnum("plan_type"),
     planName: text("plan_name"),
     planWithdrawalDays: integer("plan_withdrawal_days"),

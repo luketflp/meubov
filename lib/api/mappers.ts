@@ -292,7 +292,7 @@ export function toManejoSession(
     pricePerArroba: orNothing(row.pricePerArroba),
     carcassYieldPct: orNothing(row.carcassYieldPct),
     totalAmountBrl: orNothing(row.totalAmountBrl),
-    semenBullId: orNothing(row.semenBullId),
+    semenBullIds: orNothing(row.semenBullIds),
     notes: orNothing(row.notes),
   };
 }

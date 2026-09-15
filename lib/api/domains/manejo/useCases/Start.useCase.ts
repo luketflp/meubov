@@ -49,9 +49,10 @@ type CurrUseCase = _UseCase<StartSessionUseCaseProps, StartSessionUseCaseRespons
  * (see `registerEntryAnimal`). Any destination is resolved inside this farm
  * before the session row is written.
  *
- * An inseminação takes only females and keeps its touro principal, a semen
- * bull of this farm; any other kind ignores a bull sent along. Its stock is not
- * checked here: each pass takes its own dose at the chute.
+ * An inseminação takes only females and keeps its touros, semen bulls of this
+ * farm, each once and in the order picked; any other kind ignores bulls sent
+ * along. Their stock is not checked here: each pass takes its own dose at the
+ * chute.
  */
 export class StartSessionUseCase implements CurrUseCase {
   private repository: RepositoryType;
@@ -73,18 +74,17 @@ export class StartSessionUseCase implements CurrUseCase {
       const idByEarTag = new Map(herd.map((a) => [a.earTag, a.id]));
       if (input.earTags.some((earTag) => !idByEarTag.has(earTag))) return null;
 
-      const semenBullId = input.kind === "insemination" ? input.semenBullId : undefined;
+      const semenBullIds =
+        input.kind === "insemination" ? [...new Set(input.semenBullIds ?? [])] : undefined;
       if (input.kind === "insemination") {
         if (herd.some((a) => a.sex !== "female")) return "not_female";
-        const [bull] =
-          semenBullId === undefined
-            ? []
-            : await tx
-                .select({ id: semenBulls.id })
-                .from(semenBulls)
-                .where(and(eq(semenBulls.id, semenBullId), eq(semenBulls.farmId, farmId)))
-                .limit(1);
-        if (!bull) return "bull_not_found";
+        // No touro at all is no inseminação; one of another farm refuses the whole line.
+        if (semenBullIds === undefined || semenBullIds.length === 0) return "bull_not_found";
+        const found = await tx
+          .select({ id: semenBulls.id })
+          .from(semenBulls)
+          .where(and(inArray(semenBulls.id, semenBullIds), eq(semenBulls.farmId, farmId)));
+        if (found.length !== semenBullIds.length) return "bull_not_found";
       }
 
       if (input.destinationLotId !== undefined) {
@@ -109,7 +109,7 @@ export class StartSessionUseCase implements CurrUseCase {
           pricePerArroba: input.pricePerArroba,
           carcassYieldPct: input.carcassYieldPct,
           totalAmountBrl: input.totalAmountBrl,
-          semenBullId,
+          semenBullIds,
           planType: plan?.type,
           planName: plan?.name,
           planWithdrawalDays: plan?.withdrawalDays,

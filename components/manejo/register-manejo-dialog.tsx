@@ -5,8 +5,8 @@
  * the selected animals. A sanitary action (vaccine, deworming, medication,
  * exam) captures product, dose, withdrawal, responsible, cost and optional
  * booster date; weighing is a toggle (or the session itself). An inseminação
- * picks the lote and the touro principal first and lists only the cows it can
- * take (see insemination-fields.tsx). Nothing is applied here: the animals are
+ * picks the lote and the touros first and lists only the cows it can take (see
+ * insemination-fields.tsx). Nothing is applied here: the animals are
  * handled one by one on the session screen, as they pass the chute. Validation
  * is a local pure function (validateManejo).
  */
@@ -63,7 +63,7 @@ import {
   type ManejoFields,
   type SalePricing,
 } from "@/components/manejo/helpers";
-import { MainBullField, MainBullShortNotice } from "@/components/manejo/insemination-fields";
+import { BullsField, BullsShortNotice } from "@/components/manejo/insemination-fields";
 import { cn } from "@/lib/utils";
 
 /** Sentinel of the "all" option in the lot/category filters. */
@@ -95,7 +95,7 @@ function createInitialFields(action: ManejoAction): ManejoFields {
     pricing: "perArroba",
     pricePerArroba: "",
     totalAmountBrl: "",
-    semenBullId: "",
+    semenBullIds: [],
   };
 }
 
@@ -322,7 +322,7 @@ export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoD
       earTags: fields.earTags,
       weighing: sessionWeighs(fields),
     };
-    if (inseminates) input.semenBullId = fields.semenBullId;
+    if (inseminates) input.semenBullIds = fields.semenBullIds;
     if (moves) {
       const counterparty = fields.counterparty.trim();
       if (fields.action === "transfer" || fields.action === "entry") {
@@ -430,10 +430,10 @@ export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoD
                     invernadaNameByLot={invernadaNameByLot}
                   />
                 </div>
-                <MainBullField
-                  value={fields.semenBullId}
-                  onChange={(semenBullId) => setFields((f) => ({ ...f, semenBullId }))}
-                  error={errors.semenBullId}
+                <BullsField
+                  value={fields.semenBullIds}
+                  onChange={(semenBullIds) => setFields((f) => ({ ...f, semenBullIds }))}
+                  error={errors.semenBullIds}
                   // Alone on its row when the type is fixed and Data shares the row with Lote.
                   className={cn(initialAction !== undefined && "sm:col-span-2")}
                 />
@@ -787,8 +787,8 @@ export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoD
                 {selectedLabel(fields.earTags.length, inseminates)}.
               </p>
             ) : null}
-            {inseminates && fields.semenBullId !== "" ? (
-              <MainBullShortNotice bullId={fields.semenBullId} cows={fields.earTags.length} />
+            {inseminates && fields.semenBullIds.length > 0 ? (
+              <BullsShortNotice bullIds={fields.semenBullIds} cows={fields.earTags.length} />
             ) : null}
             <ErrorMessage message={errors.earTags} />
           </fieldset>

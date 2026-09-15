@@ -85,7 +85,7 @@ const SESSION_ROW = {
   status: "open",
   kind: "insemination",
   weighing: false,
-  semenBullId: "bull-1",
+  semenBullIds: ["bull-1"],
 };
 
 const DONE_ENTRY = {

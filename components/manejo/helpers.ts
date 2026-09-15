@@ -399,8 +399,8 @@ export interface ManejoFields {
   pricePerArroba: string;
   /** Closed value of the batch (venda) or the purchase total (entrada). */
   totalAmountBrl: string;
-  /** Touro principal of an inseminação; empty string until one is picked. */
-  semenBullId: string;
+  /** Touros of an inseminação, in the order picked; empty until one is. */
+  semenBullIds: string[];
 }
 
 export type ManejoErrors = Partial<
@@ -414,7 +414,7 @@ export type ManejoErrors = Partial<
     | "destinationLotId"
     | "pricePerArroba"
     | "totalAmountBrl"
-    | "semenBullId",
+    | "semenBullIds",
     string
   >
 >;
@@ -465,8 +465,8 @@ export function validateManejo(fields: ManejoFields): ManejoErrors {
   if (fields.action === "entry" && positiveNumber(fields.totalAmountBrl) === null) {
     errors.totalAmountBrl = "Informe o valor total da compra.";
   }
-  if (fields.action === "insemination" && fields.semenBullId === "") {
-    errors.semenBullId = "Selecione o touro principal.";
+  if (fields.action === "insemination" && fields.semenBullIds.length === 0) {
+    errors.semenBullIds = "Selecione ao menos um touro.";
   }
 
   if (sanitary) {

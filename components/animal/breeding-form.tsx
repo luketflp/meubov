@@ -19,7 +19,7 @@ import { useToast } from "@/components/providers/Toasts";
 import type { BreedingType, SemenBull } from "@/lib/types";
 import { todayISO } from "@/lib/domain/dates";
 import { BREEDING_TYPE_LABEL } from "@/lib/domain/labels";
-import { dosesLabel } from "@/components/semen/stock-pill";
+import { dosesLabel } from "@/components/semen/helpers";
 import { useSemenStock } from "@/components/semen/use-semen-stock";
 import { Button } from "@/components/ui/button";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
