@@ -145,6 +145,11 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
       "reproduction",
     ],
   },
+  "POST /api/herd/animals/:id/reactivate": {
+    "edit": [
+      "herd",
+    ],
+  },
   "POST /api/herd/animals/:id/weighings": {
     "edit": [
       "herd",

@@ -34,6 +34,7 @@ exports[`herd API route table > exposes exactly the documented routes 1`] = `
   "POST /api/herd/animals/:id/calvings",
   "POST /api/herd/animals/:id/deactivate",
   "POST /api/herd/animals/:id/diagnoses",
+  "POST /api/herd/animals/:id/reactivate",
   "POST /api/herd/animals/:id/weighings",
   "POST /api/herd/animals/batch",
   "POST /api/herd/animals/import",

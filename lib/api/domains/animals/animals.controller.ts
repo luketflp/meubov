@@ -13,6 +13,7 @@ import { todayISO } from "@/lib/domain/dates";
 import { AddAnimalUseCase } from "./useCases/Add.useCase";
 import { AddAnimalsUseCase } from "./useCases/AddBatch.useCase";
 import { DeactivateAnimalUseCase } from "./useCases/Deactivate.useCase";
+import { ReactivateAnimalUseCase } from "./useCases/Reactivate.useCase";
 import { EditWeighingUseCase } from "./useCases/EditWeighing.useCase";
 import { ImportAnimalsUseCase } from "./useCases/Import.useCase";
 import { RecordWeighingUseCase } from "./useCases/RecordWeighing.useCase";
@@ -96,6 +97,16 @@ export const animalsController = new Elysia({ prefix: "/animals" })
       };
     },
     { farm: true, body: DeactivateAnimalBody }
+  )
+  .post(
+    "/:id/reactivate",
+    async ({ farmId, params, status }) => {
+      const result = await new ReactivateAnimalUseCase().run({ farmId, animalId: params.id });
+      if (result === "animal_not_found") return status(404, { error: result });
+      if (result !== true) return status(409, { error: result });
+      return { id: params.id };
+    },
+    { farm: true }
   )
   .post(
     "/:id/weighings",
