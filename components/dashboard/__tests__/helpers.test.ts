@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  balancedSplit,
   dayMonth,
   earTagList,
   fromDayText,
@@ -61,5 +62,19 @@ describe("invernadaLabel", () => {
   it("abbreviates the invernada with its code and name", () => {
     expect(invernadaLabel({ code: "01", name: "Baixada" })).toBe("Inv. 01 Baixada");
     expect(invernadaLabel({ code: "03" })).toBe("Inv. 03");
+  });
+});
+
+describe("balancedSplit", () => {
+  it("cuts the blocks, in order, where the taller column is shortest", () => {
+    expect(balancedSplit([220, 100, 100, 160, 100])).toBe(2);
+    expect(balancedSplit([100, 200])).toBe(1);
+    expect(balancedSplit([300, 50, 50])).toBe(1);
+    expect(balancedSplit([50, 50, 300])).toBe(2);
+  });
+
+  it("keeps fewer than two blocks in one column", () => {
+    expect(balancedSplit([120])).toBe(1);
+    expect(balancedSplit([])).toBe(0);
   });
 });

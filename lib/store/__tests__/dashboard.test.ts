@@ -15,6 +15,7 @@ import {
   calvingCalendar,
   farmAgenda,
   herdFlow,
+  lotsUpToDate,
   nextCalvings,
   seasonReproduction,
   type AgendaInput,
@@ -197,6 +198,36 @@ describe("farmAgenda", () => {
     expect(agenda[0]).toMatchObject({ lotId: "lot-cria", heads: 2, invernada: invernadas[0] });
     expect(agenda[1].invernada).toBeNull();
     expect(agenda[3]).toMatchObject({ lotId: null, name: null, heads: 1 });
+  });
+});
+
+describe("lotsUpToDate", () => {
+  it("lists the lotes with active animals the agenda leaves out, by name", () => {
+    const animals = [
+      steer("G1", "lot-garrotes"),
+      cow("C1", "lot-cria"),
+      cow("C2", "lot-cria"),
+      steer("N1", "lot-novilhas"),
+    ];
+    const treatments = [makeTreatment({ id: "t1", animalEarTag: "N1", name: "Raiva", date: TODAY })];
+    const data = input({ animals, treatments });
+
+    expect(lotsUpToDate(data, farmAgenda(data, TODAY))).toEqual([
+      { lotId: "lot-garrotes", name: "Garrotes", invernada: null, heads: 1 },
+      { lotId: "lot-cria", name: "Matrizes com cria", invernada: invernadas[0], heads: 2 },
+    ]);
+  });
+
+  it("leaves out lotes with no active animal and deleted lotes", () => {
+    const data = input({
+      animals: [
+        steer("G1", "lot-garrotes", { active: false }),
+        steer("V1", "lot-velho"),
+      ],
+      lots: [...lots, { id: "lot-velho", name: "Velho", deletedAt: "2026-09-01T00:00:00Z" }],
+    });
+
+    expect(lotsUpToDate(data, farmAgenda(data, TODAY))).toEqual([]);
   });
 });
 

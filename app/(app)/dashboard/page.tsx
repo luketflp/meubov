@@ -22,6 +22,7 @@ import {
   calvingCalendar,
   farmAgenda,
   herdFlow,
+  lotsUpToDate,
   nextCalvings,
   seasonReproduction,
 } from "@/lib/store/dashboard";
@@ -110,10 +111,12 @@ export default function DashboardPage() {
     () => new Map(active.map((animal) => [animal.earTag, animal])),
     [active]
   );
-  const agenda = useMemo(
-    () => farmAgenda({ animals, treatments, lots, invernadas, lotPlacements }, today),
-    [animals, treatments, lots, invernadas, lotPlacements, today]
+  const agendaInput = useMemo(
+    () => ({ animals, treatments, lots, invernadas, lotPlacements }),
+    [animals, treatments, lots, invernadas, lotPlacements]
   );
+  const agenda = useMemo(() => farmAgenda(agendaInput, today), [agendaInput, today]);
+  const quietLots = useMemo(() => lotsUpToDate(agendaInput, agenda), [agendaInput, agenda]);
 
   const flow = useMemo(() => herdFlow(animals, movements, today), [animals, movements, today]);
   const byCategory = useMemo(() => countByCategory(active), [active]);
@@ -175,32 +178,31 @@ export default function DashboardPage() {
 
       <FirstStepsBanner />
 
-      {/* Below lg the right stack dissolves into the column (display: contents),
-          so the open sessions can come before the agenda on the phone. */}
-      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-12 lg:items-start">
-        <div className="lg:col-span-7">
-          <FarmAgenda
-            lots={agenda}
-            animalsByEarTag={animalsByEarTag}
-            todayIso={today}
-            onComplete={canCompleteTreatments ? onComplete : undefined}
-          />
-        </div>
-        <div className="contents lg:col-span-5 lg:flex lg:flex-col lg:gap-4">
-          <OpenSessionsStack className="order-first lg:order-none" />
-          <HerdCard
-            headCount={active.length}
-            change12m={flow.end - flow.start}
-            byCategory={byCategory}
-            averageAdg={averageAdg}
-            adgChange={adgChange(adgSeries)}
-            stockingRate={stockingRate}
-            stockingClass={classifyStockingRate(stockingRate)}
-            totalKg={totalKg}
-            totalArrobas={kgToArroba(totalKg)}
-          />
-          <HerdFlowCard flow={flow} />
-        </div>
+      <OpenSessionsStack />
+
+      <FarmAgenda
+        lots={agenda}
+        animalsByEarTag={animalsByEarTag}
+        todayIso={today}
+        quietLots={quietLots}
+        onComplete={canCompleteTreatments ? onComplete : undefined}
+      />
+
+      {/* Side by side the two cards stretch to one height. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <HerdCard
+          className="lg:col-span-5"
+          headCount={active.length}
+          change12m={flow.end - flow.start}
+          byCategory={byCategory}
+          averageAdg={averageAdg}
+          adgChange={adgChange(adgSeries)}
+          stockingRate={stockingRate}
+          stockingClass={classifyStockingRate(stockingRate)}
+          totalKg={totalKg}
+          totalArrobas={kgToArroba(totalKg)}
+        />
+        <HerdFlowCard className="lg:col-span-7" flow={flow} />
       </div>
 
       <SectionDivider title="Reprodução e pastos" />

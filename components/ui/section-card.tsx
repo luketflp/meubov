@@ -8,6 +8,8 @@ interface SectionCardProps {
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  /** Classes for the padded body, e.g. to lay it out as a column. */
+  bodyClassName?: string;
   /** Anchor for links and scrolling to this card. */
   id?: string;
   /**
@@ -24,6 +26,7 @@ export function SectionCard({
   action,
   children,
   className,
+  bodyClassName,
   id,
   titleAs: Heading = "h2",
 }: SectionCardProps) {
@@ -36,7 +39,7 @@ export function SectionCard({
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </header>
-      <div className="p-4">{children}</div>
+      <div className={cn("p-4", bodyClassName)}>{children}</div>
     </section>
   );
 }

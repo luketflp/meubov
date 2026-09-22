@@ -24,7 +24,7 @@ const VALUE: Record<StepKind, string> = {
   end: "text-ink",
 };
 
-export function HerdFlowCard({ flow }: { flow: HerdFlow }) {
+export function HerdFlowCard({ flow, className }: { flow: HerdFlow; className?: string }) {
   const steps: { label: string; value: number; kind: StepKind }[] = [
     { label: `Em ${formatDate(flow.since)}`, value: flow.start, kind: "start" },
     { label: "Nascimentos", value: flow.births, kind: "in" },
@@ -55,7 +55,7 @@ export function HerdFlowCard({ flow }: { flow: HerdFlow }) {
   });
 
   return (
-    <SectionCard title="Evolução do rebanho" subtitle="últimos 12 meses">
+    <SectionCard title="Evolução do rebanho" subtitle="últimos 12 meses" className={className}>
       <ul className="flex flex-col gap-1">
         {rows.map((row) => {
           const strong = row.kind === "start" || row.kind === "end";

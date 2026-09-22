@@ -215,6 +215,42 @@ export function farmAgenda(input: AgendaInput, todayIso: string): AgendaLot[] {
   });
 }
 
+/** A lote with active animals and nothing on the agenda. */
+export interface QuietLot {
+  lotId: string;
+  name: string;
+  /** The invernada the lote stands on today. */
+  invernada: Invernada | null;
+  /** Active animals in the lote today. */
+  heads: number;
+}
+
+/**
+ * The lotes the agenda leaves out: not deleted, with active animals today and
+ * nothing due, by name. Beside a short agenda they tell the rest is in order.
+ */
+export function lotsUpToDate(input: AgendaInput, agenda: AgendaLot[]): QuietLot[] {
+  const onAgenda = new Set(agenda.map((group) => group.lotId));
+  const invernadaById = new Map(input.invernadas.map((item) => [item.id, item]));
+  const heads = new Map<string, number>();
+  for (const animal of activeAnimals(input.animals)) {
+    heads.set(animal.lotId, (heads.get(animal.lotId) ?? 0) + 1);
+  }
+
+  return input.lots
+    .filter((lot) => lot.deletedAt == null && !onAgenda.has(lot.id) && heads.has(lot.id))
+    .map((lot) => {
+      const placement = currentPlacementForLot(lot.id, input.lotPlacements);
+      return {
+        lotId: lot.id,
+        name: lot.name,
+        invernada: placement ? (invernadaById.get(placement.invernadaId) ?? null) : null,
+        heads: heads.get(lot.id) ?? 0,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { numeric: true }));
+}
+
 /** The herd's flow over the 12-month window, from its start to today. */
 export interface HerdFlow {
   /** First day of the window: the first of the month 11 months before today's. */

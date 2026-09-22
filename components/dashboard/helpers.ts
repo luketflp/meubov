@@ -82,3 +82,25 @@ export function fromDayText(date: string, todayIso: string): string {
 export function invernadaLabel(invernada: Pick<Invernada, "code" | "name">): string {
   return invernada.name ? `Inv. ${invernada.code} ${invernada.name}` : `Inv. ${invernada.code}`;
 }
+
+/**
+ * Where to cut blocks of these heights into two columns, in order, so the
+ * taller column is as short as it can be: the first column takes the blocks
+ * before the cut. Fewer than two blocks stay in one column.
+ */
+export function balancedSplit(heights: number[]): number {
+  if (heights.length < 2) return heights.length;
+  const total = heights.reduce((sum, height) => sum + height, 0);
+  let cut = 1;
+  let tallest = Infinity;
+  let left = 0;
+  for (let index = 1; index < heights.length; index++) {
+    left += heights[index - 1];
+    const taller = Math.max(left, total - left);
+    if (taller < tallest) {
+      cut = index;
+      tallest = taller;
+    }
+  }
+  return cut;
+}

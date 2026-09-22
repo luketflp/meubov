@@ -38,6 +38,7 @@ interface HerdCardProps {
   stockingClass: StockingRateClass;
   totalKg: number;
   totalArrobas: number;
+  className?: string;
 }
 
 function capitalized(text: string): string {
@@ -79,14 +80,18 @@ export function HerdCard({
   stockingClass,
   totalKg,
   totalArrobas,
+  className,
 }: HerdCardProps) {
   const categories = (Object.entries(byCategory) as [Category, number][])
     .filter(([, count]) => count > 0)
     .sort((a, b) => b[1] - a[1]);
 
   return (
+    // Stretched beside the Evolução, the three figures keep to the card's floor.
     <SectionCard
       title="Rebanho"
+      className={cn("flex flex-col", className)}
+      bodyClassName="flex flex-1 flex-col"
       action={
         <Link
           href="/herd"
@@ -135,6 +140,7 @@ export function HerdCard({
         </>
       ) : null}
 
+      <span aria-hidden className="flex-1" />
       <dl className="-mx-4 mt-4 -mb-4 grid grid-cols-3 border-t border-hairline">
         <Stat
           label="GMD"
