@@ -19,6 +19,7 @@ import { useHerdStore } from "@/lib/store/useHerdStore";
 import { CATEGORY_LABEL } from "@/lib/domain/labels";
 import { inseminationBulls, predominantLotId, sessionDosesByBull } from "@/lib/domain/semen";
 import { formatNumber } from "@/lib/domain/format";
+import { breedLabel, ChuteBreed } from "@/components/manejo/chute-breed";
 import { AttentionNotice } from "@/components/semen/attention-notice";
 import { BULL_CHIP_GRID, BullChip } from "@/components/semen/bull-chip";
 import { useSemenStock } from "@/components/semen/use-semen-stock";
@@ -136,9 +137,11 @@ export function InseminationChuteForm({ session, entry, onDone }: InseminationCh
           {cow ? (
             <span className="text-sm text-ink-soft">
               {CATEGORY_LABEL[cow.category]}
+              {` · ${breedLabel(cow)}`}
               {lotName ? ` · ${lotName}` : ""}
             </span>
           ) : null}
+          {cow ? <ChuteBreed key={cow.earTag} animal={cow} /> : null}
         </div>
 
         <fieldset className="grid gap-1.5">

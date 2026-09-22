@@ -35,6 +35,7 @@ import {
 import { formatArroba, formatCurrency, formatKg, formatPercent } from "@/lib/domain/format";
 import { saleAmount } from "@/lib/domain/movements";
 import { inseminationBulls } from "@/lib/domain/semen";
+import { breedLabel, ChuteBreed } from "@/components/manejo/chute-breed";
 import { EntryChuteForm } from "@/components/manejo/entry-chute-form";
 import {
   DosesUsedToday,
@@ -309,12 +310,17 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
               {currentAnimal ? (
                 <span className="text-sm text-ink-soft">
                   {CATEGORY_LABEL[currentAnimal.category]}
+                  {" · "}
+                  {breedLabel(currentAnimal)}
                   {" · último peso: "}
                   {(() => {
                     const last = currentWeight(currentAnimal);
                     return last === null ? "sem pesagem" : formatKg(last);
                   })()}
                 </span>
+              ) : null}
+              {currentAnimal ? (
+                <ChuteBreed key={currentAnimal.earTag} animal={currentAnimal} />
               ) : null}
             </div>
 
