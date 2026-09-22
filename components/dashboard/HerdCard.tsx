@@ -133,7 +133,7 @@ export function HerdCard({
               <li key={category} className="flex items-center gap-1.5 text-xs text-ink-soft">
                 <span aria-hidden className={cn("size-2 shrink-0 rounded-full", SWATCH[category])} />
                 {capitalized(pluralCategory(category, 2))}
-                <span className="ml-auto font-mono font-medium text-ink">{formatNumber(count)}</span>
+                <span className="font-mono font-medium text-ink">{formatNumber(count)}</span>
               </li>
             ))}
           </ul>
