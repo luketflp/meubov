@@ -4,16 +4,19 @@
  * Baixas log: every animal that left the herd other than by sale, newest exit
  * first, filterable by motivo. Table on desktop, stacked cards on mobile — the
  * same shape as the births log. The filter is kept in the `motivo` query so the
- * Painel can link straight to the mortes.
+ * Painel can link straight to the mortes. Whoever may edit the Rebanho can
+ * exclude a baixa entered by mistake, which puts the animal back in the herd.
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { HeartOff } from "lucide-react";
+import { HeartOff, Trash2 } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useCan } from "@/lib/store/usePermissions";
 import { formatDate } from "@/lib/domain/dates";
 import { INACTIVE_REASON_LABEL, animalCategoryName } from "@/lib/domain/labels";
 import type { Animal } from "@/lib/types";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import {
@@ -38,10 +41,26 @@ import {
   recentBaixas,
   type BaixaFilter,
 } from "@/components/baixas/baixas";
+import { DeleteBaixaDialog } from "@/components/baixas/delete-baixa-dialog";
 
 const linkClass = "font-mono font-medium text-ink underline-offset-2 hover:underline";
 
 const FILTERS = Object.keys(BAIXA_FILTER_LABEL) as BaixaFilter[];
+
+function DeleteButton({ animal, onClick }: { animal: Animal; onClick: () => void }) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      aria-label={`Excluir baixa do animal ${animal.earTag}`}
+      className="text-ink-soft hover:text-overdue"
+      onClick={onClick}
+    >
+      <Trash2 aria-hidden />
+    </Button>
+  );
+}
 
 function reasonLabel(animal: Animal): string {
   return animal.inactiveReason ? INACTIVE_REASON_LABEL[animal.inactiveReason] : "—";
@@ -58,6 +77,8 @@ export function BaixasList() {
   const router = useRouter();
   const pathname = usePathname();
   const filter = parseBaixaFilter(useSearchParams().get("motivo"));
+  const canEdit = useCan("herd", "edit");
+  const [deleting, setDeleting] = useState<Animal | null>(null);
 
   const baixas = useMemo(() => recentBaixas(animals, filter), [animals, filter]);
   const lotNames = useMemo(() => new Map(lots.map((lot) => [lot.id, lot.name])), [lots]);
@@ -107,6 +128,11 @@ export function BaixasList() {
                   <TableHead>Lote</TableHead>
                   <TableHead>Motivo</TableHead>
                   <TableHead>Observação</TableHead>
+                  {canEdit ? (
+                    <TableHead className="w-12">
+                      <span className="sr-only">Ações</span>
+                    </TableHead>
+                  ) : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -127,6 +153,11 @@ export function BaixasList() {
                     <TableCell className="max-w-64 text-ink-soft">
                       {animal.inactiveNotes ?? "—"}
                     </TableCell>
+                    {canEdit ? (
+                      <TableCell className="text-right">
+                        <DeleteButton animal={animal} onClick={() => setDeleting(animal)} />
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))}
               </TableBody>
@@ -141,7 +172,12 @@ export function BaixasList() {
                   <Link href={`/herd/${animal.id}`} className={linkClass}>
                     {animal.earTag}
                   </Link>
-                  <span className="font-mono text-xs text-ink-soft">{dateLabel(animal)}</span>
+                  <span className="flex items-center gap-1">
+                    <span className="font-mono text-xs text-ink-soft">{dateLabel(animal)}</span>
+                    {canEdit ? (
+                      <DeleteButton animal={animal} onClick={() => setDeleting(animal)} />
+                    ) : null}
+                  </span>
                 </div>
                 <p className="mt-1 text-xs text-ink-soft">
                   <span className="text-ink">{reasonLabel(animal)}</span> ·{" "}
@@ -156,6 +192,7 @@ export function BaixasList() {
           </ul>
         </>
       )}
+      <DeleteBaixaDialog animal={deleting} onOpenChange={(open) => !open && setDeleting(null)} />
     </SectionCard>
   );
 }

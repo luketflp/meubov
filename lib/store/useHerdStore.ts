@@ -390,6 +390,12 @@ export interface HerdStore extends HerdData {
    * comes through here — it is a manejo de venda.
    */
   deactivateAnimal: (earTag: string, input: NewBaixa) => Promise<void>;
+  /**
+   * Takes back a baixa entered by mistake: the animal returns to the active
+   * herd in its lot. Throws, after a toast, when the server refuses (a venda,
+   * or a lot deleted since).
+   */
+  reactivateAnimal: (earTag: string) => Promise<void>;
 }
 
 /** Editable fields of an animal (only sent ones change). */
@@ -1594,6 +1600,32 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
         : {}),
     }));
     return true;
+  },
+
+  reactivateAnimal: async (earTag) => {
+    const id = animalIdByEarTag(get().animals, earTag);
+    const { error } = await api.animals({ id }).reactivate.post();
+    if (error) {
+      const code = (error.value as { error?: string } | null | undefined)?.error;
+      if (code === "lot_deleted") {
+        toast.error(`O lote do animal ${earTag} foi excluído: ele não tem para onde voltar.`);
+        throw new Error("reactivate animal failed (lot_deleted)");
+      }
+      apiFail("desfazer a baixa do animal", error);
+    }
+    set((s) => ({
+      animals: s.animals.map((a) =>
+        a.earTag === earTag
+          ? {
+              ...a,
+              active: true,
+              inactiveReason: undefined,
+              inactiveDate: undefined,
+              inactiveNotes: undefined,
+            }
+          : a
+      ),
+    }));
   },
 
   deactivateAnimal: async (earTag, input) => {
