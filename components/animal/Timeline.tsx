@@ -99,7 +99,9 @@ function buildEvents(
         key: `diagnosis-${d.breedingId}`,
         date: d.date,
         label: "Diagnóstico",
-        description: `Diagnóstico de gestação: ${DIAGNOSIS_RESULT_LABEL[d.result]}`,
+        description: `Diagnóstico de gestação: ${DIAGNOSIS_RESULT_LABEL[d.result]}${
+          d.notes ? ` · ${d.notes}` : ""
+        }`,
         dot: <ColorDot className="bg-fmd" />,
       });
     }

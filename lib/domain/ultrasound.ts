@@ -40,6 +40,8 @@ export interface UltrasoundRow {
   bull: SemenBull | null;
   /** "pending" while it awaits diagnosis. */
   result: DiagnosisResult;
+  /** The vet's observação at the exam, when the diagnosis has one. */
+  notes?: string;
   /** Days since the cobertura. */
   days: number;
 }
@@ -101,12 +103,14 @@ function ultrasoundRow(
   bullsById: Map<string, SemenBull>,
   todayIso: string
 ): UltrasoundRow {
+  const { result, diagnosis } = breedingOutcome(record, breeding);
   return {
     dam,
     breeding,
     bull:
       breeding.semenBullId === undefined ? null : (bullsById.get(breeding.semenBullId) ?? null),
-    result: breedingOutcome(record, breeding).result,
+    result,
+    ...(diagnosis?.notes ? { notes: diagnosis.notes } : {}),
     days: daysBetween(breeding.date, todayIso),
   };
 }

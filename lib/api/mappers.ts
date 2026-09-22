@@ -107,7 +107,12 @@ export function toSemenBull(row: SemenBullRow, purchases: SemenPurchase[]): Seme
 }
 
 export function toDiagnosis(row: PregnancyDiagnosisRow): PregnancyDiagnosis {
-  return { breedingId: row.breedingId, result: row.result, date: row.date };
+  return {
+    breedingId: row.breedingId,
+    result: row.result,
+    date: row.date,
+    ...(row.notes ? { notes: row.notes } : {}),
+  };
 }
 
 export function toCalving(row: CalvingRow): Calving {

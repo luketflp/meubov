@@ -506,6 +506,8 @@ export const pregnancyDiagnoses = pgTable("pregnancy_diagnoses", {
     .references(() => breedings.id, { onDelete: "cascade" }),
   result: diagnosisResultEnum("result").notNull(),
   date: date("date").notNull(),
+  /** The vet's observação at the exam ("gestação de ~60 dias"), when given. */
+  notes: text("notes"),
 });
 
 /** Calving record of a female (the mother). */

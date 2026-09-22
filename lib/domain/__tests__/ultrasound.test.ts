@@ -284,4 +284,20 @@ describe("breteRows", () => {
       ["B-001"]
     );
   });
+  it("carries the observação of the diagnosis, and none while the cow awaits it", () => {
+    const noted = dam(
+      "B-005",
+      record([breeding("b5", "2026-07-01")], [{ ...diagnosed("b5", "open"), notes: "cisto no ovário" }])
+    );
+    const [withNote, waiting, withoutNote] = breteRows(
+      ["b5", "b2", "b1"],
+      [...animals, noted],
+      [tufao],
+      TODAY_ISO
+    );
+
+    expect(withNote.notes).toBe("cisto no ovário");
+    expect(waiting.notes).toBeUndefined();
+    expect(withoutNote.notes).toBeUndefined();
+  });
 });

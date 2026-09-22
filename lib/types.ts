@@ -84,6 +84,8 @@ export interface PregnancyDiagnosis {
   breedingId: string;
   result: DiagnosisResult;
   date: string;
+  /** The vet's observação at the exam ("gestação de ~60 dias", "cisto no ovário"). */
+  notes?: string;
 }
 
 /** Calving record of a female. */

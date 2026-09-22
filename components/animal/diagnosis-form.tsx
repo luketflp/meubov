@@ -2,7 +2,7 @@
 
 /**
  * The diagnóstico form itself: picks one breeding and records its pregnancy
- * result.
+ * result, with the vet's observação when there is one.
  *
  * The breeding list defaults to the most recent one still waiting for a result;
  * re-examining a breeding overwrites the previous diagnosis (the API keeps one
@@ -33,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 const RESULT_LIST = Object.keys(DIAGNOSIS_RESULT_LABEL) as DiagnosisResult[];
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -53,6 +54,7 @@ interface DiagnosisFields {
   breedingId: string;
   result: DiagnosisResult;
   date: string;
+  notes: string;
 }
 
 interface DiagnosisFormProps {
@@ -73,6 +75,7 @@ export function DiagnosisForm({ earTag, record, breeding, onRegistered }: Diagno
     breedingId: breeding?.id ?? defaultBreedingId(record),
     result: "pregnant",
     date: todayISO(),
+    notes: "",
   }));
   const [error, setError] = useState<string | null>(null);
 
@@ -104,6 +107,7 @@ export function DiagnosisForm({ earTag, record, breeding, onRegistered }: Diagno
       breedingId: selected.id,
       result: fields.result,
       date: fields.date,
+      notes: fields.notes.trim() === "" ? undefined : fields.notes.trim(),
     });
     addToast({
       messageType: "success",
@@ -186,6 +190,16 @@ export function DiagnosisForm({ earTag, record, breeding, onRegistered }: Diagno
             className="min-h-11 font-mono"
           />
         </div>
+      </div>
+
+      <div className="grid gap-1.5">
+        <Label htmlFor="diagnosis-notes">Observação (opcional)</Label>
+        <Textarea
+          id="diagnosis-notes"
+          value={fields.notes}
+          onChange={(e) => setFields((f) => ({ ...f, notes: e.target.value }))}
+          placeholder="Ex.: gestação de ~60 dias, cisto no ovário…"
+        />
       </div>
 
       {error ? <p className="text-xs text-overdue">{error}</p> : null}

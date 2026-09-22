@@ -9,6 +9,9 @@
  * they walk in. A diagnosed cow can go back to waiting, which clears her
  * result, and a skipped one back to the queue.
  *
+ * The vet's observação ("gestação de ~60 dias") goes with the tap, on the
+ * diagnosis, and shows on the Diagnosticadas row.
+ *
  * The cows are the lote's waiting coberturas when the brete opened, so a cow
  * stays on screen once diagnosed; nothing else is saved about the exam, and
  * leaving the brete loses only which cows were skipped. Each tap goes through
@@ -34,6 +37,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { SectionCard } from "@/components/ui/section-card";
 import { cn } from "@/lib/utils";
 
@@ -138,6 +142,8 @@ export function UltrasoundBrete({
   const [skipped, setSkipped] = useState<ReadonlySet<string>>(() => new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  /** The observação typed for the cow in the brete; it goes with her tap. */
+  const [note, setNote] = useState("");
   /** True while a tap saves — a brete action must not double-fire. */
   const [busy, setBusy] = useState(false);
 
@@ -165,6 +171,7 @@ export function UltrasoundBrete({
   function nextCow() {
     setSelectedId(null);
     setSearch("");
+    setNote("");
   }
 
   async function diagnose(result: Exclude<DiagnosisResult, "pending">) {
@@ -175,6 +182,7 @@ export function UltrasoundBrete({
         breedingId: current.breeding.id,
         result,
         date: examDate,
+        notes: note.trim() === "" ? undefined : note.trim(),
       });
       nextCow();
     } catch {
@@ -286,6 +294,16 @@ export function UltrasoundBrete({
                 A cobertura é depois da data do exame — ajuste a data para diagnosticar.
               </p>
             ) : null}
+            <div className="grid gap-1.5">
+              <Label htmlFor="ultrasound-note">Observação (opcional)</Label>
+              <Input
+                id="ultrasound-note"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Ex.: gestação de ~60 dias, cisto no ovário…"
+                className="min-h-11"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-2 sm:flex">
               <Button
                 type="button"
@@ -360,7 +378,10 @@ export function UltrasoundBrete({
                   <li key={row.breeding.id}>
                     <button
                       type="button"
-                      onClick={() => setSelectedId(row.breeding.id)}
+                      onClick={() => {
+                        setSelectedId(row.breeding.id);
+                        setNote("");
+                      }}
                       className={cn(
                         "flex min-h-11 w-full items-center gap-2 rounded-md px-1 py-2 text-left transition-colors hover:bg-surface",
                         isCurrent && "bg-brand-soft"
@@ -391,6 +412,9 @@ export function UltrasoundBrete({
                   <li key={row.breeding.id} className="flex min-h-11 items-center gap-2 px-1 py-2">
                     <span className="font-mono text-sm font-medium text-ink">{row.dam.earTag}</span>
                     <ResultPill result={row.result} />
+                    {row.notes ? (
+                      <span className="truncate text-xs text-ink-soft">{row.notes}</span>
+                    ) : null}
                     <Button
                       variant="ghost"
                       size="sm"

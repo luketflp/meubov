@@ -1,0 +1,1 @@
+ALTER TABLE "pregnancy_diagnoses" ADD COLUMN "notes" text;

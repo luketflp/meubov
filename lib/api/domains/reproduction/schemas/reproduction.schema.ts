@@ -41,6 +41,8 @@ export const NewDiagnosisBody = t.Object({
   breedingId: t.String({ minLength: 1 }),
   result: DiagnosisResultModel,
   date: DateString,
+  /** The vet's observação; blank stores none, and a re-exam without one clears it. */
+  notes: t.Optional(t.String()),
 });
 
 /**
