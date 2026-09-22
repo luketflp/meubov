@@ -36,9 +36,16 @@ interface StockingBarProps {
   auPerHa: number;
   classification: StockingRateClass;
   className?: string;
+  /** Value and bar only: the row around it already says the faixa. */
+  compact?: boolean;
 }
 
-export function StockingBar({ auPerHa, classification, className }: StockingBarProps) {
+export function StockingBar({
+  auPerHa,
+  classification,
+  className,
+  compact = false,
+}: StockingBarProps) {
   const width = Math.min(auPerHa / SCALE_MAX_AU_PER_HA, 1) * 100;
 
   return (
@@ -47,7 +54,9 @@ export function StockingBar({ auPerHa, classification, className }: StockingBarP
         <span className={cn("font-mono text-[13px] font-medium", inkClass[classification])}>
           {formatNumber(auPerHa, 2)} UA/ha
         </span>
-        <span className="text-[11px] text-ink-soft">{STOCKING_LABEL[classification]}</span>
+        {compact ? null : (
+          <span className="text-[11px] text-ink-soft">{STOCKING_LABEL[classification]}</span>
+        )}
       </div>
       <div
         aria-hidden

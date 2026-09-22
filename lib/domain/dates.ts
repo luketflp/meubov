@@ -21,7 +21,8 @@ export function todayISO(): string {
   return TODAY_FORMATTER.format(new Date());
 }
 
-const MONTH_ABBREV = [
+/** Lowercase three-letter month names, January first: "jan", "fev", … */
+export const MONTH_ABBREV = [
   "jan",
   "fev",
   "mar",

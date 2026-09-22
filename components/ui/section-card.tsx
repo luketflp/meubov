@@ -3,6 +3,8 @@ import { cn } from "@/lib/utils";
 
 interface SectionCardProps {
   title: string;
+  /** Line under the title: a count, a window, what the card covers. */
+  subtitle?: string;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
@@ -18,6 +20,7 @@ interface SectionCardProps {
 
 export function SectionCard({
   title,
+  subtitle,
   action,
   children,
   className,
@@ -27,7 +30,10 @@ export function SectionCard({
   return (
     <section id={id} className={cn("rounded-lg border border-hairline bg-panel", className)}>
       <header className="flex items-center justify-between gap-2 border-b border-hairline px-4 py-3">
-        <Heading className="font-heading text-base font-semibold text-ink">{title}</Heading>
+        <div className="min-w-0">
+          <Heading className="font-heading text-base font-semibold text-ink">{title}</Heading>
+          {subtitle ? <p className="text-xs text-ink-soft">{subtitle}</p> : null}
+        </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </header>
       <div className="p-4">{children}</div>

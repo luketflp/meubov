@@ -35,8 +35,9 @@ describe("CATEGORY_LABEL", () => {
 
 describe("pluralCategory", () => {
   it("uses the singular when n === 1", () => {
-    expect(pluralCategory("steer", 1)).toBe("steer");
-    expect(pluralCategory("cow", 1)).toBe("cow");
+    expect(pluralCategory("steer", 1)).toBe("boi");
+    expect(pluralCategory("cow", 1)).toBe("vaca");
+    expect(pluralCategory("calf", 1)).toBe("bezerro");
   });
 
   it("uses the plural for n other than 1", () => {

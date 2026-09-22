@@ -37,7 +37,7 @@ const CATEGORY_PLURAL: Record<Category, string> = {
  * n === 1, plural otherwise. E.g.: pluralCategory("steer", 2) === "bois".
  */
 export function pluralCategory(category: Category, n: number): string {
-  return n === 1 ? category : CATEGORY_PLURAL[category];
+  return n === 1 ? CATEGORY_LABEL[category].toLowerCase() : CATEGORY_PLURAL[category];
 }
 
 /** Full sex label, e.g.: "Macho" / "Fêmea". */
