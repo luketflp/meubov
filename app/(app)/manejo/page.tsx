@@ -5,6 +5,7 @@
  * (overdue and upcoming treatments grouped per batch), batch registration
  * of sanitary actions and weighings, and the history of executed manejos.
  */
+import { Suspense } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
 import { useCan } from "@/lib/store/usePermissions";
@@ -25,7 +26,10 @@ export default function ManejoPage() {
       />
       <OpenManejoSessions />
       <ActivityPanel />
-      <ManejoHistory />
+      {/* The history's filter lives in the URL query, read inside a Suspense boundary. */}
+      <Suspense fallback={null}>
+        <ManejoHistory />
+      </Suspense>
     </div>
   );
 }

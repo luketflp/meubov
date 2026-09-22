@@ -5,9 +5,13 @@
  * wrote (treatments marked feito on the calendar, weighings saved outside the
  * chute), filterable by action; table on desktop and stacked cards on mobile,
  * always in descending order of date. Every row opens its details page.
+ *
+ * The filter lives in the `tipo` query, so the Painel can open the compras or
+ * the vendas and going back from a row's page restores it.
  */
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight, ClipboardList } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
@@ -42,6 +46,10 @@ import { ManejoTypePill } from "@/components/manejo/manejo-type-pill";
 import { ManejoRowMenu } from "@/components/manejo/manejo-row-menu";
 
 const ALL = "all";
+
+function parseFilter(value: string | null): ManejoAction | typeof ALL {
+  return MANEJO_ACTION_LIST.find((action) => action === value) ?? ALL;
+}
 
 function headsLabel(session: ManejoHistoryRow): string {
   return session.headCount === 1 ? "animal" : "animais";
@@ -84,7 +92,12 @@ export function ManejoHistory() {
   const treatments = useHerdStore((s) => s.treatments);
   const animals = useHerdStore((s) => s.animals);
   const manejoSessions = useHerdStore((s) => s.manejoSessions);
-  const [filter, setFilter] = useState<ManejoAction | typeof ALL>(ALL);
+  const router = useRouter();
+  const pathname = usePathname();
+  const filter = parseFilter(useSearchParams().get("tipo"));
+  const setFilter = (next: ManejoAction | typeof ALL): void => {
+    router.replace(next === ALL ? pathname : `${pathname}?tipo=${next}`, { scroll: false });
+  };
   // Without Financeiro the server sends no values: the column would be all dashes.
   const seeMoney = useCan("finance", "view");
 
@@ -100,6 +113,7 @@ export function ManejoHistory() {
 
   return (
     <SectionCard
+      id="historico"
       title="Histórico de manejos"
       action={
         <Select value={filter} onValueChange={(v) => setFilter(v as ManejoAction | typeof ALL)}>
