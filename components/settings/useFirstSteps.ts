@@ -11,12 +11,11 @@ import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useActivePermissions } from "@/lib/store/usePermissions";
 
 export function useFirstSteps(): FirstStep[] | null {
-  const farm = useHerdStore((s) => s.farm);
   const invernadas = useHerdStore((s) => s.invernadas);
   const animals = useHerdStore((s) => s.animals);
   const permissions = useActivePermissions();
 
   if (!showFirstSteps(animals)) return null;
   if (!can(permissions, "lots", "edit") && !can(permissions, "herd", "edit")) return null;
-  return firstSteps(farm, invernadas, animals);
+  return firstSteps(invernadas, animals);
 }

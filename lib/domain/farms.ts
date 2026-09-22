@@ -5,7 +5,7 @@
  * Node-safe and pure, shared by the use cases and the components.
  */
 import type { FarmRole } from "@/lib/domain/permissions";
-import type { Animal, FarmData, Invernada } from "@/lib/types";
+import type { Animal, Invernada } from "@/lib/types";
 
 /** Longest name or município a new farm accepts. */
 export const FARM_FIELD_MAX = 80;
@@ -86,7 +86,7 @@ export function copySummary(counts: {
   return `Traz ${listPt(parts)}.`;
 }
 
-export type FirstStepId = "headquarters" | "invernada" | "animal";
+export type FirstStepId = "invernada" | "animal";
 
 export interface FirstStep {
   id: FirstStepId;
@@ -94,17 +94,13 @@ export interface FirstStep {
 }
 
 /**
- * The Primeiros passos of a farm, each done because the data says so — the
- * saved sede, a first invernada, a first animal — with no "onboarding done"
- * flag to go stale, the same idea as lib/domain/mapSetup.ts.
+ * The Primeiros passos of a farm, each done because the data says so — a
+ * first invernada, a first animal — with no "onboarding done" flag to go
+ * stale, the same idea as lib/domain/mapSetup.ts. The sede and the outlines
+ * are not steps: the map's own guided setup asks for them when it opens.
  */
-export function firstSteps(
-  farm: Pick<FarmData, "headquarters">,
-  invernadas: readonly Invernada[],
-  animals: readonly Animal[]
-): FirstStep[] {
+export function firstSteps(invernadas: readonly Invernada[], animals: readonly Animal[]): FirstStep[] {
   return [
-    { id: "headquarters", done: farm.headquarters !== undefined },
     { id: "invernada", done: invernadas.length > 0 },
     { id: "animal", done: animals.length > 0 },
   ];
@@ -118,21 +114,19 @@ export function showFirstSteps(animals: readonly Animal[]): boolean {
   return animals.length === 0;
 }
 
-/** How the Painel banner names each pending step, and whether the phrase is plural. */
-const STEP_PHRASES: Record<FirstStepId, { phrase: string; plural: boolean }> = {
-  headquarters: { phrase: "a sede no mapa", plural: false },
-  invernada: { phrase: "as invernadas", plural: true },
-  animal: { phrase: "os animais", plural: true },
+/** How the Painel banner names each pending step. */
+const STEP_PHRASES: Record<FirstStepId, string> = {
+  invernada: "as invernadas",
+  animal: "os animais",
 };
 
 /**
  * What the Painel banner says is still missing: "Faltam as invernadas e os
- * animais." A lone step sets the verb's number; two or more are plural. Null
- * when every step is done.
+ * animais." Both phrases are plural, so the verb always is. Null when every
+ * step is done.
  */
 export function missingStepsSentence(steps: readonly FirstStep[]): string | null {
   const pending = steps.filter((step) => !step.done).map((step) => STEP_PHRASES[step.id]);
   if (pending.length === 0) return null;
-  const verb = pending.length === 1 && !pending[0].plural ? "Falta" : "Faltam";
-  return `${verb} ${listPt(pending.map((item) => item.phrase))}.`;
+  return `Faltam ${listPt(pending)}.`;
 }

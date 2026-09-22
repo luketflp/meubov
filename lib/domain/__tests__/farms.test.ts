@@ -128,24 +128,15 @@ describe("copySummary", () => {
 });
 
 describe("firstSteps", () => {
-  it("has every step pending on a brand-new farm", () => {
-    expect(firstSteps({}, [], [])).toEqual([
-      { id: "headquarters", done: false },
+  it("has both steps pending on a brand-new farm", () => {
+    expect(firstSteps([], [])).toEqual([
       { id: "invernada", done: false },
       { id: "animal", done: false },
     ]);
   });
 
-  it("marks the sede once a map view is saved", () => {
-    expect(firstSteps({ headquarters: { lat: -13, lng: -56 } }, [], [])[0]).toEqual({
-      id: "headquarters",
-      done: true,
-    });
-  });
-
   it("marks the invernadas once one exists and the animals once one exists", () => {
-    expect(firstSteps({}, [invernada], [animal])).toEqual([
-      { id: "headquarters", done: false },
+    expect(firstSteps([invernada], [animal])).toEqual([
       { id: "invernada", done: true },
       { id: "animal", done: true },
     ]);
@@ -163,33 +154,20 @@ describe("showFirstSteps", () => {
 });
 
 describe("missingStepsSentence", () => {
-  const steps = (headquarters: boolean, invernada: boolean, animal: boolean) => [
-    { id: "headquarters" as const, done: headquarters },
+  const steps = (invernada: boolean, animal: boolean) => [
     { id: "invernada" as const, done: invernada },
     { id: "animal" as const, done: animal },
   ];
 
-  it("lists every step on a brand-new farm", () => {
-    expect(missingStepsSentence(steps(false, false, false))).toBe(
-      "Faltam a sede no mapa, as invernadas e os animais."
-    );
+  it("joins both steps with e on a brand-new farm", () => {
+    expect(missingStepsSentence(steps(false, false))).toBe("Faltam as invernadas e os animais.");
   });
 
-  it("joins two steps with e", () => {
-    expect(missingStepsSentence(steps(false, true, false))).toBe(
-      "Faltam a sede no mapa e os animais."
-    );
-  });
-
-  it("agrees with a lone singular step", () => {
-    expect(missingStepsSentence(steps(false, true, true))).toBe("Falta a sede no mapa.");
-  });
-
-  it("agrees with a lone plural step", () => {
-    expect(missingStepsSentence(steps(true, true, false))).toBe("Faltam os animais.");
+  it("names the lone step left", () => {
+    expect(missingStepsSentence(steps(true, false))).toBe("Faltam os animais.");
   });
 
   it("is null when nothing is missing", () => {
-    expect(missingStepsSentence(steps(true, true, true))).toBeNull();
+    expect(missingStepsSentence(steps(true, true))).toBeNull();
   });
 });

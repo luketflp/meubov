@@ -4,12 +4,12 @@
  * Primeiros passos: what a farm with no animal still needs, at the top of
  * Configurações. Each step is done because the data says so, and the card is
  * gone with the first animal — a farm that already has a herd never sees it.
- * Step 2 stays on this page: it scrolls to the Invernadas card below.
+ * Step 1 stays on this page: it scrolls to the Invernadas card below. The
+ * sede and the outlines wait for the map's own guided setup.
  */
 import Link from "next/link";
-import { ArrowRight, Check, MapIcon, Plus, type LucideIcon } from "lucide-react";
+import { ArrowRight, Check, Plus, type LucideIcon } from "lucide-react";
 import type { FirstStepId } from "@/lib/domain/farms";
-import { stepHref } from "@/lib/domain/mapSetup";
 import { can } from "@/lib/domain/permissions";
 import { useActivePermissions } from "@/lib/store/usePermissions";
 import { cn } from "@/lib/utils";
@@ -31,14 +31,6 @@ interface StepCopy {
 }
 
 const STEPS: Record<FirstStepId, StepCopy> = {
-  headquarters: {
-    title: "Marque a sede no mapa",
-    hint: "O mapa passa a abrir direto na fazenda.",
-    action: "Abrir o mapa",
-    href: stepHref({ kind: "headquarters" }),
-    icon: MapIcon,
-    area: "lots",
-  },
   invernada: {
     title: "Cadastre as invernadas",
     hint: "Dê um código a cada pasto. O contorno no mapa pode vir depois.",
@@ -77,7 +69,7 @@ export function FirstStepsCard() {
 
   return (
     <SectionCard title={`Primeiros passos (${done} de ${steps.length})`}>
-      <ol className="grid gap-5 md:grid-cols-3 md:gap-6">
+      <ol className="grid gap-5 md:grid-cols-2 md:gap-6">
         {steps.map((step, index) => {
           const copy = STEPS[step.id];
           const buttonClass = "min-h-11 w-full md:min-h-0 md:w-auto";
