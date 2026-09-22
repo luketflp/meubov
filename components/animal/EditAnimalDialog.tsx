@@ -5,11 +5,15 @@
  * the animal's sex), breed, birth date and lot, the weighings to correct — plus
  * the danger zone that deactivates the animal with a reason (a sale goes through
  * a manejo de venda).
+ *
+ * The brete opens it too, on the animal it holds: there the save keeps the
+ * operator on the session, and the baixa goes through the session (onBaixa), so
+ * the animal also leaves the queue instead of the screen jumping to Rebanho.
  */
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil } from "lucide-react";
-import { useHerdStore } from "@/lib/store/useHerdStore";
+import { useHerdStore, type NewBaixa } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
 import type { Animal, Category, InactiveReason } from "@/lib/types";
 import { todayISO } from "@/lib/domain/dates";
@@ -59,7 +63,20 @@ const BAIXA_REASONS: readonly Exclude<InactiveReason, "sale">[] = [
 const baseValue = (category: Category): string => `base:${category}`;
 const customValue = (id: string): string => `custom:${id}`;
 
-export function EditAnimalDialog({ animal }: { animal: Animal }) {
+interface EditAnimalDialogProps {
+  animal: Animal;
+  /** Button that opens the dialog; "Editar" by default. */
+  trigger?: ReactNode;
+  /** Called after a save with the animal's ear tag, renamed or not. */
+  onSaved?: (earTag: string) => void;
+  /**
+   * Gives the baixa in place of the default one, which lands on Rebanho: the
+   * dialog closes and the screen stays. False when it was refused.
+   */
+  onBaixa?: (input: NewBaixa) => Promise<boolean>;
+}
+
+export function EditAnimalDialog({ animal, trigger, onSaved, onBaixa }: EditAnimalDialogProps) {
   const animals = useHerdStore((s) => s.animals);
   const breeds = useHerdStore((s) => s.breeds);
   const lots = useHerdStore((s) => s.lots);
@@ -168,6 +185,7 @@ export function EditAnimalDialog({ animal }: { animal: Animal }) {
     }
     addToast({ messageType: "success", text: `Animal ${newTag} atualizado` });
     setOpen(false);
+    onSaved?.(newTag);
   }
 
   async function onDeactivate() {
@@ -185,11 +203,16 @@ export function EditAnimalDialog({ animal }: { animal: Animal }) {
       setError("A baixa não pode ser anterior ao nascimento do animal.");
       return;
     }
-    await deactivateAnimal(animal.earTag, {
-      reason,
-      date: baixaDate,
-      notes: baixaNotes,
-    });
+    const input: NewBaixa = { reason, date: baixaDate, notes: baixaNotes };
+    if (onBaixa) {
+      // A refused baixa was already explained by the store's toast.
+      if (await onBaixa(input)) {
+        addToast({ messageType: "success", text: `Animal ${animal.earTag} baixado` });
+      }
+      setOpen(false);
+      return;
+    }
+    await deactivateAnimal(animal.earTag, input);
     addToast({ messageType: "success", text: `Animal ${animal.earTag} baixado` });
     setOpen(false);
     router.push("/herd");
@@ -198,10 +221,12 @@ export function EditAnimalDialog({ animal }: { animal: Animal }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="min-h-11 md:min-h-9">
-          <Pencil data-icon="inline-start" aria-hidden />
-          Editar
-        </Button>
+        {trigger ?? (
+          <Button variant="outline" className="min-h-11 md:min-h-9">
+            <Pencil data-icon="inline-start" aria-hidden />
+            Editar
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-md">
         <DialogHeader>

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildPassEffects, sessionName, WEIGHING_SESSION_NAME } from "@/lib/domain/manejo";
+import {
+  baixaPassNote,
+  buildPassEffects,
+  sessionName,
+  WEIGHING_SESSION_NAME,
+} from "@/lib/domain/manejo";
 import { KG_PER_ARROBA } from "@/lib/domain/weights";
 import type { ManejoTreatmentPlan } from "@/lib/types";
 
@@ -200,5 +205,18 @@ describe("buildPassEffects on an inseminação", () => {
         { weightKg: 300, semenBullId: "bull-1" }
       ).breeding
     ).toBeUndefined();
+  });
+});
+
+describe("baixaPassNote", () => {
+  it("names the reason and keeps the farmer's words", () => {
+    expect(baixaPassNote("death", " quebrou a perna no brete ")).toBe(
+      "Baixa · Morte · quebrou a perna no brete"
+    );
+  });
+
+  it("names the reason alone when there is no observação", () => {
+    expect(baixaPassNote("loss", undefined)).toBe("Baixa · Perda / extravio");
+    expect(baixaPassNote("other", "   ")).toBe("Baixa · Outro");
   });
 });

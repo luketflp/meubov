@@ -116,7 +116,7 @@ const ENTRY_ROW = {
 const BULL_ROW = { id: "bull-1", farmId: 7, name: "Tufão da Serra", code: null, breed: null, central: null };
 
 /** lockEntry's three reads: the session, the animal, its chute entry. */
-const passRows = () => [[SESSION_ROW], [{ id: "a-1", earTag: "V-01", lotId: "lot-1" }], [ENTRY_ROW]];
+const passRows = () => [[SESSION_ROW], [{ id: "a-1", earTag: "V-01", lotId: "lot-1", active: true }], [ENTRY_ROW]];
 
 beforeEach(() => {
   state.selectResults = [];
@@ -126,6 +126,27 @@ beforeEach(() => {
 });
 
 describe("completeAnimal — inseminação", () => {
+  it("refuses the pass and writes nothing when the animal already had a baixa", async () => {
+    // A baixa given on the animal's page while the session was open.
+    state.selectResults = [
+      [SESSION_ROW],
+      [{ id: "a-1", earTag: "V-01", lotId: "lot-1", active: false }],
+      [ENTRY_ROW],
+    ];
+
+    const result = await new CompleteAnimalUseCase().run({
+      farmId: 7,
+      sessionId: "s-1",
+      animalId: "a-1",
+      data: { semenBullId: "bull-1" },
+    });
+
+    expect(result).toEqual({ conflict: "animal_inactive" });
+    expect(lockBullStock).not.toHaveBeenCalled();
+    expect(state.inserts).toEqual([]);
+    expect(state.updates).toEqual([]);
+  });
+
   it("refuses the pass and writes nothing when the bull has no dose left", async () => {
     state.selectResults = passRows();
     lockBullStock.mockResolvedValue({ bull: BULL_ROW, bought: 10, used: 10, left: 0 });

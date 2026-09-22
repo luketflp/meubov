@@ -7,7 +7,8 @@
  * cow, so a morning with one bull is one tap per cow — then taps "Inseminar"
  * or "Pular". Each chip reads the bull's doses left live from the store; when
  * the picked bull runs out the pick drops and a notice asks for another, or
- * says the touros are over, instead of the server refusing the next cow.
+ * says the touros are over, instead of the server refusing the next cow. The
+ * cow herself can be edited on the spot, a baixa included (chute-animal.tsx).
  *
  * Also here, for the runner and the record: the "Doses usadas hoje" line, the
  * cobertura a pass recorded and the title with the lote of the cows.
@@ -19,7 +20,7 @@ import { useHerdStore } from "@/lib/store/useHerdStore";
 import { CATEGORY_LABEL } from "@/lib/domain/labels";
 import { inseminationBulls, predominantLotId, sessionDosesByBull } from "@/lib/domain/semen";
 import { formatNumber } from "@/lib/domain/format";
-import { breedLabel, ChuteBreed } from "@/components/manejo/chute-breed";
+import { breedLabel, ChuteEditAnimal } from "@/components/manejo/chute-animal";
 import { AttentionNotice } from "@/components/semen/attention-notice";
 import { BULL_CHIP_GRID, BullChip } from "@/components/semen/bull-chip";
 import { useSemenStock } from "@/components/semen/use-semen-stock";
@@ -73,9 +74,16 @@ interface InseminationChuteFormProps {
   entry: ManejoSessionAnimal;
   /** Called after each pass, inseminated or skipped, so the queue moves on. */
   onDone: () => void;
+  /** Called after the cow was edited, with her ear tag now, so a rename keeps her in the brete. */
+  onSaved: (earTag: string) => void;
 }
 
-export function InseminationChuteForm({ session, entry, onDone }: InseminationChuteFormProps) {
+export function InseminationChuteForm({
+  session,
+  entry,
+  onDone,
+  onSaved,
+}: InseminationChuteFormProps) {
   const cow = useHerdStore((s) => s.animals.find((a) => a.earTag === entry.earTag));
   const lots = useHerdStore((s) => s.lots);
   const completeManejoAnimal = useHerdStore((s) => s.completeManejoAnimal);
@@ -131,7 +139,9 @@ export function InseminationChuteForm({ session, entry, onDone }: InseminationCh
 
   return (
     <SectionCard title="No brete agora">
-      <form onSubmit={onInseminate} className="space-y-4">
+      <div className="space-y-4">
+        {/* Outside the chute form: the edit dialog's own submit would bubble
+            through the portal into it and inseminate the cow. */}
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <span className="font-mono text-3xl font-semibold text-ink">{entry.earTag}</span>
           {cow ? (
@@ -141,69 +151,82 @@ export function InseminationChuteForm({ session, entry, onDone }: InseminationCh
               {lotName ? ` · ${lotName}` : ""}
             </span>
           ) : null}
-          {cow ? <ChuteBreed key={cow.earTag} animal={cow} /> : null}
-        </div>
-
-        <fieldset className="grid gap-1.5">
-          <legend className="mb-1.5 text-sm font-medium text-ink">Touro</legend>
-          <div className={BULL_CHIP_GRID}>
-            {bulls.map((bull) => (
-              <BullChip
-                key={bull.id}
-                bull={bull}
-                left={dosesLeft(bull.id)}
-                selected={bull.id === bullId}
-                onClick={() => setPickedId(bull.id)}
-              />
-            ))}
-          </div>
-          {bulls.length === 0 ? (
-            <AttentionNotice className="mt-1">
-              Os touros desta inseminação não estão mais cadastrados.
-            </AttentionNotice>
-          ) : allOut ? (
-            <AttentionNotice className="mt-1">
-              {bulls.length === 1 ? `${bulls[0].name} acabou.` : "Os touros desta inseminação acabaram."}{" "}
-              Pule as vacas que faltam ou registre uma compra na aba Touros.
-            </AttentionNotice>
-          ) : soldOut ? (
-            <AttentionNotice className="mt-1">
-              {soldOut.name} acabou. Escolha outro touro para continuar.
-            </AttentionNotice>
+          {cow ? (
+            <ChuteEditAnimal
+              key={cow.id}
+              sessionId={session.id}
+              animal={cow}
+              onSaved={onSaved}
+              onBaixa={() => {
+                setNote("");
+                onDone();
+              }}
+            />
           ) : null}
-        </fieldset>
-
-        <div className="grid gap-1.5">
-          <Label htmlFor="pass-note">Observação (opcional)</Label>
-          <Input
-            id="pass-note"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Ex.: corrimento, vaca agitada…"
-            className="min-h-11"
-          />
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="submit"
-            disabled={busy || bullId === null}
-            className="min-h-12 flex-1 sm:flex-none sm:px-8"
-          >
-            <CheckCircle2 aria-hidden />
-            Inseminar
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-12"
-            disabled={busy}
-            onClick={onSkip}
-          >
-            Pular (não passou)
-          </Button>
-        </div>
-      </form>
+        <form onSubmit={onInseminate} className="space-y-4">
+          <fieldset className="grid gap-1.5">
+            <legend className="mb-1.5 text-sm font-medium text-ink">Touro</legend>
+            <div className={BULL_CHIP_GRID}>
+              {bulls.map((bull) => (
+                <BullChip
+                  key={bull.id}
+                  bull={bull}
+                  left={dosesLeft(bull.id)}
+                  selected={bull.id === bullId}
+                  onClick={() => setPickedId(bull.id)}
+                />
+              ))}
+            </div>
+            {bulls.length === 0 ? (
+              <AttentionNotice className="mt-1">
+                Os touros desta inseminação não estão mais cadastrados.
+              </AttentionNotice>
+            ) : allOut ? (
+              <AttentionNotice className="mt-1">
+                {bulls.length === 1 ? `${bulls[0].name} acabou.` : "Os touros desta inseminação acabaram."}{" "}
+                Pule as vacas que faltam ou registre uma compra na aba Touros.
+              </AttentionNotice>
+            ) : soldOut ? (
+              <AttentionNotice className="mt-1">
+                {soldOut.name} acabou. Escolha outro touro para continuar.
+              </AttentionNotice>
+            ) : null}
+          </fieldset>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="pass-note">Observação (opcional)</Label>
+            <Input
+              id="pass-note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Ex.: corrimento, vaca agitada…"
+              className="min-h-11"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="submit"
+              disabled={busy || bullId === null}
+              className="min-h-12 flex-1 sm:flex-none sm:px-8"
+            >
+              <CheckCircle2 aria-hidden />
+              Inseminar
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-12"
+              disabled={busy}
+              onClick={onSkip}
+            >
+              Pular (não passou)
+            </Button>
+          </div>
+        </form>
+      </div>
     </SectionCard>
   );
 }

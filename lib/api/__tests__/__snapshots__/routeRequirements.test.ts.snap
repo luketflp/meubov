@@ -219,6 +219,12 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
       "manejo",
     ],
   },
+  "POST /api/herd/manejo/:id/animals/:animalId/baixa": {
+    "edit": [
+      "manejo",
+      "herd",
+    ],
+  },
   "POST /api/herd/manejo/:id/animals/:animalId/complete": {
     "edit": [
       "manejo",

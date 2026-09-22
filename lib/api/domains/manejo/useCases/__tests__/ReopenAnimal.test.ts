@@ -105,7 +105,7 @@ const DONE_ENTRY = {
 };
 
 /** lockEntry's three reads: the session, the animal, its chute entry. */
-const passRows = () => [[SESSION_ROW], [{ id: "a-1", earTag: "V-01", lotId: "lot-1" }], [DONE_ENTRY]];
+const passRows = () => [[SESSION_ROW], [{ id: "a-1", earTag: "V-01", lotId: "lot-1", active: true }], [DONE_ENTRY]];
 
 /** The cobertura the pass recorded, as its row lock returns it. */
 const lockedBreeding = [{ id: "br-1" }];
@@ -174,5 +174,50 @@ describe("reopenAnimal — inseminação", () => {
 
     expect(state.writes).toEqual(["update manejo_session_animals", "delete breedings"]);
     expect(result).toMatchObject({ removedBreedingId: "br-1" });
+  });
+});
+
+describe("reopenAnimal — an animal that had a baixa", () => {
+  const inactiveAnimal = { id: "a-1", earTag: "V-01", lotId: "lot-1", active: false };
+  const skippedEntry = { ...DONE_ENTRY, outcome: "skipped", notes: "Baixa · Morte", breedingId: null };
+
+  it("refuses to put a skipped animal that left the herd back in the queue", async () => {
+    state.selectResults = [
+      [{ ...SESSION_ROW, kind: "health" }],
+      [inactiveAnimal],
+      [skippedEntry],
+    ];
+
+    const result = await new ReopenAnimalUseCase().run({ farmId: 7, sessionId: "s-1", animalId: "a-1" });
+
+    expect(result).toEqual({ conflict: "animal_inactive" });
+    expect(state.writes).toEqual([]);
+  });
+
+  it("refuses it in a venda too, where the undo would put the animal back in the herd", async () => {
+    state.selectResults = [
+      [{ ...SESSION_ROW, kind: "sale" }],
+      [inactiveAnimal],
+      [skippedEntry],
+    ];
+
+    const result = await new ReopenAnimalUseCase().run({ farmId: 7, sessionId: "s-1", animalId: "a-1" });
+
+    expect(result).toEqual({ conflict: "animal_inactive" });
+    expect(state.writes).toEqual([]);
+  });
+
+  it("still undoes a sold pass, whose own sale took the animal out of the herd", async () => {
+    state.selectResults = [
+      [{ ...SESSION_ROW, kind: "sale" }],
+      [inactiveAnimal],
+      [{ ...DONE_ENTRY, breedingId: null }],
+    ];
+
+    const result = await new ReopenAnimalUseCase().run({ farmId: 7, sessionId: "s-1", animalId: "a-1" });
+
+    expect(state.writes).toEqual(["update animals", "update manejo_session_animals"]);
+    expect(state.updates[0]).toMatchObject({ active: true });
+    expect(result).toMatchObject({ entry: { earTag: "V-01", outcome: "pending" } });
   });
 });

@@ -11,6 +11,8 @@
 import { Elysia } from "elysia";
 
 import { farmPlugin } from "@/lib/api/plugins/farm";
+import { DeactivateAnimalBody } from "@/lib/api/domains/animals/schemas/animal.schema";
+import { todayISO } from "@/lib/domain/dates";
 import { can } from "@/lib/domain/permissions";
 import {
   redactManejoSession,
@@ -18,6 +20,7 @@ import {
   startNeedsFinance,
 } from "@/lib/domain/moneyRedaction";
 
+import { BaixaAnimalUseCase } from "./useCases/BaixaAnimal.useCase";
 import { CloseSessionUseCase } from "./useCases/Close.useCase";
 import { CompleteAnimalUseCase } from "./useCases/CompleteAnimal.useCase";
 import { DeleteSessionUseCase } from "./useCases/Delete.useCase";
@@ -114,6 +117,23 @@ export const manejoController = new Elysia({ prefix: "/manejo" })
       return result;
     },
     { farm: true, body: ManejoSkipBody }
+  )
+  .post(
+    "/:id/animals/:animalId/baixa",
+    async ({ farmId, params, body, status }) => {
+      // A baixa is history: it can be backdated, never postdated.
+      if (body.date > todayISO()) return status(422, { error: "future_date" });
+      const result = await new BaixaAnimalUseCase().run({
+        farmId,
+        sessionId: params.id,
+        animalId: params.animalId,
+        input: body,
+      });
+      if (result === null) return status(404, { error: "not_found" });
+      if ("conflict" in result) return status(409, { error: result.conflict });
+      return result;
+    },
+    { farm: true, body: DeactivateAnimalBody }
   )
   .post(
     "/:id/animals/:animalId/reopen",

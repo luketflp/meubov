@@ -7,6 +7,7 @@
  */
 import type { ManejoPassData } from "@/lib/store/useHerdStore";
 import type {
+  InactiveReason,
   ManejoKind,
   ManejoTreatmentPlan,
   Treatment,
@@ -14,6 +15,7 @@ import type {
   Weighing,
 } from "@/lib/types";
 import { saleAmount } from "@/lib/domain/movements";
+import { INACTIVE_REASON_LABEL } from "@/lib/domain/labels";
 
 /** Treatment effect before persistence (no id / animal ref yet). */
 export type TreatmentEffect = Omit<Treatment, "id" | "animalEarTag"> & {
@@ -81,6 +83,17 @@ export function sessionName(
   kind: ManejoKind = "health"
 ): string {
   return treatment?.name ?? KIND_SESSION_NAME[kind] ?? WEIGHING_SESSION_NAME;
+}
+
+/**
+ * Note a baixa given at the brete leaves on the skipped pass: "Baixa · Morte ·
+ * quebrou a perna no brete". The animal's record keeps the same reason and
+ * words; the note is what the session's Pulados list shows.
+ */
+export function baixaPassNote(reason: InactiveReason, notes: string | undefined): string {
+  const words = notes?.trim();
+  const note = `Baixa · ${INACTIVE_REASON_LABEL[reason]}`;
+  return words ? `${note} · ${words}` : note;
 }
 
 /**

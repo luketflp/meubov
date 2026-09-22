@@ -88,6 +88,9 @@ export class CompleteAnimalUseCase implements CurrUseCase {
       if (!session || !entry || !animal) return null;
       if (session.status !== "open") return conflict("session_not_open");
       if (entry.outcome !== "pending") return conflict("entry_not_actionable");
+      // A baixa given while the session was open: the animal left the herd, so
+      // it takes no treatment, weight, sale or cobertura — it can only be skipped.
+      if (!animal.active) return conflict("animal_inactive");
       const earTag = animal.earTag;
 
       const effects = buildPassEffects(

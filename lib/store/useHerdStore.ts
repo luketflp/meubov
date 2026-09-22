@@ -262,8 +262,8 @@ export interface HerdStore extends HerdData {
   startManejoSession: (input: NewManejoSession) => Promise<string>;
   /**
    * Applies the session's effects to one animal and marks it done. False when
-   * nothing was saved: the pass was refused (409) — the bull out of doses, or a
-   * stale screen.
+   * nothing was saved: the pass was refused (409) — the bull out of doses, an
+   * animal that had a baixa meanwhile, or a stale screen.
    */
   completeManejoAnimal: (
     sessionId: string,
@@ -273,9 +273,16 @@ export interface HerdStore extends HerdData {
   /** Marks one animal as skipped (did not pass the chute). */
   skipManejoAnimal: (sessionId: string, earTag: string, notes?: string) => Promise<void>;
   /**
+   * A baixa at the brete: the animal leaves the herd and its pass is skipped,
+   * with the baixa as its note, in one server transaction. False when the pass
+   * was refused (409): it already left the queue, or the animal already had a
+   * baixa — the herd is then reloaded.
+   */
+  baixaManejoAnimal: (sessionId: string, earTag: string, input: NewBaixa) => Promise<boolean>;
+  /**
    * Undo: reverts one animal to pending, removing the effects it created. An
    * inseminação pass whose cobertura was diagnosed is refused; the toast offers
-   * to clear that diagnosis and undo again.
+   * to clear that diagnosis and undo again. So is an animal that had a baixa.
    */
   reopenManejoAnimal: (sessionId: string, earTag: string) => Promise<void>;
   /**
@@ -479,6 +486,10 @@ const CONFLICT = 409;
 
 /** Toast of a cobertura refused because the semen bull has no dose left. */
 const OUT_OF_STOCK_MESSAGE = "Esse touro não tem mais doses.";
+
+/** Toast of a pass refused because the animal had a baixa (409 animal_inactive). */
+const inactiveAnimalMessage = (earTag: string) =>
+  `O animal ${earTag} teve baixa e não passa mais no brete.`;
 
 /** Immutably updates one semen bull's purchases. */
 function withPurchases(
@@ -766,6 +777,11 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
           // reload so the chips show the doses the server counts.
           toast.error(OUT_OF_STOCK_MESSAGE);
           await reloadHerd(set);
+        } else if (detail.error === "animal_inactive") {
+          // A baixa given elsewhere while the session ran: reload so the brete
+          // sees the animal out of the herd.
+          toast.error(inactiveAnimalMessage(earTag));
+          await reloadHerd(set);
         }
         return false; // otherwise stale UI: pass already recorded
       }
@@ -828,6 +844,44 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     }));
   },
 
+  baixaManejoAnimal: async (sessionId, earTag, input) => {
+    const animalId = animalIdByEarTag(get().animals, earTag);
+    const notes = input.notes?.trim();
+    const { data, error } = await api.manejo({ id: sessionId }).animals({ animalId }).baixa.post({
+      reason: input.reason,
+      date: input.date,
+      notes: notes ? notes : undefined,
+    });
+    if (error) {
+      if (error.status === CONFLICT) {
+        const detail = error.value as { error?: string };
+        if (detail.error === "animal_inactive") toast.error(inactiveAnimalMessage(earTag));
+        await reloadHerd(set);
+        return false;
+      }
+      apiFail("dar baixa no animal", error);
+    }
+    const result = data as {
+      entry: ManejoSessionAnimal;
+      animal: Pick<Animal, "active" | "inactiveReason" | "inactiveDate" | "inactiveNotes">;
+    };
+    set((s) => ({
+      animals: s.animals.map((a) =>
+        a.earTag === earTag
+          ? {
+              ...a,
+              active: result.animal.active,
+              inactiveReason: result.animal.inactiveReason,
+              inactiveDate: result.animal.inactiveDate,
+              inactiveNotes: result.animal.inactiveNotes,
+            }
+          : a
+      ),
+      manejoSessions: withSessionAnimal(s.manejoSessions, sessionId, earTag, result.entry),
+    }));
+    return true;
+  },
+
   reopenManejoAnimal: async (sessionId, earTag) => {
     const animalId = animalIdByEarTag(get().animals, earTag);
     const { data, error } = await api.manejo({ id: sessionId }).animals({ animalId }).reopen.post();
@@ -864,6 +918,8 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
                   },
                 }
           );
+        } else if (detail.error === "animal_inactive") {
+          toast.error(inactiveAnimalMessage(earTag));
         }
         return; // otherwise stale UI: pass already reverted
       }

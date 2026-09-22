@@ -34,7 +34,9 @@ export type ManejoConflict =
   | "session_not_open"
   | "entry_not_actionable"
   | "out_of_stock"
-  | "has_diagnosis";
+  | "has_diagnosis"
+  /** The animal had a baixa: nothing more is applied to it at the brete. */
+  | "animal_inactive";
 
 export const conflict = (code: ManejoConflict): { conflict: ManejoConflict } => ({
   conflict: code,
@@ -65,7 +67,12 @@ export async function lockEntry(
     .for("update");
   if (!session) return { session: undefined, entry: undefined, animal: undefined };
   const [animal] = await tx
-    .select({ id: animals.id, earTag: animals.earTag, lotId: animals.lotId })
+    .select({
+      id: animals.id,
+      earTag: animals.earTag,
+      lotId: animals.lotId,
+      active: animals.active,
+    })
     .from(animals)
     .where(and(eq(animals.farmId, farmId), eq(animals.id, animalId)))
     .limit(1);

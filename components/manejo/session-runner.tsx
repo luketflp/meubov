@@ -6,7 +6,8 @@
  * "Pular", and the next pending animal takes the focus. Every action applies
  * its effects immediately (treatment, weighing), so the session can stop and
  * resume at any point without losing work — a manejo takes hours. An entrada
- * and an inseminação bring their own chute form.
+ * and an inseminação bring their own chute form. The animal in the brete can
+ * be edited on the spot, a baixa included (chute-animal.tsx).
  */
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
@@ -35,7 +36,7 @@ import {
 import { formatArroba, formatCurrency, formatKg, formatPercent } from "@/lib/domain/format";
 import { saleAmount } from "@/lib/domain/movements";
 import { inseminationBulls } from "@/lib/domain/semen";
-import { breedLabel, ChuteBreed } from "@/components/manejo/chute-breed";
+import { breedLabel, ChuteEditAnimal } from "@/components/manejo/chute-animal";
 import { EntryChuteForm } from "@/components/manejo/entry-chute-form";
 import {
   DosesUsedToday,
@@ -155,6 +156,10 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
   const current =
     (selectedTag && pending.find((a) => a.earTag === selectedTag)) || visiblePending[0] || null;
   const currentAnimal = current ? byTag.get(current.earTag) : undefined;
+  // An animal that had a baixa cannot come back to the queue; only a sold pass,
+  // whose own sale took it out of the herd, can be undone.
+  const leftHerd = (entry: ManejoSessionAnimal) =>
+    byTag.get(entry.earTag)?.active === false && !(isSale && entry.outcome === "done");
 
   function resetPassForm() {
     setWeight("");
@@ -284,7 +289,12 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
       {operable && isEntry ? <EntryChuteForm session={session} todayIso={todayISO()} /> : null}
 
       {operable && isInsemination && current ? (
-        <InseminationChuteForm session={session} entry={current} onDone={resetPassForm} />
+        <InseminationChuteForm
+          session={session}
+          entry={current}
+          onDone={resetPassForm}
+          onSaved={setSelectedTag}
+        />
       ) : null}
 
       {needsYield ? (
@@ -302,7 +312,9 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
 
       {operable && !isEntry && !isInsemination && !needsYield && current ? (
         <SectionCard title="No brete agora">
-          <form onSubmit={onComplete} className="space-y-4">
+          <div className="space-y-4">
+            {/* Outside the chute form: the edit dialog's own submit would bubble
+                through the portal into it and complete the animal. */}
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span className="font-mono text-3xl font-semibold text-ink">
                 {current.earTag}
@@ -320,93 +332,101 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
                 </span>
               ) : null}
               {currentAnimal ? (
-                <ChuteBreed key={currentAnimal.earTag} animal={currentAnimal} />
+                <ChuteEditAnimal
+                  key={currentAnimal.id}
+                  sessionId={session.id}
+                  animal={currentAnimal}
+                  onSaved={setSelectedTag}
+                  onBaixa={resetPassForm}
+                />
               ) : null}
             </div>
 
-            {session.kind === "transfer" && destinationName ? (
-              <p className="text-sm text-ink-soft">
-                Ao concluir, o animal passa a ocupar{" "}
-                <span className="font-medium text-ink">{destinationName}</span>.
-              </p>
-            ) : null}
+            <form onSubmit={onComplete} className="space-y-4">
+              {session.kind === "transfer" && destinationName ? (
+                <p className="text-sm text-ink-soft">
+                  Ao concluir, o animal passa a ocupar{" "}
+                  <span className="font-medium text-ink">{destinationName}</span>.
+                </p>
+              ) : null}
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              {session.weighing ? (
-                <div className="grid gap-1.5">
-                  <Label htmlFor="pass-weight">Peso na balança (kg)</Label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {session.weighing ? (
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="pass-weight">Peso na balança (kg)</Label>
+                    <Input
+                      key={current.earTag}
+                      id="pass-weight"
+                      type="number"
+                      min={1}
+                      step="0.1"
+                      inputMode="decimal"
+                      autoFocus
+                      value={weight}
+                      onChange={(e) => setWeight(e.target.value)}
+                      placeholder="kg"
+                      aria-invalid={error ? true : undefined}
+                      className="min-h-11 font-mono text-lg"
+                    />
+                  </div>
+                ) : null}
+                <div className={cn("grid gap-1.5", !session.weighing && "sm:col-span-2")}>
+                  <Label htmlFor="pass-note">Observação (opcional)</Label>
                   <Input
-                    key={current.earTag}
-                    id="pass-weight"
-                    type="number"
-                    min={1}
-                    step="0.1"
-                    inputMode="decimal"
-                    autoFocus
-                    value={weight}
-                    onChange={(e) => setWeight(e.target.value)}
-                    placeholder="kg"
-                    aria-invalid={error ? true : undefined}
-                    className="min-h-11 font-mono text-lg"
+                    id="pass-note"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Ex.: reação, brinco danificado…"
+                    className="min-h-11"
                   />
                 </div>
-              ) : null}
-              <div className={cn("grid gap-1.5", !session.weighing && "sm:col-span-2")}>
-                <Label htmlFor="pass-note">Observação (opcional)</Label>
-                <Input
-                  id="pass-note"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Ex.: reação, brinco danificado…"
-                  className="min-h-11"
-                />
               </div>
-            </div>
 
-            {isSale && session.pricePerArroba !== undefined ? (
-              <p className="text-sm text-ink-soft">
-                {passWeight === null ? (
-                  "Digite o peso para calcular o valor deste animal."
-                ) : (
-                  <>
-                    {formatArroba(
-                      carcassArrobas(
-                        passWeight,
-                        session.carcassYieldPct ?? DEFAULT_CARCASS_YIELD_PCT
-                      )
-                    )}{" "}
-                    de carcaça (rend.{" "}
-                    {formatPercent(session.carcassYieldPct ?? DEFAULT_CARCASS_YIELD_PCT)}) ×{" "}
-                    {formatCurrency(session.pricePerArroba)}/@ ={" "}
-                    <span className="font-mono font-medium text-ink">
-                      {formatCurrency(passValue ?? 0)}
-                    </span>
-                  </>
-                )}
-              </p>
-            ) : null}
-            {error ? <p className="text-xs text-overdue">{error}</p> : null}
+              {isSale && session.pricePerArroba !== undefined ? (
+                <p className="text-sm text-ink-soft">
+                  {passWeight === null ? (
+                    "Digite o peso para calcular o valor deste animal."
+                  ) : (
+                    <>
+                      {formatArroba(
+                        carcassArrobas(
+                          passWeight,
+                          session.carcassYieldPct ?? DEFAULT_CARCASS_YIELD_PCT
+                        )
+                      )}{" "}
+                      de carcaça (rend.{" "}
+                      {formatPercent(session.carcassYieldPct ?? DEFAULT_CARCASS_YIELD_PCT)}) ×{" "}
+                      {formatCurrency(session.pricePerArroba)}/@ ={" "}
+                      <span className="font-mono font-medium text-ink">
+                        {formatCurrency(passValue ?? 0)}
+                      </span>
+                    </>
+                  )}
+                </p>
+              ) : null}
+              {error ? <p className="text-xs text-overdue">{error}</p> : null}
 
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="submit"
-                disabled={busy}
-                className="min-h-12 flex-1 sm:flex-none sm:px-8"
-              >
-                <CheckCircle2 aria-hidden />
-                Concluir animal
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-12"
-                disabled={busy}
-                onClick={onSkip}
-              >
-                Pular (não passou)
-              </Button>
-            </div>
-          </form>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="submit"
+                  disabled={busy}
+                  className="min-h-12 flex-1 sm:flex-none sm:px-8"
+                >
+                  <CheckCircle2 aria-hidden />
+                  Concluir animal
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-12"
+                  disabled={busy}
+                  onClick={onSkip}
+                >
+                  Pular (não passou)
+                </Button>
+              </div>
+            </form>
+          </div>
         </SectionCard>
       ) : null}
 
@@ -510,6 +530,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
                 entries={done}
                 open={operable}
                 onUndo={(earTag) => reopenManejoAnimal(session.id, earTag)}
+                leftHerd={leftHerd}
                 detail={
                   isInsemination
                     ? (entry) =>
@@ -526,6 +547,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
                 entries={skipped}
                 open={operable}
                 onUndo={(earTag) => reopenManejoAnimal(session.id, earTag)}
+                leftHerd={leftHerd}
               />
             </SectionCard>
           ) : null}
@@ -557,11 +579,14 @@ function HandledList({
   entries,
   open,
   onUndo,
+  leftHerd,
   detail,
 }: {
   entries: ManejoSessionAnimal[];
   open: boolean;
   onUndo: (earTag: string) => void;
+  /** The animal had a baixa: its row reads "Baixa" instead of offering the undo. */
+  leftHerd: (entry: ManejoSessionAnimal) => boolean;
   /** What the pass recorded beside the brinco — the bull, on an inseminação. */
   detail?: (entry: ManejoSessionAnimal) => string | undefined;
 }) {
@@ -582,7 +607,9 @@ function HandledList({
             {entry.notes ? (
               <span className="truncate text-xs text-ink-soft">{entry.notes}</span>
             ) : null}
-            {open ? (
+            {open && leftHerd(entry) ? (
+              <span className="ml-auto shrink-0 text-xs font-medium text-ink-soft">Baixa</span>
+            ) : open ? (
               <Button
                 variant="ghost"
                 size="sm"

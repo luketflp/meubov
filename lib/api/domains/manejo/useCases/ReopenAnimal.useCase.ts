@@ -84,6 +84,11 @@ export class ReopenAnimalUseCase implements CurrUseCase {
       if (!session || !entry || !animal) return null;
       if (session.status !== "open") return conflict("session_not_open");
       if (entry.outcome === "pending") return conflict("entry_not_actionable");
+      // An animal that had a baixa stays out of the queue: there is nothing left
+      // to apply to it, and in a venda the undo would even put it back in the
+      // herd. Only a sold pass, whose own sale took it out, may be undone.
+      const soldHere = session.kind === "sale" && entry.outcome === "done";
+      if (!animal.active && !soldHere) return conflict("animal_inactive");
       const earTag = animal.earTag;
 
       if (entry.previousLotId !== null) {

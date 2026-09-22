@@ -37,6 +37,8 @@ export const ROUTE_REQUIREMENTS: Readonly<Record<string, RouteRequirement>> = {
   "POST /api/herd/manejo": edit("manejo"),
   "DELETE /api/herd/manejo/:id": edit("manejo"),
   "POST /api/herd/manejo/:id/animals": edit("manejo"),
+  // A baixa at the brete skips the pass and takes the animal out of the herd.
+  "POST /api/herd/manejo/:id/animals/:animalId/baixa": edit("manejo", "herd"),
   "POST /api/herd/manejo/:id/animals/:animalId/complete": edit("manejo"),
   "POST /api/herd/manejo/:id/animals/:animalId/reopen": edit("manejo"),
   "POST /api/herd/manejo/:id/animals/:animalId/skip": edit("manejo"),
