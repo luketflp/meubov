@@ -20,11 +20,14 @@ import { SemenBullsList } from "@/components/semen/semen-bulls-list";
 import { useCan } from "@/lib/store/usePermissions";
 
 interface ReproducaoPageProps {
-  searchParams: Promise<{ tab?: string | string[] }>;
+  searchParams: Promise<{ tab?: string | string[]; brete?: string | string[] }>;
 }
 
 export default function ReproducaoPage({ searchParams }: ReproducaoPageProps) {
-  const activeTab = reproductionTab(use(searchParams).tab);
+  const params = use(searchParams);
+  const activeTab = reproductionTab(params.tab);
+  // The lote whose ultrassom brete is open, on the Ultrassom tab.
+  const brete = typeof params.brete === "string" ? params.brete : null;
   const canEdit = useCan("reproduction", "edit");
   // The inseminação is a manejo: starting one is a Manejo write.
   const canStartInsemination = useCan("manejo", "edit");
@@ -48,7 +51,7 @@ export default function ReproducaoPage({ searchParams }: ReproducaoPageProps) {
       {activeTab === "touros" ? (
         <SemenBullsList />
       ) : activeTab === "ultrassom" ? (
-        <UltrasoundList />
+        <UltrasoundList brete={brete} />
       ) : (
         <BreedingsList />
       )}

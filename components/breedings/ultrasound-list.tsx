@@ -1,10 +1,13 @@
 "use client";
 
 /**
- * Ultrassom tab of the Reprodução page: the coberturas waiting for the vet, one
- * card per inseminação and then the coberturas avulsas, each cow with a
- * "Prenhe" and a "Vazia" button that save on tap. Table on desktop, stacked
- * cards on mobile — the same shape as the Coberturas tab.
+ * Ultrassom tab of the Reprodução page: the coberturas waiting for the vet,
+ * split by the lote each cow is in today — the Coberturas tab's lote rows,
+ * same markup and same rules: up to three lotes start open, more start closed,
+ * and a search opens every lote it keeps. Each cow has a "Prenhe" and a
+ * "Vazia" button that save on tap; a diagnosed cow can change her result or go
+ * back to waiting. "Iniciar ultrassom" on a lote opens its brete
+ * (ultrasound-brete.tsx), one cow at a time, on the URL's `brete`.
  *
  * The groups come from {@link ultrasoundGroups} over the herd store, so the
  * list needs no request of its own; only the diagnosis goes to the server. The
@@ -13,15 +16,26 @@
  * confirms with a toast that can undo it. Without Reprodução edit the list only
  * reads: each cow shows her result, and the date and the buttons are gone.
  */
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useId, useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, Pencil, Search, Stethoscope, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Pencil,
+  Search,
+  Stethoscope,
+  Undo2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import type { DiagnosisResult } from "@/lib/types";
 import { ACTION_TOAST_MS, useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
 import { formatDate, todayISO } from "@/lib/domain/dates";
+import { formatNumber } from "@/lib/domain/format";
 import {
+  NO_LOT_KEY,
   pendingDiagnosisCount,
   searchUltrasound,
   ultrasoundGroups,
@@ -30,10 +44,18 @@ import {
 } from "@/lib/domain/ultrasound";
 import { BreedingPill, ResultPill } from "@/components/animal/reproduction-pills";
 import { StartInseminationButton } from "@/components/breedings/start-insemination-button";
+import { UltrasoundBrete } from "@/components/breedings/ultrasound-brete";
+import {
+  BullName,
+  daysText,
+  examDateError,
+  ExamDateField,
+  linkClass,
+  ultrasoundBreteHref,
+} from "@/components/breedings/ultrasound-parts";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -44,28 +66,11 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
-const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+/** A list with at most this many lotes opens all of them; more start closed. */
+const OPEN_BY_DEFAULT_MAX = 3;
 
-const linkClass = "font-mono font-medium text-ink underline-offset-2 hover:underline";
-
-/** "1 dia", "39 dias". */
-const daysText = (days: number): string => `${days} ${days === 1 ? "dia" : "dias"}`;
-
-/** Why the toolbar's date cannot take a tap yet; null when it can. */
-function examDateError(date: string, todayIso: string): string | null {
-  if (!ISO_DATE_PATTERN.test(date)) return "Informe a data do diagnóstico.";
-  if (date > todayIso) return "O diagnóstico não pode ser no futuro.";
-  return null;
-}
-
-/** The bull: a registered semen bull by name, a herd bull or a semen code by its tag. */
-function BullName({ row, className }: { row: UltrasoundRow; className?: string }) {
-  if (row.bull !== null) {
-    return <span className={cn("text-ink", className)}>{row.bull.name}</span>;
-  }
-  return (
-    <span className={cn("font-mono text-ink", className)}>{row.breeding.bullEarTag}</span>
-  );
+function groupName(group: Pick<UltrasoundGroup, "name">): string {
+  return group.name ?? "Sem lote";
 }
 
 interface RowActionsProps {
@@ -79,10 +84,10 @@ interface RowActionsProps {
 }
 
 /**
- * "Prenhe" and "Vazia" for a cow still waiting, or the result and "Alterar"
- * once she has one — which brings the buttons back for that cow only. Both
- * buttons stay disabled while the tap saves, and for a cobertura dated after
- * the exam.
+ * "Prenhe" and "Vazia" for a cow still waiting, or the result, "Alterar" and
+ * "Voltar a pendente" once she has one — "Alterar" brings the buttons back for
+ * that cow only. Every button stays disabled while the tap saves, and "Prenhe"
+ * and "Vazia" for a cobertura dated after the exam.
  */
 function RowActions({ row, examDate, variant, canEdit }: RowActionsProps) {
   const recordDiagnosis = useHerdStore((s) => s.recordDiagnosis);
@@ -120,12 +125,38 @@ function RowActions({ row, examDate, variant, canEdit }: RowActionsProps) {
     });
   }
 
+  async function backToPending() {
+    const earTag = dam.earTag;
+    const previous = dam.reproduction?.diagnoses.find((d) => d.breedingId === breeding.id);
+    if (previous === undefined) return;
+    setSaving(true);
+    try {
+      await clearDiagnosis(earTag, breeding.id);
+    } catch {
+      return; // The store already showed the failure.
+    } finally {
+      setSaving(false);
+    }
+
+    const undo = async () => {
+      try {
+        await recordDiagnosis(earTag, previous);
+      } catch {
+        // The store already showed the failure.
+      }
+    };
+    toast.success("Diagnóstico removido", {
+      duration: ACTION_TOAST_MS,
+      action: { label: "Desfazer", onClick: () => void undo() },
+    });
+  }
+
   if (!canEdit) {
     return (
       <div
         className={cn(
           "flex min-h-11 items-center",
-          variant === "row" ? "ml-auto w-54 justify-end" : "mt-3"
+          variant === "row" ? "ml-auto w-60 justify-end" : "mt-3"
         )}
       >
         <ResultPill result={row.result} />
@@ -137,8 +168,8 @@ function RowActions({ row, examDate, variant, canEdit }: RowActionsProps) {
     return (
       <div
         className={cn(
-          "flex min-h-11 items-center justify-between gap-2",
-          variant === "row" ? "ml-auto w-54" : "mt-3"
+          "flex min-h-11 items-center gap-1",
+          variant === "row" ? "ml-auto w-60" : "mt-3"
         )}
       >
         <ResultPill result={row.result} />
@@ -146,11 +177,24 @@ function RowActions({ row, examDate, variant, canEdit }: RowActionsProps) {
           type="button"
           variant="ghost"
           size="sm"
-          className="min-h-11 text-brand hover:text-brand"
+          className="ml-auto min-h-11 text-brand hover:text-brand"
+          disabled={saving}
           onClick={() => setChanging(true)}
         >
           <Pencil data-icon="inline-start" aria-hidden />
           Alterar
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-11 text-ink-soft hover:text-ink"
+          disabled={saving}
+          onClick={() => void backToPending()}
+          aria-label={`Voltar a vaca ${dam.earTag} para aguardando diagnóstico`}
+          title="Voltar a pendente"
+        >
+          <Undo2 aria-hidden />
         </Button>
       </div>
     );
@@ -158,7 +202,7 @@ function RowActions({ row, examDate, variant, canEdit }: RowActionsProps) {
 
   const disabled = saving || examDate === null || breeding.date > examDate;
   return (
-    <div className={variant === "row" ? "ml-auto flex w-54 justify-end gap-2" : "mt-3 grid grid-cols-2 gap-2"}>
+    <div className={variant === "row" ? "ml-auto flex w-60 justify-end gap-2" : "mt-3 grid grid-cols-2 gap-2"}>
       <Button
         type="button"
         variant="outline"
@@ -183,144 +227,108 @@ function RowActions({ row, examDate, variant, canEdit }: RowActionsProps) {
   );
 }
 
-/** "16 pendentes · 6 prenhes · 2 vazias", leaving out the counts at zero. */
+/** "16 aguardando · 6 prenhes · 2 vazias", leaving out the counts at zero. */
 function GroupCounts({ group }: { group: UltrasoundGroup }) {
   const parts = [
-    { key: "pending", count: group.pending, one: "pendente", many: "pendentes" },
+    { key: "pending", count: group.pending, one: "aguardando", many: "aguardando" },
     { key: "pregnant", count: group.pregnant, one: "prenhe", many: "prenhes" },
     { key: "open", count: group.open, one: "vazia", many: "vazias" },
   ].filter((part) => part.count > 0);
 
   return (
-    <p className="text-xs whitespace-nowrap text-ink-soft">
+    <span className="block text-xs text-ink-soft">
       {parts.map((part, index) => (
         <Fragment key={part.key}>
           {index > 0 ? " · " : null}
-          <span className="font-mono font-medium text-ink">{part.count}</span>{" "}
+          <span className="font-mono font-medium text-ink">{formatNumber(part.count)}</span>{" "}
           {part.count === 1 ? part.one : part.many}
         </Fragment>
       ))}
-    </p>
+    </span>
   );
 }
 
-interface GroupCardProps {
-  group: UltrasoundGroup;
-  lotNames: Map<string, string>;
-  examDate: string | null;
-  canEdit: boolean;
-}
-
-/**
- * One inseminação, or the coberturas avulsas. SectionCard's anatomy with a line
- * beside the title — the lote and how long ago — the way the invernada groups
- * on Lotes carry theirs.
- */
-function GroupCard({ group, lotNames, examDate, canEdit }: GroupCardProps) {
-  const title =
-    group.date === null ? "Coberturas avulsas" : `Inseminação de ${formatDate(group.date)}`;
-  const lotName = group.lotId === null ? undefined : lotNames.get(group.lotId);
-  const detail =
-    group.days === null
-      ? null
-      : [lotName, daysText(group.days)].filter((part) => part !== undefined).join(" · ");
-
+/** "Iniciar ultrassom" of one lote: into its brete. */
+function StartUltrasoundLink({ group, className }: { group: UltrasoundGroup; className?: string }) {
   return (
-    <section className="rounded-lg border border-hairline bg-panel">
-      <header className="flex flex-col gap-0.5 border-b border-hairline px-4 py-3 md:flex-row md:items-center md:justify-between md:gap-2">
-        <div className="flex min-w-0 flex-col gap-0.5 md:flex-row md:items-baseline md:gap-2">
-          <h2 className="font-heading text-base font-semibold text-ink">{title}</h2>
-          {detail ? <p className="text-xs text-ink-soft">{detail}</p> : null}
-        </div>
-        <GroupCounts group={group} />
-      </header>
-
-      <div className="p-4">
-        {/* Desktop: table. Fixed columns on wide screens, so the cards line up. */}
-        <div className="hidden md:block">
-          <Table className="xl:table-fixed">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="xl:w-40">Matriz</TableHead>
-                <TableHead className="xl:w-60">Touro</TableHead>
-                <TableHead className="xl:w-40">Tipo</TableHead>
-                <TableHead className="text-right xl:w-18">Dias</TableHead>
-                <TableHead className="text-right">
-                  <span className="sr-only">Diagnóstico</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {group.rows.map((row) => (
-                <TableRow key={row.breeding.id}>
-                  <TableCell>
-                    <Link href={`/herd/${row.dam.id}`} className={linkClass}>
-                      {row.dam.earTag}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="truncate">
-                    <BullName row={row} />
-                  </TableCell>
-                  <TableCell>
-                    <BreedingPill type={row.breeding.type} />
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-ink">{row.days}</TableCell>
-                  <TableCell className="text-right">
-                    <RowActions row={row} examDate={examDate} variant="row" canEdit={canEdit} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-
-        {/* Mobile: stacked cards */}
-        <ul className="space-y-3 md:hidden">
-          {group.rows.map((row) => (
-            <li
-              key={row.breeding.id}
-              className="rounded-lg border border-hairline bg-surface p-4"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <Link href={`/herd/${row.dam.id}`} className={linkClass}>
-                  {row.dam.earTag}
-                </Link>
-                <span className="font-mono text-xs text-ink-soft">{daysText(row.days)}</span>
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <BreedingPill type={row.breeding.type} />
-                <span className="text-xs text-ink-soft">
-                  Touro <BullName row={row} className="font-medium" />
-                </span>
-              </div>
-              <RowActions row={row} examDate={examDate} variant="card" canEdit={canEdit} />
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
+    <Button asChild variant="outline" size="sm" className={cn("min-h-11 md:min-h-8", className)}>
+      <Link
+        href={ultrasoundBreteHref(group.key)}
+        scroll={false}
+        onClick={(e) => e.stopPropagation()}
+        aria-label={`Iniciar ultrassom de ${groupName(group)}`}
+      >
+        <Stethoscope data-icon="inline-start" aria-hidden />
+        Iniciar ultrassom
+      </Link>
+    </Button>
   );
 }
 
-export function UltrasoundList() {
+export function UltrasoundList({ brete }: { brete: string | null }) {
   const animals = useHerdStore((s) => s.animals);
   const sessions = useHerdStore((s) => s.manejoSessions);
   const semenBulls = useHerdStore((s) => s.semenBulls);
   const lots = useHerdStore((s) => s.lots);
   const canEdit = useCan("reproduction", "edit");
   const canStartInsemination = useCan("manejo", "edit");
+  const idPrefix = useId();
   const today = todayISO();
   const [examDate, setExamDate] = useState(today);
   const [search, setSearch] = useState("");
+  /** Lotes the farmer opened or closed, over the default. */
+  const [toggled, setToggled] = useState<Record<string, boolean>>({});
+  /** Lotes closed under the current search; forgotten whenever the search changes. */
+  const [closedInSearch, setClosedInSearch] = useState<ReadonlySet<string>>(() => new Set());
 
   const groups = useMemo(
-    () => ultrasoundGroups(animals, sessions, semenBulls, today),
-    [animals, sessions, semenBulls, today]
+    () => ultrasoundGroups(animals, sessions, semenBulls, lots, today),
+    [animals, sessions, semenBulls, lots, today]
   );
   const shown = useMemo(() => searchUltrasound(groups, search), [groups, search]);
-  const lotNames = useMemo(() => new Map(lots.map((lot) => [lot.id, lot.name])), [lots]);
   const dateError = examDateError(examDate, today);
   const tapDate = dateError === null ? examDate : null;
+  const searching = search.trim() !== "";
+  const openByDefault = groups.length <= OPEN_BY_DEFAULT_MAX;
+
+  function isOpen(key: string): boolean {
+    if (searching) return !closedInSearch.has(key);
+    return toggled[key] ?? openByDefault;
+  }
+
+  function toggle(key: string) {
+    if (searching) {
+      setClosedInSearch((previous) => {
+        const next = new Set(previous);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+      return;
+    }
+    setToggled((previous) => ({ ...previous, [key]: !(previous[key] ?? openByDefault) }));
+  }
+
+  function changeSearch(value: string) {
+    setSearch(value);
+    setClosedInSearch(new Set());
+  }
+
+  if (canEdit && brete !== null) {
+    const lotName =
+      brete === NO_LOT_KEY
+        ? "Sem lote"
+        : (lots.find((lot) => lot.id === brete)?.name ?? "Lote não encontrado");
+    return (
+      <UltrasoundBrete
+        key={brete}
+        group={groups.find((group) => group.key === brete) ?? null}
+        lotName={lotName}
+        examDate={examDate}
+        onExamDateChange={setExamDate}
+      />
+    );
+  }
 
   if (groups.length === 0) {
     return (
@@ -345,27 +353,12 @@ export function UltrasoundList() {
       {/* Toolbar */}
       <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
         {canEdit ? (
-          <>
-            <div className="grid gap-1.5 md:flex md:items-center md:gap-2.5">
-              <Label htmlFor="ultrasound-exam-date">Data do exame</Label>
-              <Input
-                id="ultrasound-exam-date"
-                type="date"
-                max={today}
-                value={examDate}
-                onChange={(e) => setExamDate(e.target.value)}
-                aria-describedby="ultrasound-exam-date-hint"
-                aria-invalid={dateError !== null}
-                className="min-h-11 font-mono md:min-h-9 md:w-44"
-              />
-            </div>
-            <p
-              id="ultrasound-exam-date-hint"
-              className={cn("-mt-1.5 text-xs md:mt-0", dateError ? "text-overdue" : "text-ink-soft")}
-            >
-              {dateError ?? "Vale para todos os toques desta tela"}
-            </p>
-          </>
+          <ExamDateField
+            id="ultrasound-exam-date"
+            value={examDate}
+            todayIso={today}
+            onChange={setExamDate}
+          />
         ) : null}
         <div className={cn("relative md:w-60", canEdit && "md:ml-3")}>
           <Search
@@ -375,7 +368,7 @@ export function UltrasoundList() {
           <Input
             type="search"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => changeSearch(e.target.value)}
             placeholder="Buscar brinco"
             aria-label="Buscar vaca por brinco"
             className="min-h-11 pl-9 font-mono md:min-h-9"
@@ -387,19 +380,189 @@ export function UltrasoundList() {
         </p>
       </div>
 
-      {shown.length === 0 ? (
-        <p className="text-xs text-ink-soft">Nenhum brinco corresponde à busca.</p>
-      ) : (
-        shown.map((group) => (
-          <GroupCard
-            key={group.key}
-            group={group}
-            lotNames={lotNames}
-            examDate={tapDate}
-            canEdit={canEdit}
-          />
-        ))
-      )}
+      <section className="rounded-lg border border-hairline bg-panel p-4">
+        {shown.length === 0 ? (
+          <p className="text-sm text-ink-soft">Nenhum brinco corresponde à busca.</p>
+        ) : (
+          <>
+            {/* Desktop: one row per lote, its cows nested under it when open */}
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Lote</TableHead>
+                    <TableHead className="text-right">Aguardando</TableHead>
+                    <TableHead className="text-right">Prenhes</TableHead>
+                    <TableHead className="text-right">Vazias</TableHead>
+                    <TableHead className="w-44 text-right">
+                      <span className="sr-only">Iniciar ultrassom</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {shown.map((group, index) => {
+                    const open = isOpen(group.key);
+                    const panelId = `${idPrefix}-tabela-${index}`;
+                    const Chevron = open ? ChevronDown : ChevronRight;
+                    return (
+                      <Fragment key={group.key}>
+                        <TableRow
+                          onClick={() => toggle(group.key)}
+                          className="cursor-pointer has-aria-expanded:bg-surface"
+                        >
+                          <TableCell className="py-3">
+                            <button
+                              type="button"
+                              aria-expanded={open}
+                              aria-controls={open ? panelId : undefined}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggle(group.key);
+                              }}
+                              className="inline-flex items-center gap-2 font-semibold text-ink"
+                            >
+                              <Chevron className="size-4 text-ink-soft" aria-hidden />
+                              {groupName(group)}
+                            </button>
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {formatNumber(group.pending)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {formatNumber(group.pregnant)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {formatNumber(group.open)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {canEdit ? <StartUltrasoundLink group={group} /> : null}
+                          </TableCell>
+                        </TableRow>
+
+                        {open ? (
+                          <TableRow id={panelId} className="hover:bg-transparent">
+                            <TableCell colSpan={5} className="p-0 pb-2">
+                              {/* Shared widths line the columns up across the lotes. */}
+                              <Table>
+                                <TableHeader>
+                                  <TableRow className="hover:bg-transparent [&>th]:border-b">
+                                    <TableHead className="w-[12%] pl-6 text-xs text-ink-soft">Matriz</TableHead>
+                                    <TableHead className="w-[13%] text-xs text-ink-soft">Cobertura</TableHead>
+                                    <TableHead className="w-[20%] text-xs text-ink-soft">Touro</TableHead>
+                                    <TableHead className="w-[14%] text-xs text-ink-soft">Tipo</TableHead>
+                                    <TableHead className="w-[7%] text-right text-xs text-ink-soft">Dias</TableHead>
+                                    <TableHead className="text-right">
+                                      <span className="sr-only">Diagnóstico</span>
+                                    </TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {group.rows.map((row) => (
+                                    <TableRow key={row.breeding.id}>
+                                      <TableCell className="pl-6">
+                                        <Link href={`/herd/${row.dam.id}`} className={linkClass}>
+                                          {row.dam.earTag}
+                                        </Link>
+                                      </TableCell>
+                                      <TableCell className="font-mono text-ink">
+                                        {formatDate(row.breeding.date)}
+                                      </TableCell>
+                                      <TableCell className="truncate">
+                                        <BullName row={row} />
+                                      </TableCell>
+                                      <TableCell>
+                                        <BreedingPill type={row.breeding.type} />
+                                      </TableCell>
+                                      <TableCell className="text-right font-mono text-ink">
+                                        {row.days}
+                                      </TableCell>
+                                      <TableCell className="text-right">
+                                        <RowActions
+                                          row={row}
+                                          examDate={tapDate}
+                                          variant="row"
+                                          canEdit={canEdit}
+                                        />
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </TableCell>
+                          </TableRow>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Mobile: a tappable row per lote over the stacked cards */}
+            <div className="-my-2 divide-y divide-hairline md:hidden">
+              {shown.map((group, index) => {
+                const open = isOpen(group.key);
+                const panelId = `${idPrefix}-cards-${index}`;
+                const Chevron = open ? ChevronDown : ChevronRight;
+                return (
+                  <div key={group.key}>
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      aria-controls={open ? panelId : undefined}
+                      onClick={() => toggle(group.key)}
+                      className="flex min-h-14 w-full items-center gap-2.5 py-2 text-left"
+                    >
+                      <Chevron className="size-4 shrink-0 text-ink-soft" aria-hidden />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-ink">
+                          {groupName(group)}
+                        </span>
+                        <GroupCounts group={group} />
+                      </span>
+                    </button>
+
+                    {open ? (
+                      <div id={panelId} className="space-y-3 pt-1 pb-4">
+                        {canEdit ? <StartUltrasoundLink group={group} className="w-full" /> : null}
+                        <ul className="space-y-3">
+                          {group.rows.map((row) => (
+                            <li
+                              key={row.breeding.id}
+                              className="rounded-lg border border-hairline bg-surface p-4"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <Link href={`/herd/${row.dam.id}`} className={linkClass}>
+                                  {row.dam.earTag}
+                                </Link>
+                                <span className="font-mono text-xs text-ink-soft">
+                                  {formatDate(row.breeding.date)} · {daysText(row.days)}
+                                </span>
+                              </div>
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <BreedingPill type={row.breeding.type} />
+                                <span className="text-xs text-ink-soft">
+                                  Touro <BullName row={row} className="font-medium" />
+                                </span>
+                              </div>
+                              <RowActions
+                                row={row}
+                                examDate={tapDate}
+                                variant="card"
+                                canEdit={canEdit}
+                              />
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </section>
     </div>
   );
 }
