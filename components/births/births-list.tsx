@@ -2,20 +2,29 @@
 
 /**
  * Births log: every calving on the farm, newest first, joining the calf to the
- * dam that bore it. Table on desktop, stacked cards on mobile — the same shape
+ * dam that bore it and the lot the dam is in. The table headers sort it the way
+ * the Rebanho table does. Table on desktop, stacked cards on mobile — the same shape
  * the manejo history uses.
  *
  * The rows come straight from the herd store: a calving already travels inside
  * its dam's reproduction record, so this screen needs no request of its own.
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Baby } from "lucide-react";
+import { ArrowDown, ArrowUp, Baby, ChevronsUpDown } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { recentBirths, type Birth } from "@/lib/store/selectors";
 import { formatDate } from "@/lib/domain/dates";
 import { formatKg } from "@/lib/domain/format";
 import { SEX_LABEL } from "@/lib/domain/labels";
+import { cn } from "@/lib/utils";
+import {
+  DEFAULT_BIRTH_SORT,
+  nextBirthSort,
+  sortBirths,
+  type BirthSort,
+  type BirthSortColumn,
+} from "@/components/births/sort-births";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import {
@@ -28,6 +37,52 @@ import {
 } from "@/components/ui/table";
 
 const linkClass = "font-mono font-medium text-ink underline-offset-2 hover:underline";
+
+const COLUMNS: { key: BirthSortColumn; label: string; className?: string }[] = [
+  { key: "date", label: "Data" },
+  { key: "calf", label: "Bezerro" },
+  { key: "sex", label: "Sexo" },
+  { key: "dam", label: "Mãe" },
+  { key: "lot", label: "Lote" },
+  { key: "breed", label: "Raça" },
+  { key: "weight", label: "Peso ao nascer", className: "text-right" },
+];
+
+function SortIcon({ active, direction }: { active: boolean; direction: "asc" | "desc" }) {
+  if (!active) return <ChevronsUpDown aria-hidden className="size-3.5 text-ink-soft/50" />;
+  if (direction === "asc") return <ArrowUp aria-hidden className="size-3.5 text-brand" />;
+  return <ArrowDown aria-hidden className="size-3.5 text-brand" />;
+}
+
+function SortableHead({
+  column,
+  sort,
+  onSort,
+}: {
+  column: (typeof COLUMNS)[number];
+  sort: BirthSort;
+  onSort: (column: BirthSortColumn) => void;
+}) {
+  const active = sort.column === column.key;
+  return (
+    <TableHead
+      aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}
+      className={column.className}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(column.key)}
+        className={cn(
+          "inline-flex items-center gap-1 text-xs font-medium transition-colors",
+          active ? "text-ink" : "text-ink-soft hover:text-ink"
+        )}
+      >
+        {column.label}
+        <SortIcon active={active} direction={sort.direction} />
+      </button>
+    </TableHead>
+  );
+}
 
 /**
  * The calf's ear tag, linked to its ficha. A calving keeps the tag it was
@@ -55,7 +110,15 @@ function weightLabel(birth: Birth): string {
 
 export function BirthsList() {
   const animals = useHerdStore((s) => s.animals);
-  const births = useMemo(() => recentBirths(animals), [animals]);
+  const lots = useHerdStore((s) => s.lots);
+  const [sort, setSort] = useState<BirthSort>(DEFAULT_BIRTH_SORT);
+
+  const lotNames = useMemo(() => new Map(lots.map((lot) => [lot.id, lot.name])), [lots]);
+  const births = useMemo(
+    () => sortBirths(recentBirths(animals), sort, lotNames),
+    [animals, sort, lotNames]
+  );
+  const lotName = (birth: Birth): string => lotNames.get(birth.dam.lotId) ?? "—";
 
   return (
     <SectionCard title="Nascimentos registrados">
@@ -72,12 +135,14 @@ export function BirthsList() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Bezerro</TableHead>
-                  <TableHead>Sexo</TableHead>
-                  <TableHead>Mãe</TableHead>
-                  <TableHead>Raça</TableHead>
-                  <TableHead className="text-right">Peso ao nascer</TableHead>
+                  {COLUMNS.map((column) => (
+                    <SortableHead
+                      key={column.key}
+                      column={column}
+                      sort={sort}
+                      onSort={(key) => setSort((current) => nextBirthSort(current, key))}
+                    />
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -95,6 +160,7 @@ export function BirthsList() {
                         {birth.dam.earTag}
                       </Link>
                     </TableCell>
+                    <TableCell className="text-ink-soft">{lotName(birth)}</TableCell>
                     <TableCell className="text-ink-soft">
                       {birth.calf?.breed ?? "—"}
                     </TableCell>
@@ -132,7 +198,8 @@ export function BirthsList() {
                     className="font-mono text-ink underline-offset-2 hover:underline"
                   >
                     {birth.dam.earTag}
-                  </Link>
+                  </Link>{" "}
+                  · lote {lotName(birth)}
                 </p>
               </li>
             ))}
