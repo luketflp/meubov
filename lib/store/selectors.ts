@@ -841,6 +841,47 @@ export function filterBreedings(rows: BreedingRow[], filter: BreedingFilter): Br
   return rows.filter((row) => row.outcome.result === filter);
 }
 
+/** The coberturas of the dams in one lote, as the Coberturas list groups them. */
+export interface BreedingLotGroup {
+  /** The lote the dams are in today; null gathers the dams whose lote resolves to nothing. */
+  lotId: string | null;
+  /** The lote's name, a deleted one included; null with the null lote. */
+  name: string | null;
+  /** The lote's coberturas, in the order they came in. */
+  rows: BreedingRow[];
+  /** Coberturas still waiting for the diagnosis. */
+  pending: number;
+  /** Coberturas diagnosed pregnant. */
+  pregnant: number;
+}
+
+/**
+ * Coberturas split by the lote each dam is in today — the breeding records no
+ * lote of its own, the same rule as the Lote column it replaces. Lotes read
+ * by name the way a person numbers them ("Lote 2" before "Lote 10"), the
+ * unknown lote last; each keeps the rows in the order they came in.
+ */
+export function breedingsByLot(rows: BreedingRow[], lots: Lot[]): BreedingLotGroup[] {
+  const nameById = new Map(lots.map((lot) => [lot.id, lot.name]));
+  const groups = new Map<string | null, BreedingLotGroup>();
+  for (const row of rows) {
+    const name = nameById.get(row.dam.lotId) ?? null;
+    const lotId = name === null ? null : row.dam.lotId;
+    let group = groups.get(lotId);
+    if (!group) {
+      group = { lotId, name, rows: [], pending: 0, pregnant: 0 };
+      groups.set(lotId, group);
+    }
+    group.rows.push(row);
+    if (row.outcome.result === "pending") group.pending += 1;
+    if (row.outcome.result === "pregnant") group.pregnant += 1;
+  }
+  return [...groups.values()].sort((a, b) => {
+    if (a.name === null || b.name === null) return a.name === null ? 1 : -1;
+    return a.name.localeCompare(b.name, "pt-BR", { numeric: true });
+  });
+}
+
 /**
  * The levels the user holds on the active farm. Until the farm list is known
  * (or when it failed to load) the floors apply, so the UI hides writes rather

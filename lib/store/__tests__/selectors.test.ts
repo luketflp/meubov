@@ -15,6 +15,7 @@ import { makeAnimal, makeTreatment } from "@/lib/domain/__tests__/fixtures";
 import {
   animalById,
   animalsByBreed,
+  breedingsByLot,
   canDeleteLot,
   currentlyPlacedLots,
   filterBreedings,
@@ -491,6 +492,82 @@ describe("filterBreedings", () => {
       expect(filterBreedings(rows, filter).map((row) => row.key)).toEqual([filter]);
     }
   );
+});
+
+describe("breedingsByLot", () => {
+  const dam = (id: string, lotId: string, breedings: Breeding[], diagnoses: ReproductionRecord["diagnoses"] = []) =>
+    makeAnimal({
+      id,
+      earTag: id.toUpperCase(),
+      category: "cow",
+      sex: "female",
+      lotId,
+      reproduction: { breedings, diagnoses, calvings: [] },
+    });
+  const groupLots: Lot[] = [
+    { id: "lot-10", name: "Lote 10" },
+    { id: "lot-2", name: "Lote 2" },
+    { id: "lot-old", name: "Apagado", deletedAt: "2026-08-01T12:00:00.000Z" },
+  ];
+  const rows = recentBreedings(
+    [
+      dam("a", "lot-10", [
+        { id: "a-pending", date: "2026-05-01", type: "timedAI", bullEarTag: "T-10" },
+      ]),
+      dam(
+        "b",
+        "lot-2",
+        [
+          { id: "b-pregnant", date: "2026-04-01", type: "timedAI", bullEarTag: "T-10" },
+          { id: "b-open", date: "2025-10-01", type: "naturalMating", bullEarTag: "T-11" },
+        ],
+        [
+          { breedingId: "b-pregnant", result: "pregnant", date: "2026-05-05" },
+          { breedingId: "b-open", result: "open", date: "2025-11-05" },
+        ]
+      ),
+      dam("c", "lot-10", [
+        { id: "c-pending", date: "2026-06-01", type: "timedAI", bullEarTag: "T-10" },
+      ]),
+      dam("d", "lot-old", [
+        { id: "d-pending", date: "2026-03-01", type: "timedAI", bullEarTag: "T-10" },
+      ]),
+      dam("e", "lot-gone", [
+        { id: "e-pending", date: "2026-02-01", type: "timedAI", bullEarTag: "T-10" },
+      ]),
+    ],
+    []
+  );
+
+  it("orders the lotes by name as a person reads numbers, the unknown lote last", () => {
+    expect(breedingsByLot(rows, groupLots).map((group) => group.name)).toEqual([
+      "Apagado",
+      "Lote 2",
+      "Lote 10",
+      null,
+    ]);
+  });
+
+  it("keeps each lote's coberturas newest first", () => {
+    const lot10 = breedingsByLot(rows, groupLots).find((group) => group.lotId === "lot-10");
+    expect(lot10?.rows.map((row) => row.key)).toEqual(["c-pending", "a-pending"]);
+  });
+
+  it("counts the coberturas awaiting diagnosis and the pregnant ones", () => {
+    const lot2 = breedingsByLot(rows, groupLots).find((group) => group.lotId === "lot-2");
+    expect(lot2).toMatchObject({ pending: 0, pregnant: 1 });
+    expect(lot2?.rows).toHaveLength(2);
+  });
+
+  it("gathers the dams whose lote resolves to nothing under a null lote", () => {
+    const unknown = breedingsByLot(rows, groupLots).at(-1);
+    expect(unknown).toMatchObject({ lotId: null, name: null, pending: 1, pregnant: 0 });
+    expect(unknown?.rows.map((row) => row.key)).toEqual(["e-pending"]);
+  });
+
+  it("has no group for a lote without coberturas", () => {
+    expect(breedingsByLot([], groupLots)).toEqual([]);
+  });
 });
 
 describe("lotSummary", () => {
