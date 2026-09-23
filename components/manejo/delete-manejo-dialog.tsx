@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * "Excluir manejo" / "Descartar manejo": one confirmation for every row of the
- * histórico. It spells the reversal out in the farmer's terms — how many
- * animals come back and where to — and, when the server refuses, lists the
- * animals standing in the way instead of the delete button. There is no undo:
+ * "Excluir manejo" / "Descartar manejo": one confirmation for every manejo page
+ * (sessions, pesagens avulsas, calendar treatments). It spells the reversal
+ * out in the farmer's terms — how many animals come back and where to — and,
+ * when the server refuses, lists the animals standing in the way instead of
+ * the delete button. There is no undo:
  * registering the manejo again is the way back.
  *
  * An inseminação is held back by the diagnoses of its cows, which nothing else

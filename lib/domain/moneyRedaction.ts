@@ -74,6 +74,19 @@ export function canDeleteSession(permissions: Permissions, session: ManejoSessio
   );
 }
 
+/**
+ * Who may delete a row of the manejo history, through the area that wrote it:
+ * a session through Manejo (plus Financeiro when it has money), a group of
+ * calendar treatments through Sanitário, a day of loose weighings through Rebanho.
+ */
+export function canDeleteManejo(
+  permissions: Permissions,
+  target: { kind: "session"; session: ManejoSession } | { kind: "treatments" | "weighings" }
+): boolean {
+  if (target.kind === "session") return canDeleteSession(permissions, target.session);
+  return can(permissions, target.kind === "treatments" ? "sanitary" : "herd", "edit");
+}
+
 export function redactTreatment(treatment: Treatment): Treatment {
   return treatment.costBrl === undefined ? treatment : without(treatment, "costBrl");
 }

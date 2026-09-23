@@ -13,14 +13,14 @@ import { ArrowLeft, ClipboardX, Search, Trash2 } from "lucide-react";
 import type { Animal, ManejoSession } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useActivePermissions } from "@/lib/store/usePermissions";
-import { canDeleteSession } from "@/lib/domain/moneyRedaction";
+import { canDeleteManejo } from "@/lib/domain/moneyRedaction";
 import { formatDate } from "@/lib/domain/dates";
 import { formatNumber } from "@/lib/domain/format";
 import { animalCategoryName } from "@/lib/domain/labels";
 import { visibleLines, type DetailLine, type DetailScope } from "@/lib/domain/manejoDetail";
 import type { ManejoAction } from "@/components/manejo/helpers";
 import { ManejoTypePill } from "@/components/manejo/manejo-type-pill";
-import { DeleteManejoDialog } from "@/components/manejo/delete-manejo-dialog";
+import { DeleteManejoDialog, type DeleteTarget } from "@/components/manejo/delete-manejo-dialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ExportMenu, type ExportFormat } from "@/components/export/ExportMenu";
 import type { DetailExportNames } from "@/lib/export/datasets/manejo";
@@ -191,17 +191,24 @@ interface DetailHeaderProps {
   title: string;
   action: ManejoAction;
   subtitle: string;
-  /** The session behind the page; without one there is no "Excluir manejo" here. */
+  /** The session behind the page; its "Excluir manejo" deletes it. */
   session?: ManejoSession;
+  /**
+   * What "Excluir manejo" deletes on a page with no session: a day of loose
+   * weighings or a group of calendar treatments. Without either, no button.
+   */
+  deleteTarget?: DeleteTarget;
   /** More header actions, before "Excluir manejo": the Exportar, the Romaneio. */
   extra?: ReactNode;
 }
 
-export function DetailHeader({ title, action, subtitle, session, extra }: DetailHeaderProps) {
+export function DetailHeader({ title, action, subtitle, session, deleteTarget, extra }: DetailHeaderProps) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
   const permissions = useActivePermissions();
-  const deletable = session !== undefined && canDeleteSession(permissions, session);
+  const target: DeleteTarget | undefined =
+    deleteTarget ?? (session ? { kind: "session", session } : undefined);
+  const deletable = target !== undefined && canDeleteManejo(permissions, target);
   return (
     <>
       <PageHeader
@@ -227,9 +234,9 @@ export function DetailHeader({ title, action, subtitle, session, extra }: Detail
           </div>
         }
       />
-      {session ? (
+      {target ? (
         <DeleteManejoDialog
-          target={{ kind: "session", session }}
+          target={target}
           open={deleting}
           onOpenChange={setDeleting}
           onDeleted={() => router.push("/manejo")}

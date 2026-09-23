@@ -136,6 +136,12 @@ export function CalendarTreatmentsDetail({ treatmentId }: { treatmentId: string 
         title={group.name}
         action={group.type}
         subtitle={`${formatDate(group.date)} · Calendário sanitário`}
+        deleteTarget={{
+          kind: "treatments",
+          treatmentId,
+          name: group.name,
+          headCount: group.treatments.length,
+        }}
         extra={
           <LinesExportMenu
             title={group.name}

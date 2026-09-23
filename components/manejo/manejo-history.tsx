@@ -45,7 +45,6 @@ import {
   type ManejoHistoryRow,
 } from "@/components/manejo/helpers";
 import { ManejoTypePill } from "@/components/manejo/manejo-type-pill";
-import { ManejoRowMenu } from "@/components/manejo/manejo-row-menu";
 
 function headsLabel(session: ManejoHistoryRow): string {
   return session.headCount === 1 ? "animal" : "animais";
@@ -175,16 +174,13 @@ export function ManejoHistory() {
                       </TableCell>
                     ) : null}
                     <TableCell className="text-right">
-                      <span className="inline-flex items-center justify-end gap-0.5">
-                        <ManejoRowMenu row={session} />
-                        <Link
-                          href={session.href}
-                          aria-label={`Abrir ${session.name}`}
-                          className="inline-flex size-7 items-center justify-center rounded-md text-ink-soft hover:bg-muted hover:text-ink"
-                        >
-                          <ChevronRight className="size-4" aria-hidden />
-                        </Link>
-                      </span>
+                      <Link
+                        href={session.href}
+                        aria-label={`Abrir ${session.name}`}
+                        className="inline-flex size-7 items-center justify-center rounded-md text-ink-soft hover:bg-muted hover:text-ink"
+                      >
+                        <ChevronRight className="size-4" aria-hidden />
+                      </Link>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -202,11 +198,8 @@ export function ManejoHistory() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <ManejoTypePill action={session.kind} />
-                    <span className="flex items-center gap-1">
-                      <span className="font-mono text-xs text-ink-soft">
-                        {formatDate(session.date)}
-                      </span>
-                      <ManejoRowMenu row={session} />
+                    <span className="font-mono text-xs text-ink-soft">
+                      {formatDate(session.date)}
                     </span>
                   </div>
                   <p className="mt-2 text-sm font-medium text-ink">

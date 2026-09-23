@@ -147,6 +147,7 @@ export function LooseWeighingsDetail({ date }: { date: string }) {
         title="Pesagens avulsas"
         action="weighing"
         subtitle={`${formatDate(date)} · fora do brete`}
+        deleteTarget={{ kind: "weighings", date, earTags: lines.map((line) => line.earTag) }}
         extra={
           <LinesExportMenu
             title={`Pesagens avulsas ${formatDate(date)}`}
@@ -161,7 +162,7 @@ export function LooseWeighingsDetail({ date }: { date: string }) {
         <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
         <p>
           Pesos salvos neste dia fora de um manejo no brete: na ficha do animal, no cadastro ou
-          como peso ao nascer. Para apagar, use o menu da linha no histórico.
+          como peso ao nascer. “Excluir manejo” apaga os pesos deste dia.
         </p>
       </div>
 

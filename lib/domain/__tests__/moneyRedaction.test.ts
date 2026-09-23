@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { HerdData, ManejoSession, SemenBull, Treatment } from "@/lib/types";
 import { FULL_PERMISSIONS, PRESETS } from "@/lib/domain/permissions";
 import {
+  canDeleteManejo,
   canDeleteSession,
   hasMoney,
   redactHerdMoney,
@@ -121,6 +122,21 @@ describe("canDeleteSession", () => {
     expect(canDeleteSession(PRESETS.vaqueiro, redactManejoSession(sale))).toBe(false);
     expect(canDeleteSession(FULL_PERMISSIONS, sale)).toBe(true);
     expect(canDeleteSession(PRESETS.consultor, vaccination)).toBe(false);
+  });
+});
+
+describe("canDeleteManejo", () => {
+  it("deletes a session as canDeleteSession does", () => {
+    expect(canDeleteManejo(PRESETS.vaqueiro, { kind: "session", session: vaccination })).toBe(true);
+    expect(canDeleteManejo(PRESETS.consultor, { kind: "session", session: vaccination })).toBe(false);
+  });
+
+  it("deletes treatments through Sanitário and weighings through Rebanho", () => {
+    const noSanitary = { ...PRESETS.vaqueiro, sanitary: "view" as const };
+    expect(canDeleteManejo(PRESETS.vaqueiro, { kind: "treatments" })).toBe(true);
+    expect(canDeleteManejo(noSanitary, { kind: "treatments" })).toBe(false);
+    expect(canDeleteManejo(noSanitary, { kind: "weighings" })).toBe(true);
+    expect(canDeleteManejo(PRESETS.consultor, { kind: "weighings" })).toBe(false);
   });
 });
 
