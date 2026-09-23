@@ -27,6 +27,7 @@ import {
   ResumoCard,
   useDetailExportNames,
   useHerdLookup,
+  sortedLines,
   useLinesView,
   type LineColumn,
   type ResumoColumn,
@@ -95,20 +96,24 @@ export function CalendarTreatmentsDetail({ treatmentId }: { treatmentId: string 
   const columns: LineColumn<CalendarLine>[] = [
     {
       header: "Brinco",
+      sortValue: (line) => line.earTag,
       cell: (line) => line.earTag,
       className: "font-mono font-medium text-ink",
     },
     {
       header: "Categoria",
+      sortValue: (line) => lookup.categoryName(lookup.animal(line.earTag)),
       cell: (line) => lookup.categoryName(lookup.animal(line.earTag)),
     },
     {
       header: "Lote",
+      sortValue: (line) => lookup.lotName(lookup.animal(line.earTag)?.lotId),
       cell: (line) => lookup.lotName(lookup.animal(line.earTag)?.lotId),
       className: "text-ink-soft",
     },
     {
       header: "Dose",
+      sortValue: (line) => line.dose ?? null,
       cell: (line) => line.dose ?? "—",
     },
     // A group with no cost at all would print a column of dashes.
@@ -117,6 +122,7 @@ export function CalendarTreatmentsDetail({ treatmentId }: { treatmentId: string 
       : [
           {
             header: "Custo",
+            sortValue: (line: CalendarLine) => line.costBrl,
             cell: (line: CalendarLine) =>
               line.costBrl === null ? "—" : formatCurrency(line.costBrl),
             align: "right" as const,
@@ -125,6 +131,7 @@ export function CalendarTreatmentsDetail({ treatmentId }: { treatmentId: string 
         ]),
     {
       header: "Observação",
+      sortValue: (line) => outcomeNote(line),
       cell: (line) => outcomeNote(line),
       className: "text-ink-soft",
     },
@@ -146,7 +153,7 @@ export function CalendarTreatmentsDetail({ treatmentId }: { treatmentId: string 
           <LinesExportMenu
             title={group.name}
             lines={lines}
-            visible={view.visible}
+            visible={sortedLines(view, columns)}
             build={(rows) => calendarApplicationsExportTable(group.name, rows, exportNames)}
           />
         }

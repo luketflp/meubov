@@ -47,6 +47,7 @@ import {
 import { SaleSummaryCard } from "@/components/manejo/sale-summary";
 import { SaleYieldDialog } from "@/components/manejo/sale-yield-dialog";
 import { DeleteManejoDialog } from "@/components/manejo/delete-manejo-dialog";
+import { CloseSessionDialog } from "@/components/manejo/close-session-dialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,7 @@ import { ManejoProgressBar } from "@/components/manejo/progress-bar";
 import { ManejoTypePill } from "@/components/manejo/manejo-type-pill";
 import {
   movementSubtitle,
+  reviewBeforeClosing,
   sessionKind,
   sessionProgress,
 } from "@/components/manejo/helpers";
@@ -83,6 +85,8 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
   const permissions = useActivePermissions();
 
   const [deleting, setDeleting] = useState(false);
+  /** "Encerrar" with animals that did not pass: the dialog that names them. */
+  const [reviewingClose, setReviewingClose] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [weight, setWeight] = useState("");
@@ -190,6 +194,12 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function closeSession() {
+    if (!session) return;
+    await closeManejoSession(session.id);
+    addToast({ messageType: "success", text: "Manejo encerrado" });
   }
 
   async function onSkip() {
@@ -559,16 +569,34 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
           <Button
             variant="outline"
             className="min-h-11"
-            onClick={async () => {
-              await closeManejoSession(session.id);
-              addToast({ messageType: "success", text: "Manejo encerrado" });
-            }}
+            onClick={() => (reviewBeforeClosing(progress) ? setReviewingClose(true) : closeSession())}
           >
             {progress.pending > 0
               ? `Encerrar com ${progress.pending} ${progress.pending === 1 ? "pendente" : "pendentes"}`
               : "Encerrar manejo"}
           </Button>
         </div>
+      ) : null}
+
+      {operable ? (
+        <CloseSessionDialog
+          open={reviewingClose}
+          onOpenChange={setReviewingClose}
+          done={done.length}
+          pending={pending}
+          skipped={skipped}
+          byTag={byTag}
+          lots={lots}
+          skippedLabel={isInsemination ? "Puladas" : "Pulados"}
+          onBring={(earTag) => {
+            setSearch("");
+            setSelectedTag(earTag);
+            setWeight("");
+            setNote("");
+            setError(null);
+          }}
+          onConfirm={closeSession}
+        />
       ) : null}
     </div>
   );

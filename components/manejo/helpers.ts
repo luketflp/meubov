@@ -11,7 +11,7 @@ import type {
   TreatmentType,
 } from "@/lib/types";
 import { daysBetween } from "@/lib/domain/dates";
-import { formatCurrency, formatPercent } from "@/lib/domain/format";
+import { formatCurrency, formatNumber, formatPercent } from "@/lib/domain/format";
 import { TREATMENT_TYPE_LABEL } from "@/lib/domain/labels";
 import { deriveTreatmentStatus, isFootAndMouth } from "@/lib/domain/status";
 import type { SaleRow } from "@/lib/domain/movements";
@@ -378,6 +378,19 @@ export function sessionProgress(session: ManejoSession): ManejoProgress {
     pending: total - handled,
     pct: total === 0 ? 0 : Math.round((handled / total) * 100),
   };
+}
+
+/**
+ * Closing asks first whenever an animal did not pass — still in the line or
+ * skipped — so the farmer sees who before the manejo is over.
+ */
+export function reviewBeforeClosing(progress: ManejoProgress): boolean {
+  return progress.pending + progress.skipped > 0;
+}
+
+/** "1 animal não passou", "4 animais não passaram": the closing dialog's title. */
+export function notPassedTitle(count: number): string {
+  return count === 1 ? "1 animal não passou" : `${formatNumber(count)} animais não passaram`;
 }
 
 /** Action kind of a session, for pills and filters. */

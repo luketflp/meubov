@@ -31,6 +31,7 @@ import {
   signedKg,
   useDetailExportNames,
   useHerdLookup,
+  sortedLines,
   useLinesView,
   type LineColumn,
   type ResumoRow,
@@ -140,27 +141,32 @@ export function WeighingDetail({ session }: { session: ManejoSession }) {
     {
       header: "Brinco",
       cell: (line) => line.earTag,
+      sortValue: (line) => line.earTag,
       className: "font-mono font-medium text-ink",
     },
     {
       header: "Categoria",
       cell: (line) => lookup.categoryName(lookup.animal(line.earTag)),
+      sortValue: (line) => lookup.categoryName(lookup.animal(line.earTag)),
       className: "text-ink",
     },
     {
       header: "Lote",
       cell: (line) => lookup.lotName(lookup.animal(line.earTag)?.lotId),
+      sortValue: (line) => lookup.lotName(lookup.animal(line.earTag)?.lotId),
       className: "text-ink-soft",
     },
     {
       header: "Peso",
       align: "right",
       cell: (line) => (line.weightKg === null ? "—" : formatKg(line.weightKg)),
+      sortValue: (line) => line.weightKg,
       className: "font-mono text-ink",
     },
     {
       header: "Pesagem anterior",
       align: "right",
+      sortValue: (line) => line.previous?.weightKg ?? null,
       cell: (line) =>
         line.previous === null ? (
           "—"
@@ -177,6 +183,7 @@ export function WeighingDetail({ session }: { session: ManejoSession }) {
     {
       header: "Ganho",
       align: "right",
+      sortValue: (line) => line.gain?.gainKg ?? null,
       cell: (line) =>
         line.gain === null ? (
           "—"
@@ -188,6 +195,7 @@ export function WeighingDetail({ session }: { session: ManejoSession }) {
     {
       header: "GMD kg/dia",
       align: "right",
+      sortValue: (line) => line.gain?.adgKgDay ?? null,
       cell: (line) =>
         line.gain === null ? (
           "—"
@@ -199,6 +207,7 @@ export function WeighingDetail({ session }: { session: ManejoSession }) {
     {
       header: "Observação",
       cell: note,
+      sortValue: note,
       className: "text-ink-soft",
     },
   ];
@@ -214,7 +223,7 @@ export function WeighingDetail({ session }: { session: ManejoSession }) {
           <LinesExportMenu
             title={session.name}
             lines={lines}
-            visible={view.visible}
+            visible={sortedLines(view, columns)}
             build={(rows) => weighingLinesExportTable(session.name, rows, exportNames)}
           />
         }

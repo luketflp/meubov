@@ -15,6 +15,7 @@ import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
 import { formatDate } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
+import { DIAGNOSIS_RESULT_LABEL } from "@/lib/domain/labels";
 import { breedingOutcome } from "@/lib/domain/reproduction";
 import { sessionSemenCost } from "@/lib/domain/semen";
 import { ResultPill } from "@/components/animal/reproduction-pills";
@@ -31,6 +32,7 @@ import {
   ResumoCard,
   useDetailExportNames,
   useHerdLookup,
+  sortedLines,
   useLinesView,
   type LineColumn,
   type ResumoRow,
@@ -116,19 +118,36 @@ export function InseminationDetail({ session }: { session: ManejoSession }) {
   }
 
   const columns: LineColumn<InseminationLine>[] = [
-    { header: "Brinco", cell: (line) => line.earTag, className: "font-mono font-medium text-ink" },
+    {
+      header: "Brinco",
+      sortValue: (line) => line.earTag,
+      cell: (line) => line.earTag,
+      className: "font-mono font-medium text-ink",
+    },
     {
       header: "Categoria",
+      sortValue: (line) => lookup.categoryName(lookup.animal(line.earTag)),
       cell: (line) => lookup.categoryName(lookup.animal(line.earTag)),
       className: "text-ink",
     },
-    { header: "Touro", cell: (line) => line.bull ?? "—", className: "text-ink" },
+    {
+      header: "Touro",
+      sortValue: (line) => line.bull ?? null,
+      cell: (line) => line.bull ?? "—",
+      className: "text-ink",
+    },
     {
       header: "Diagnóstico",
+      sortValue: (line) => (line.result === null ? null : DIAGNOSIS_RESULT_LABEL[line.result]),
       cell: (line) => (line.result === null ? "—" : <ResultPill result={line.result} />),
       className: "text-ink",
     },
-    { header: "Observação", cell: inseminationNote, className: "text-ink-soft" },
+    {
+      header: "Observação",
+      sortValue: (line) => inseminationNote(line),
+      cell: inseminationNote,
+      className: "text-ink-soft",
+    },
   ];
 
   return (
@@ -142,7 +161,7 @@ export function InseminationDetail({ session }: { session: ManejoSession }) {
           <LinesExportMenu
             title={inseminationTitle(session, animals, lots)}
             lines={lines}
-            visible={view.visible}
+            visible={sortedLines(view, columns)}
             build={(rows) =>
               inseminationLinesExportTable(inseminationTitle(session, animals, lots), rows, exportNames)
             }

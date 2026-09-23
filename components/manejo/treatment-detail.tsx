@@ -27,6 +27,7 @@ import {
   ResumoCard,
   useDetailExportNames,
   useHerdLookup,
+  sortedLines,
   useLinesView,
   type LineColumn,
   type ResumoColumn,
@@ -98,15 +99,18 @@ export function TreatmentDetail({ session }: { session: ManejoSession }) {
   const columns: LineColumn<TreatmentLine>[] = [
     {
       header: "Brinco",
+      sortValue: (line) => line.earTag,
       cell: (line) => line.earTag,
       className: "font-mono font-medium text-ink",
     },
     {
       header: "Categoria",
+      sortValue: (line) => lookup.categoryName(lookup.animal(line.earTag)),
       cell: (line) => lookup.categoryName(lookup.animal(line.earTag)),
     },
     {
       header: "Lote",
+      sortValue: (line) => lookup.lotName(lookup.animal(line.earTag)?.lotId),
       cell: (line) => lookup.lotName(lookup.animal(line.earTag)?.lotId),
       className: "text-ink-soft",
     },
@@ -114,6 +118,7 @@ export function TreatmentDetail({ session }: { session: ManejoSession }) {
       ? [
           {
             header: "Peso",
+            sortValue: (line: TreatmentLine) => line.weightKg,
             cell: (line: TreatmentLine) => (line.weightKg === null ? "—" : formatKg(line.weightKg)),
             align: "right" as const,
             className: "font-mono text-ink",
@@ -124,6 +129,7 @@ export function TreatmentDetail({ session }: { session: ManejoSession }) {
       ? [
           {
             header: "Custo",
+            sortValue: (line: TreatmentLine) => line.costBrl,
             cell: (line: TreatmentLine) =>
               line.costBrl === null ? "—" : formatCurrency(line.costBrl),
             align: "right" as const,
@@ -133,6 +139,7 @@ export function TreatmentDetail({ session }: { session: ManejoSession }) {
       : []),
     {
       header: "Observação",
+      sortValue: (line) => outcomeNote(line),
       cell: (line) => outcomeNote(line),
       className: "text-ink-soft",
     },
@@ -149,7 +156,7 @@ export function TreatmentDetail({ session }: { session: ManejoSession }) {
           <LinesExportMenu
             title={session.name}
             lines={lines}
-            visible={view.visible}
+            visible={sortedLines(view, columns)}
             build={(rows) => treatmentLinesExportTable(session.name, rows, exportNames)}
           />
         }

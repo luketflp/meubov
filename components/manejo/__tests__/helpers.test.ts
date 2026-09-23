@@ -7,6 +7,9 @@ import {
   isSanitaryAction,
   manejoHistory,
   movementSubtitle,
+  notPassedTitle,
+  reviewBeforeClosing,
+  sessionProgress,
   sessionWeighs,
   validateManejo,
   visibleSaleRows,
@@ -351,5 +354,29 @@ describe("movementSubtitle", () => {
     expect(
       movementSubtitle(makeSession({ kind: "entry", pricePerArroba: undefined }), "Recria 2")
     ).toBe("Compra · sem valor · entra em Recria 2");
+  });
+});
+
+describe("closing a manejo", () => {
+  const withOutcomes = (...outcomes: ManejoSession["animals"][number]["outcome"][]) =>
+    makeSession({
+      status: "open",
+      animals: outcomes.map((outcome, i) => ({ earTag: `BR-${i}`, outcome })),
+    });
+
+  it("asks first when an animal is still in the line or was skipped", () => {
+    expect(reviewBeforeClosing(sessionProgress(withOutcomes("done", "pending")))).toBe(true);
+    expect(reviewBeforeClosing(sessionProgress(withOutcomes("done", "skipped")))).toBe(true);
+  });
+
+  it("closes straight away when every animal passed", () => {
+    expect(reviewBeforeClosing(sessionProgress(withOutcomes("done", "done")))).toBe(false);
+    expect(reviewBeforeClosing(sessionProgress(withOutcomes()))).toBe(false);
+  });
+
+  it("titles the dialog with the count, in agreement", () => {
+    expect(notPassedTitle(1)).toBe("1 animal não passou");
+    expect(notPassedTitle(4)).toBe("4 animais não passaram");
+    expect(notPassedTitle(1200)).toBe("1.200 animais não passaram");
   });
 });

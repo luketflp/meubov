@@ -18,6 +18,7 @@ import { formatDate } from "@/lib/domain/dates";
 import { formatNumber } from "@/lib/domain/format";
 import { animalCategoryName } from "@/lib/domain/labels";
 import { visibleLines, type DetailLine, type DetailScope } from "@/lib/domain/manejoDetail";
+import { nextLineSort, sortLines, type LineSort, type SortValue } from "@/lib/domain/lineSort";
 import type { ManejoAction } from "@/components/manejo/helpers";
 import { ManejoTypePill } from "@/components/manejo/manejo-type-pill";
 import { DeleteManejoDialog, type DeleteTarget } from "@/components/manejo/delete-manejo-dialog";
@@ -29,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { SectionCard } from "@/components/ui/section-card";
+import { SortableHead } from "@/components/ui/sortable-head";
 import { SummaryRow } from "@/components/ui/summary-row";
 import {
   Select,
@@ -289,10 +291,15 @@ export function ResumoCard({
   );
 }
 
-/** Scope and search state of an animals card, and what it has to say about them. */
+/**
+ * Scope, search and sort state of an animals card, and what it has to say
+ * about them. `visible` is in the manejo's order; `sortedLines` puts it in
+ * the order the headers ask for.
+ */
 export function useLinesView<T extends DetailLine>(lines: T[], scoped: boolean) {
   const [scope, setScope] = useState<DetailScope>("passed");
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<LineSort | null>(null);
   const effective: DetailScope = scoped ? scope : "lot";
   const passed = lines.filter((line) => line.outcome === "done").length;
   const visible = visibleLines(lines, effective, search);
@@ -308,12 +315,28 @@ export function useLinesView<T extends DetailLine>(lines: T[], scoped: boolean) 
         : visible.length === 0
           ? "Nenhum brinco corresponde à busca."
           : null;
-  return { scope, setScope, search, setSearch, visible, countLabel, message };
+  const sortBy = (key: string) => setSort((current) => nextLineSort(current, key));
+  return { scope, setScope, search, setSearch, sort, sortBy, visible, countLabel, message };
+}
+
+/**
+ * The card's lines in the order its sorted header asks for, so the table, the
+ * phone cards and the Exportar all list them alike.
+ */
+export function sortedLines<T>(
+  view: { visible: T[]; sort: LineSort | null },
+  columns: readonly LineColumn<T>[]
+): T[] {
+  const { sort } = view;
+  const value = sort ? columns.find((column) => column.header === sort.key)?.sortValue : undefined;
+  return sort && value ? sortLines(view.visible, value, sort.direction) : view.visible;
 }
 
 export interface LineColumn<T> {
   header: string;
   cell: (line: T) => ReactNode;
+  /** What the header sorts by; a column without it does not sort. */
+  sortValue?: (line: T) => SortValue;
   align?: "right";
   className?: string;
 }
@@ -336,6 +359,7 @@ export function AnimalsCard<T extends DetailLine>({
   columns,
   card,
 }: AnimalsCardProps<T>) {
+  const rows = sortedLines(view, columns);
   return (
     <SectionCard
       title={`Animais (${view.countLabel})`}
@@ -378,18 +402,28 @@ export function AnimalsCard<T extends DetailLine>({
             <Table>
               <TableHeader>
                 <TableRow>
-                  {columns.map((column) => (
-                    <TableHead
-                      key={column.header}
-                      className={column.align === "right" ? "text-right" : undefined}
-                    >
-                      {column.header}
-                    </TableHead>
-                  ))}
+                  {columns.map((column) =>
+                    column.sortValue ? (
+                      <SortableHead
+                        key={column.header}
+                        label={column.header}
+                        sort={view.sort}
+                        onSort={view.sortBy}
+                        align={column.align}
+                      />
+                    ) : (
+                      <TableHead
+                        key={column.header}
+                        className={column.align === "right" ? "text-right" : undefined}
+                      >
+                        {column.header}
+                      </TableHead>
+                    )
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {view.visible.map((line, index) => (
+                {rows.map((line, index) => (
                   <TableRow key={`${line.earTag}-${index}`}>
                     {columns.map((column) => (
                       <TableCell
@@ -407,7 +441,7 @@ export function AnimalsCard<T extends DetailLine>({
 
           {/* Mobile: stacked cards */}
           <ul className="space-y-3 md:hidden">
-            {view.visible.map((line, index) => (
+            {rows.map((line, index) => (
               <li
                 key={`${line.earTag}-${index}`}
                 className="rounded-lg border border-hairline bg-surface p-4"

@@ -27,6 +27,7 @@ import {
   ResumoCard,
   useDetailExportNames,
   useHerdLookup,
+  sortedLines,
   useLinesView,
   type LineColumn,
   type ResumoColumn,
@@ -91,19 +92,27 @@ export function TransferDetail({ session }: { session: ManejoSession }) {
   ];
 
   const lineColumns: LineColumn<MovementLine>[] = [
-    { header: "Brinco", cell: (line) => line.earTag, className: "font-mono font-medium text-ink" },
+    {
+      header: "Brinco",
+      sortValue: (line) => line.earTag,
+      cell: (line) => line.earTag,
+      className: "font-mono font-medium text-ink",
+    },
     {
       header: "Categoria",
+      sortValue: (line) => lookup.categoryName(lookup.animal(line.earTag)),
       cell: (line) => lookup.categoryName(lookup.animal(line.earTag)),
       className: "text-ink",
     },
     {
       header: "Raça",
+      sortValue: (line) => lookup.animal(line.earTag)?.breed ?? null,
       cell: (line) => lookup.animal(line.earTag)?.breed ?? "—",
       className: "text-ink",
     },
     {
       header: "Lote anterior",
+      sortValue: (line) => lookup.lotName(line.previousLotId),
       cell: (line) => lookup.lotName(line.previousLotId),
       className: "text-ink-soft",
     },
@@ -111,13 +120,19 @@ export function TransferDetail({ session }: { session: ManejoSession }) {
       ? [
           {
             header: "Peso",
+            sortValue: (line: MovementLine) => line.weightKg,
             align: "right" as const,
             cell: (line: MovementLine) => (line.weightKg === null ? "—" : formatKg(line.weightKg)),
             className: "font-mono text-ink",
           },
         ]
       : []),
-    { header: "Observação", cell: outcomeNote, className: "text-ink-soft" },
+    {
+      header: "Observação",
+      sortValue: (line) => outcomeNote(line),
+      cell: outcomeNote,
+      className: "text-ink-soft",
+    },
   ];
 
   return (
@@ -130,7 +145,7 @@ export function TransferDetail({ session }: { session: ManejoSession }) {
           <LinesExportMenu
             title={session.name}
             lines={lines}
-            visible={view.visible}
+            visible={sortedLines(view, lineColumns)}
             build={(rows) => transferLinesExportTable(session.name, rows, exportNames)}
           />
         }

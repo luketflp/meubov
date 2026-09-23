@@ -13,6 +13,7 @@ import { FileText, Search } from "lucide-react";
 import type { ManejoSession } from "@/lib/types";
 import { formatDate } from "@/lib/domain/dates";
 import { formatArroba, formatCurrency, formatKg } from "@/lib/domain/format";
+import { nextLineSort, sortLines, type LineSort, type SortValue } from "@/lib/domain/lineSort";
 import { saleRows, type SaleRow } from "@/lib/domain/movements";
 import {
   movementSubtitle,
@@ -30,6 +31,7 @@ import { useCan } from "@/lib/store/usePermissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SectionCard } from "@/components/ui/section-card";
+import { SortableHead } from "@/components/ui/sortable-head";
 import {
   Select,
   SelectContent,
@@ -41,7 +43,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
@@ -56,6 +57,7 @@ export function SaleDetail({ session }: SaleDetailProps) {
   // Opens on the animals actually sold — the romaneio the frigorífico paid.
   // The whole lot, skipped animals included, is one switch away.
   const [scope, setScope] = useState<SaleRowScope>("sold");
+  const [sort, setSort] = useState<LineSort | null>(null);
 
   const rows = useMemo(() => saleRows(session), [session]);
   const exportNames = useDetailExportNames();
@@ -68,7 +70,10 @@ export function SaleDetail({ session }: SaleDetailProps) {
   const priced = rows.some((row) => row.amountBrl !== null);
   const soldCount = rows.filter((row) => row.outcome === "done").length;
   const inScope = scope === "sold" ? soldCount : rows.length;
-  const visible = visibleSaleRows(rows, scope, search);
+  const filtered = visibleSaleRows(rows, scope, search);
+  // The phone cards and the Exportar follow the table's sorted header.
+  const visible = sort ? sortLines(filtered, SORT_VALUE[sort.key], sort.direction) : filtered;
+  const sortBy = (key: string) => setSort((current) => nextLineSort(current, key));
   const countLabel =
     scope === "sold" && soldCount < rows.length
       ? `${soldCount} de ${rows.length}`
@@ -154,11 +159,15 @@ export function SaleDetail({ session }: SaleDetailProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Brinco</TableHead>
-                    <TableHead className="text-right">Peso</TableHead>
-                    {perArroba ? <TableHead className="text-right">@ carcaça</TableHead> : null}
-                    {priced ? <TableHead className="text-right">Valor</TableHead> : null}
-                    <TableHead>Observação</TableHead>
+                    <SortableHead label="Brinco" sort={sort} onSort={sortBy} />
+                    <SortableHead label="Peso" sort={sort} onSort={sortBy} align="right" />
+                    {perArroba ? (
+                      <SortableHead label="@ carcaça" sort={sort} onSort={sortBy} align="right" />
+                    ) : null}
+                    {priced ? (
+                      <SortableHead label="Valor" sort={sort} onSort={sortBy} align="right" />
+                    ) : null}
+                    <SortableHead label="Observação" sort={sort} onSort={sortBy} />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -224,6 +233,15 @@ export function SaleDetail({ session }: SaleDetailProps) {
     </div>
   );
 }
+
+/** What each header of the table sorts by. */
+const SORT_VALUE: Record<string, (row: SaleRow) => SortValue> = {
+  Brinco: (row) => row.earTag,
+  Peso: (row) => row.weightKg,
+  "@ carcaça": (row) => row.carcassArrobas,
+  Valor: (row) => row.amountBrl,
+  Observação: (row) => rowNote(row),
+};
 
 /** Note shown for an animal: its own, prefixed by "pulado" when it did not pass. */
 function rowNote(row: SaleRow): string {

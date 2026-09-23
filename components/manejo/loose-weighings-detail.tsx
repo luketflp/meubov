@@ -28,6 +28,7 @@ import {
   shortDate,
   useDetailExportNames,
   useHerdLookup,
+  sortedLines,
   useLinesView,
   type LineColumn,
   type ResumoColumn,
@@ -91,27 +92,32 @@ export function LooseWeighingsDetail({ date }: { date: string }) {
   const lineColumns: LineColumn<WeighingLine>[] = [
     {
       header: "Brinco",
+      sortValue: (line) => line.earTag,
       cell: (line) => line.earTag,
       className: "font-mono font-medium text-ink",
     },
     {
       header: "Categoria",
+      sortValue: (line) => lookup.categoryName(lookup.animal(line.earTag)),
       cell: (line) => lookup.categoryName(lookup.animal(line.earTag)),
       className: "text-ink",
     },
     {
       header: "Lote",
+      sortValue: (line) => lookup.lotName(lookup.animal(line.earTag)?.lotId),
       cell: (line) => lookup.lotName(lookup.animal(line.earTag)?.lotId),
       className: "text-ink-soft",
     },
     {
       header: "Peso",
+      sortValue: (line) => line.weightKg,
       align: "right",
       cell: (line) => (line.weightKg === null ? "—" : formatKg(line.weightKg)),
       className: "font-mono text-ink",
     },
     {
       header: "Pesagem anterior",
+      sortValue: (line) => line.previous?.weightKg ?? null,
       align: "right",
       cell: (line) =>
         line.atBirth ? (
@@ -128,6 +134,7 @@ export function LooseWeighingsDetail({ date }: { date: string }) {
     },
     {
       header: "GMD kg/dia",
+      sortValue: (line) => line.gain?.adgKgDay ?? null,
       align: "right",
       cell: (line) =>
         line.gain === null ? (
@@ -152,7 +159,7 @@ export function LooseWeighingsDetail({ date }: { date: string }) {
           <LinesExportMenu
             title={`Pesagens avulsas ${formatDate(date)}`}
             lines={lines}
-            visible={view.visible}
+            visible={sortedLines(view, lineColumns)}
             build={(rows) => weighingLinesExportTable("Pesagens avulsas", rows, exportNames)}
           />
         }

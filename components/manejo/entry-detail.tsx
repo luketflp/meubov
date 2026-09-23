@@ -26,6 +26,7 @@ import {
   ResumoCard,
   useDetailExportNames,
   useHerdLookup,
+  sortedLines,
   useLinesView,
   type LineColumn,
   type ResumoColumn,
@@ -69,29 +70,43 @@ export function EntryDetail({ session }: { session: ManejoSession }) {
   ];
 
   const lineColumns: LineColumn<MovementLine>[] = [
-    { header: "Brinco", cell: (line) => line.earTag, className: "font-mono font-medium text-ink" },
+    {
+      header: "Brinco",
+      sortValue: (line) => line.earTag,
+      cell: (line) => line.earTag,
+      className: "font-mono font-medium text-ink",
+    },
     {
       header: "Categoria",
+      sortValue: (line) => lookup.categoryName(lookup.animal(line.earTag)),
       cell: (line) => lookup.categoryName(lookup.animal(line.earTag)),
       className: "text-ink",
     },
     {
       header: "Raça",
+      sortValue: (line) => lookup.animal(line.earTag)?.breed ?? null,
       cell: (line) => lookup.animal(line.earTag)?.breed ?? "—",
       className: "text-ink",
     },
     {
       header: "Sexo",
+      sortValue: (line) => sexLabel(lookup.animal(line.earTag)?.sex),
       cell: (line) => sexLabel(lookup.animal(line.earTag)?.sex),
       className: "text-ink",
     },
     {
       header: "Peso de entrada",
+      sortValue: (line) => line.weightKg,
       align: "right",
       cell: (line) => (line.weightKg === null ? "—" : formatKg(line.weightKg)),
       className: "font-mono text-ink",
     },
-    { header: "Observação", cell: outcomeNote, className: "text-ink-soft" },
+    {
+      header: "Observação",
+      sortValue: (line) => outcomeNote(line),
+      cell: outcomeNote,
+      className: "text-ink-soft",
+    },
   ];
 
   return (
@@ -104,7 +119,7 @@ export function EntryDetail({ session }: { session: ManejoSession }) {
           <LinesExportMenu
             title={session.name}
             lines={lines}
-            visible={view.visible}
+            visible={sortedLines(view, lineColumns)}
             build={(rows) => entryLinesExportTable(session.name, rows, exportNames)}
           />
         }
