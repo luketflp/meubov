@@ -562,7 +562,8 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   load: async () => {
     if (get().loaded) return;
     const [data, farmsRes, invitesRes] = await Promise.all([
-      repository.load(),
+      // AppShell shows its own screen when this first load fails.
+      repository.load({ quiet: true }),
       api.farms.get(),
       api.invites.get(),
     ]);

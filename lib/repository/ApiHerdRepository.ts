@@ -16,7 +16,7 @@ import { api } from "@/lib/api/client";
 import { clearActiveFarmId, getActiveFarmId } from "@/lib/api/activeFarm";
 
 export class ApiHerdRepository implements HerdRepository {
-  async load(): Promise<HerdData> {
+  async load({ quiet = false }: { quiet?: boolean } = {}): Promise<HerdData> {
     const { data, error } = await api.get();
     if (error) {
       if (error.status === 401 && typeof window !== "undefined") {
@@ -26,7 +26,7 @@ export class ApiHerdRepository implements HerdRepository {
       } else if (error.status === 403 && getActiveFarmId() !== null) {
         clearActiveFarmId();
         window.location.reload();
-      } else {
+      } else if (!quiet) {
         toast.error("Não foi possível carregar os dados do rebanho.");
       }
       throw new Error(`Failed to load herd data (status ${error.status})`);

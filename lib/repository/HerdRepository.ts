@@ -8,5 +8,9 @@
 import type { HerdData } from "@/lib/types";
 
 export interface HerdRepository {
-  load(): Promise<HerdData>;
+  /**
+   * `quiet` skips the error toast: the first load shows a screen of its own
+   * when it fails, so the toast would only repeat it.
+   */
+  load(options?: { quiet?: boolean }): Promise<HerdData>;
 }

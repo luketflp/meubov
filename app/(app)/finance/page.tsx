@@ -43,7 +43,7 @@ import {
   totalCostLast12m,
 } from "@/lib/domain/economics";
 
-/** Opened by URL without Financeiro, the page is "Sem acesso a esta área", not a screen of zeros. */
+/** Opened by URL without Financeiro, the page is the "Porteira fechada" of NoAccess, not a screen of zeros. */
 export default function FinancePage() {
   return (
     <RequireAccess area="finance" level="view">

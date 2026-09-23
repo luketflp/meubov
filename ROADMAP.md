@@ -76,14 +76,20 @@ Há teste dos helpers isolados, mas as transações de `lib/api/services/*`, o
 escopo por `farm_id` e os locks do manejo ainda não são exercitados contra um
 Postgres real. Também não há testes de ponta a ponta.
 
-## 6. Sem telas de erro
+## 6. ~~Sem telas de erro~~ ✅ feito em 23/09/2026
 
-Nenhum `error.tsx`, `not-found.tsx` ou `loading.tsx` em qualquer rota. Qualquer
-exceção cai na tela padrão do Next.
+`app/not-found.tsx`, `app/(app)/error.tsx`, `app/global-error.tsx` e
+`app/(app)/loading.tsx`, todos com o `ErrorScene` (`components/errors/`) e as
+cenas a nanquim do Nelore da marca em `public/illustrations/` (geradas por
+`cli/illustrations/build.mjs`). A primeira carga que falha mostra "Sem conexão"
+ou o erro do servidor com "Tentar de novo" em vez de carregar para sempre, e o
+`NoAccess` virou a "Porteira fechada".
 
-## 7. Sem exportação
+## 7. ~~Sem exportação~~ ✅ feito em 22/09/2026
 
-Nada de CSV, PDF ou impressão em rebanho, financeiro ou calendário.
+Botão Exportar (xlsx, csv, impressão A4) em cada lista e a página Relatórios
+com Declaração de rebanho, Romaneio de venda, Relatório para banco e Relatório
+técnico (`lib/export/`, `lib/reports/`, `app/(app)/relatorios/`).
 
 ## 8. Sem PWA / offline
 
@@ -94,10 +100,10 @@ manifest, service worker nem fila offline.
 
 Nem coluna, nem upload, nem exibição.
 
-## 10. Página de preview em produção
+## 10. ~~Página de preview em produção~~ ✅ feito em 23/09/2026
 
-`app/preview/loading/page.tsx` é ferramenta de desenvolvimento e vai junto no
-bundle de produção.
+`app/preview/loading/page.tsx` saiu; o `LoadingOverlay` aparece no
+`app/(app)/loading.tsx` e na primeira carga.
 
 ---
 
