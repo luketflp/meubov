@@ -216,31 +216,43 @@ export function DetailHeader({ title, action, subtitle, session, deleteTarget, e
   const target: DeleteTarget | undefined =
     deleteTarget ?? (session ? { kind: "session", session } : undefined);
   const deletable = target !== undefined && canDeleteManejo(permissions, target);
+  // Like the Ficha do animal: the way back on the left of a top row, the
+  // actions on its right, and the title alone below them.
   return (
     <>
-      <PageHeader
-        title={title}
-        badges={<ManejoTypePill action={action} />}
-        subtitle={subtitle}
-        actions={
-          <div className="flex flex-wrap items-center gap-3">
+      <div className="space-y-3">
+        {/* When the actions do not fit beside the way back, they drop below it. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <Link
+            href="/manejo"
+            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 text-sm font-medium text-ink-soft transition-colors hover:text-ink md:min-h-0"
+          >
+            <ArrowLeft className="size-4" aria-hidden />
+            Manejo
+          </Link>
+          <div className="flex items-center gap-2">
             {extra}
             {deletable ? (
+              // Only the trash can on the phone, so the venda's three actions fit a row.
               <Button
                 type="button"
-                variant="ghost"
-                size="sm"
-                className="min-h-11 text-ink-soft hover:text-overdue md:min-h-9"
+                variant="outline"
+                title="Excluir manejo"
+                className="h-11 min-w-11 text-ink-soft hover:border-overdue/40 hover:text-overdue md:h-8 md:min-w-0"
                 onClick={() => setDeleting(true)}
               >
-                <Trash2 data-icon="inline-start" aria-hidden />
-                Excluir manejo
+                <Trash2 aria-hidden />
+                <span className="sr-only sm:not-sr-only">Excluir manejo</span>
               </Button>
             ) : null}
-            <BackToManejo />
           </div>
-        }
-      />
+        </div>
+        <PageHeader
+          title={title}
+          badges={<ManejoTypePill action={action} />}
+          subtitle={subtitle}
+        />
+      </div>
       {target ? (
         <DeleteManejoDialog
           target={target}
