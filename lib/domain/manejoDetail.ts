@@ -23,7 +23,13 @@ import { addDays, daysBetween } from "@/lib/domain/dates";
 /* -------------------------------------------------------------------------- */
 
 /** Which animals a page lists: the ones that passed, or the whole lot. */
-export type DetailScope = "passed" | "lot";
+/** "missed": the pulados and the ones left in the line, the animals that never passed. */
+export type DetailScope = "passed" | "missed" | "lot";
+
+/** A pulado or one left in the line: it never passed the brete. A refugo did. */
+export function missedBrete(outcome: ManejoOutcome): boolean {
+  return outcome === "pending" || outcome === "skipped";
+}
 
 /** What every line of a details page carries. */
 export interface DetailLine {
@@ -42,7 +48,12 @@ export function visibleLines<T extends DetailLine>(
   scope: DetailScope,
   search: string
 ): T[] {
-  const inScope = scope === "passed" ? lines.filter((line) => line.outcome === "done") : lines;
+  const inScope =
+    scope === "passed"
+      ? lines.filter((line) => line.outcome === "done")
+      : scope === "missed"
+        ? lines.filter((line) => missedBrete(line.outcome))
+        : lines;
   const term = search.trim().toLowerCase();
   if (term === "") return inScope;
   return inScope.filter((line) => line.earTag.toLowerCase().includes(term));

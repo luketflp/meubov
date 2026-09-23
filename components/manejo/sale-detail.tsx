@@ -15,7 +15,7 @@ import { formatDate } from "@/lib/domain/dates";
 import { formatArroba, formatCurrency, formatKg } from "@/lib/domain/format";
 import { nextLineSort, sortLines, type LineSort, type SortValue } from "@/lib/domain/lineSort";
 import { saleRows, type SaleRow } from "@/lib/domain/movements";
-import { outcomeLabel } from "@/lib/domain/manejoDetail";
+import { missedBrete, outcomeLabel } from "@/lib/domain/manejoDetail";
 import {
   movementSubtitle,
   visibleSaleRows,
@@ -70,15 +70,14 @@ export function SaleDetail({ session }: SaleDetailProps) {
   // stack of dashes, so it only shows when some animal carries a value.
   const priced = rows.some((row) => row.amountBrl !== null);
   const soldCount = rows.filter((row) => row.outcome === "done").length;
-  const inScope = scope === "sold" ? soldCount : rows.length;
+  const missedCount = rows.filter((row) => missedBrete(row.outcome)).length;
+  const inScope = scope === "sold" ? soldCount : scope === "missed" ? missedCount : rows.length;
   const filtered = visibleSaleRows(rows, scope, search);
   // The phone cards and the Exportar follow the table's sorted header.
   const visible = sort ? sortLines(filtered, SORT_VALUE[sort.key], sort.direction) : filtered;
   const sortBy = (key: string) => setSort((current) => nextLineSort(current, key));
   const countLabel =
-    scope === "sold" && soldCount < rows.length
-      ? `${soldCount} de ${rows.length}`
-      : `${rows.length}`;
+    scope !== "lot" && inScope < rows.length ? `${inScope} de ${rows.length}` : `${rows.length}`;
 
   return (
     <div className="space-y-6">
@@ -123,6 +122,7 @@ export function SaleDetail({ session }: SaleDetailProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="sold">Vendidos</SelectItem>
+                  <SelectItem value="missed">Não passaram</SelectItem>
                   <SelectItem value="lot">Todo o lote</SelectItem>
                 </SelectContent>
               </Select>
@@ -146,6 +146,8 @@ export function SaleDetail({ session }: SaleDetailProps) {
       >
         {rows.length === 0 ? (
           <p className="py-1 text-xs text-ink-soft">Nenhum animal nesta venda.</p>
+        ) : scope === "missed" && inScope === 0 ? (
+          <p className="py-1 text-xs text-ink-soft">Todos os animais passaram no brete.</p>
         ) : inScope === 0 ? (
           <p className="py-1 text-xs text-ink-soft">
             Nenhum animal chegou a ser vendido. Veja todo o lote para conferir o que

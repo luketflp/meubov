@@ -15,6 +15,7 @@ import { daysBetween } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/domain/format";
 import { TREATMENT_TYPE_LABEL } from "@/lib/domain/labels";
 import { deriveTreatmentStatus, isFootAndMouth } from "@/lib/domain/status";
+import { missedBrete } from "@/lib/domain/manejoDetail";
 import type { SaleRow } from "@/lib/domain/movements";
 
 /**
@@ -193,7 +194,7 @@ export function calendarTreatmentsHref(treatmentId: string): string {
  * Which animals of a venda the romaneio lists: the ones actually sold, or the
  * whole lot the session opened with — the skipped ones included.
  */
-export type SaleRowScope = "sold" | "lot";
+export type SaleRowScope = "sold" | "missed" | "lot";
 
 /**
  * Rows of the venda record for a scope and a search term, in that order: the
@@ -205,7 +206,12 @@ export function visibleSaleRows(
   scope: SaleRowScope,
   search: string
 ): SaleRow[] {
-  const inScope = scope === "sold" ? rows.filter((row) => row.outcome === "done") : rows;
+  const inScope =
+    scope === "sold"
+      ? rows.filter((row) => row.outcome === "done")
+      : scope === "missed"
+        ? rows.filter((row) => missedBrete(row.outcome))
+        : rows;
   const term = search.trim().toLowerCase();
   if (term === "") return inScope;
   return inScope.filter((row) => row.earTag.toLowerCase().includes(term));

@@ -17,7 +17,12 @@ import { canDeleteManejo } from "@/lib/domain/moneyRedaction";
 import { formatDate } from "@/lib/domain/dates";
 import { formatNumber } from "@/lib/domain/format";
 import { animalCategoryName } from "@/lib/domain/labels";
-import { visibleLines, type DetailLine, type DetailScope } from "@/lib/domain/manejoDetail";
+import {
+  missedBrete,
+  visibleLines,
+  type DetailLine,
+  type DetailScope,
+} from "@/lib/domain/manejoDetail";
 import { nextLineSort, sortLines, type LineSort, type SortValue } from "@/lib/domain/lineSort";
 import type { ManejoAction } from "@/components/manejo/helpers";
 import { ManejoTypePill } from "@/components/manejo/manejo-type-pill";
@@ -302,19 +307,23 @@ export function useLinesView<T extends DetailLine>(lines: T[], scoped: boolean) 
   const [sort, setSort] = useState<LineSort | null>(null);
   const effective: DetailScope = scoped ? scope : "lot";
   const passed = lines.filter((line) => line.outcome === "done").length;
+  const missed = lines.filter((line) => missedBrete(line.outcome)).length;
+  const inScope = effective === "passed" ? passed : effective === "missed" ? missed : lines.length;
   const visible = visibleLines(lines, effective, search);
   const countLabel =
-    effective === "passed" && passed < lines.length
-      ? `${formatNumber(passed)} de ${formatNumber(lines.length)}`
+    inScope < lines.length
+      ? `${formatNumber(inScope)} de ${formatNumber(lines.length)}`
       : formatNumber(lines.length);
   const message =
     lines.length === 0
       ? "Nenhum animal neste manejo."
       : effective === "passed" && passed === 0
         ? "Nenhum animal passou no brete. Veja todo o lote."
-        : visible.length === 0
-          ? "Nenhum brinco corresponde à busca."
-          : null;
+        : effective === "missed" && missed === 0
+          ? "Todos os animais passaram no brete."
+          : visible.length === 0
+            ? "Nenhum brinco corresponde à busca."
+            : null;
   const sortBy = (key: string) => setSort((current) => nextLineSort(current, key));
   return { scope, setScope, search, setSearch, sort, sortBy, visible, countLabel, message };
 }
@@ -343,7 +352,7 @@ export interface LineColumn<T> {
 
 interface AnimalsCardProps<T extends DetailLine> {
   view: ReturnType<typeof useLinesView<T>>;
-  /** Show the Passaram / Todo o lote switch (sessions only). */
+  /** Show the Passaram / Não passaram / Todo o lote switch (sessions only). */
   scoped: boolean;
   /** Label of the "passed" scope; the venda says "Vendidos". */
   passedScopeLabel?: string;
@@ -372,6 +381,7 @@ export function AnimalsCard<T extends DetailLine>({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="passed">{passedScopeLabel}</SelectItem>
+                <SelectItem value="missed">Não passaram</SelectItem>
                 <SelectItem value="lot">Todo o lote</SelectItem>
               </SelectContent>
             </Select>

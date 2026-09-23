@@ -49,6 +49,12 @@ describe("visibleLines and outcomeNote", () => {
     expect(visibleLines(lines, "lot", "").map((l) => l.earTag)).toEqual(["BR-001", "BR-002", "BR-010"]);
   });
 
+  it("keeps only the pulados and the ones left in the line under the missed scope", () => {
+    const withRefugo: DetailLine[] = [...lines, { earTag: "BR-020", outcome: "rejected" }];
+    expect(visibleLines(withRefugo, "missed", "").map((l) => l.earTag)).toEqual(["BR-002", "BR-010"]);
+    expect(visibleLines(lines, "missed", "010").map((l) => l.earTag)).toEqual(["BR-010"]);
+  });
+
   it("searches inside the scope", () => {
     expect(visibleLines(lines, "passed", "002")).toEqual([]);
     expect(visibleLines(lines, "lot", " br-00").map((l) => l.earTag)).toEqual(["BR-001", "BR-002"]);

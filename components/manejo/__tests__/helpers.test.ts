@@ -325,6 +325,11 @@ describe("visibleSaleRows", () => {
     expect(visibleSaleRows(rows, "sold", "")).toEqual([sold]);
   });
 
+  it("keeps only the pulados and the ones left in the line under the missed scope", () => {
+    const refugo: SaleRow = { ...pending, earTag: "BR-004", outcome: "rejected", weightKg: 390 };
+    expect(visibleSaleRows([...rows, refugo], "missed", "")).toEqual([skipped, pending]);
+  });
+
   it("keeps every animal of the session under the lot scope", () => {
     expect(visibleSaleRows(rows, "lot", "")).toEqual(rows);
   });
