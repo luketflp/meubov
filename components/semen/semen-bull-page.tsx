@@ -45,6 +45,11 @@ import { SemenBullDialog } from "@/components/semen/semen-bull-dialog";
 import { SemenPurchaseDialog } from "@/components/semen/semen-purchase-dialog";
 import { dosesLabel, TOUROS_TAB } from "@/components/semen/helpers";
 import { MonoDoses } from "@/components/semen/stock-pill";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import {
+  bullInseminationsExportTable,
+  semenPurchasesExportTable,
+} from "@/lib/export/datasets/semen";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
@@ -388,6 +393,7 @@ function BullInseminations({ rows }: { rows: BullInsemination[] }) {
 /** The bull's record once it is found: header, resumo, compras and inseminações. */
 function BullRecord({ bull }: { bull: SemenBull }) {
   const animals = useHerdStore((s) => s.animals);
+  const lots = useHerdStore((s) => s.lots);
   const canEdit = useCan("reproduction", "edit");
   const canEditFinance = useCan("finance", "edit");
   const seeMoney = useCan("finance", "view");
@@ -396,6 +402,27 @@ function BullRecord({ bull }: { bull: SemenBull }) {
   const router = useRouter();
   const inseminations = useMemo(() => bullInseminations(bull.id, animals), [bull.id, animals]);
   const subtitle = [bull.breed, bull.central].filter(Boolean).join(" · ");
+  const purchases = bull.purchases.length;
+  const exportMenu = (
+    <ExportMenu
+      title={`Touro ${bull.name}`}
+      formats={["xlsx", "print"]}
+      current={{
+        label: bull.name,
+        detail: `${purchases === 1 ? "1 compra" : `${formatNumber(purchases)} compras`} · ${inseminationsLabel(
+          inseminations.length
+        )}`,
+        build: () => [
+          semenPurchasesExportTable([bull]),
+          bullInseminationsExportTable(
+            inseminations,
+            new Map(lots.map((lot) => [lot.id, lot.name]))
+          ),
+        ],
+      }}
+      hint="Duas tabelas: as compras de doses e as inseminações com o diagnóstico."
+    />
+  );
 
   return (
     <>
@@ -414,19 +441,22 @@ function BullRecord({ bull }: { bull: SemenBull }) {
           ) : undefined
         }
         actions={
-          canEdit ? (
-            <>
-              <SemenBullDialog bull={bull} />
-              {canBuy ? <SemenPurchaseDialog bull={bull} variant="header" /> : null}
-              {canDelete ? (
-                <DeleteSemenBullButton
-                  bull={bull}
-                  variant="header"
-                  onDeleted={() => router.replace(TOUROS_TAB)}
-                />
-              ) : null}
-            </>
-          ) : undefined
+          <>
+            {exportMenu}
+            {canEdit ? (
+              <>
+                <SemenBullDialog bull={bull} />
+                {canBuy ? <SemenPurchaseDialog bull={bull} variant="header" /> : null}
+                {canDelete ? (
+                  <DeleteSemenBullButton
+                    bull={bull}
+                    variant="header"
+                    onDeleted={() => router.replace(TOUROS_TAB)}
+                  />
+                ) : null}
+              </>
+            ) : null}
+          </>
         }
       />
       <BullResumo

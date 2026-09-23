@@ -52,6 +52,17 @@ export const MANEJO_ACTION_LIST: readonly ManejoAction[] = [
   "entry",
 ];
 
+/** The history's filter value that shows every kind. */
+export const MANEJO_FILTER_ALL = "all";
+
+/** The history's filter: one action, or every one. */
+export type ManejoFilter = ManejoAction | typeof MANEJO_FILTER_ALL;
+
+/** Reads the `tipo` query value; anything unknown shows every manejo. */
+export function parseManejoFilter(value: string | null): ManejoFilter {
+  return MANEJO_ACTION_LIST.find((action) => action === value) ?? MANEJO_FILTER_ALL;
+}
+
 /** The actions that move the herd instead of only recording its history. */
 const MOVEMENT_ACTIONS = new Set<ManejoAction>(["transfer", "sale", "entry"]);
 
@@ -229,8 +240,11 @@ export interface ManejoHistoryRow {
   earTags?: string[];
 }
 
-/** Money of a session row: a trade's value, or the plan's cost for each animal treated. */
-function sessionAmount(session: ManejoSession, done: number): number | null {
+/**
+ * Money of a session row: a trade's value, or the plan's cost for each of the
+ * `done` animals treated. Null when the session carries no value.
+ */
+export function sessionAmount(session: ManejoSession, done: number): number | null {
   if (session.kind === "health") {
     const cost = session.treatment?.costBrl;
     return cost === undefined ? null : cost * done;

@@ -132,3 +132,27 @@
     @apply font-heading;
   }
 }
+
+/* Exports print on A4. Report pages draw their sheet at A4 size on screen;
+   on paper the sheet drops its frame and the @page margin takes over. */
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #ffffff;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* Menus, dialogs and toasts float over the page; none belongs on paper. */
+  [data-radix-popper-content-wrapper],
+  [data-sonner-toaster],
+  [role="dialog"],
+  [data-slot="dialog-overlay"] {
+    display: none !important;
+  }
+}

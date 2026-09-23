@@ -11,7 +11,7 @@ import { ArrowLeft, SearchX } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
 import { formatDate, todayISO } from "@/lib/domain/dates";
-import { lotSummary, withStatus } from "@/lib/store/selectors";
+import { animalsByBreed, lotSummary, withStatus } from "@/lib/store/selectors";
 import { DEFAULT_SORT, sortHerd } from "@/components/herd/filters";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
@@ -20,6 +20,9 @@ import { LotAnimalsCard } from "@/components/lots/lot-animals";
 import { LotSummaryCard } from "@/components/lots/lot-summary";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { herdExportTable } from "@/lib/export/datasets/herd";
+import { currentInvernadaNames } from "@/lib/export/datasets/lots";
 
 function BackLink() {
   return (
@@ -43,6 +46,7 @@ export default function LotRecordPage() {
   const treatments = useHerdStore((s) => s.treatments);
   const invernadas = useHerdStore((s) => s.invernadas);
   const lotPlacements = useHerdStore((s) => s.lotPlacements);
+  const customCategories = useHerdStore((s) => s.customCategories);
   const canEditLots = useCan("lots", "edit");
 
   const today = todayISO();
@@ -93,6 +97,31 @@ export default function LotRecordPage() {
           : ""
       }`;
 
+  // The file follows the Animais card: raça by raça, each by ear tag.
+  const exportTitle = `Lote ${lot.name}`;
+  const exportMenu = (
+    <ExportMenu
+      title={exportTitle}
+      current={{
+        label: "Animais do lote",
+        detail: rows.length === 1 ? "1 animal" : `${rows.length} animais`,
+        build: () => [
+          herdExportTable(
+            animalsByBreed(rows).flatMap((group) => group.items),
+            {
+              lotNames: new Map(lots.map((item) => [item.id, item.name])),
+              invernadaNames: currentInvernadaNames(invernadas, lotPlacements),
+              customCategories,
+            },
+            todayISO(),
+            exportTitle
+          ),
+        ],
+      }}
+      hint="Todos os animais do lote, com as colunas do Rebanho: raça a raça, por brinco."
+    />
+  );
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 md:px-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -112,6 +141,7 @@ export default function LotRecordPage() {
             </>
           ) : undefined
         }
+        actions={exportMenu}
       />
 
       <LotSummaryCard summary={summary} />

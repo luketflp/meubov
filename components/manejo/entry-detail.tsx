@@ -18,10 +18,13 @@ import {
   type MovementLine,
 } from "@/lib/domain/manejoDetail";
 import { movementSubtitle } from "@/components/manejo/helpers";
+import { entryLinesExportTable } from "@/lib/export/datasets/manejo";
 import {
   AnimalsCard,
   DetailHeader,
+  LinesExportMenu,
   ResumoCard,
+  useDetailExportNames,
   useHerdLookup,
   useLinesView,
   type LineColumn,
@@ -34,6 +37,7 @@ export function EntryDetail({ session }: { session: ManejoSession }) {
   const lines = useMemo(() => movementLines(session), [session]);
   const totals = useMemo(() => entryTotals(session), [session]);
   const view = useLinesView(lines, true);
+  const exportNames = useDetailExportNames();
 
   const destinationName = session.destinationLotId
     ? lookup.lotName(session.destinationLotId)
@@ -96,6 +100,14 @@ export function EntryDetail({ session }: { session: ManejoSession }) {
         title={session.name}
         action="entry"
         session={session}
+        extra={
+          <LinesExportMenu
+            title={session.name}
+            lines={lines}
+            visible={view.visible}
+            build={(rows) => entryLinesExportTable(session.name, rows, exportNames)}
+          />
+        }
         subtitle={`${formatDate(session.date)} · ${movementSubtitle(session, destinationName)}`}
       />
 

@@ -8,6 +8,7 @@
 import { Suspense } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { BaixasList } from "@/components/baixas/baixas-list";
+import { BaixasExport } from "@/components/baixas/baixas-export";
 
 // The Motivo filter lives in the URL query, which useSearchParams reads inside a Suspense boundary.
 export default function BaixasPage() {
@@ -16,6 +17,11 @@ export default function BaixasPage() {
       <PageHeader
         title="Baixas"
         subtitle="Mortes, perdas e outras saídas do rebanho que não foram venda"
+        actions={
+          <Suspense fallback={null}>
+            <BaixasExport />
+          </Suspense>
+        }
       />
       <Suspense fallback={null}>
         <BaixasList />

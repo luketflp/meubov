@@ -30,6 +30,12 @@ import { semenBullHref } from "@/components/semen/helpers";
 import { SemenBullDialog } from "@/components/semen/semen-bull-dialog";
 import { SemenPurchaseDialog } from "@/components/semen/semen-purchase-dialog";
 import { StockPill } from "@/components/semen/stock-pill";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import {
+  semenBullsByName,
+  semenBullsExportTable,
+  semenPurchasesExportTable,
+} from "@/lib/export/datasets/semen";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import {
@@ -70,16 +76,36 @@ export function SemenBullsList() {
   // A bull registered here is appended unsorted; the list reads by name.
   const rows = useMemo(
     () =>
-      [...semenBulls]
-        .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
-        .map((bull) => ({ bull, stock: bullStock(bull, animals) })),
+      semenBullsByName(semenBulls).map((bull) => ({ bull, stock: bullStock(bull, animals) })),
     [semenBulls, animals]
   );
+  const purchases = rows.reduce((total, { bull }) => total + bull.purchases.length, 0);
 
   return (
     <SectionCard
       title="Touros"
-      action={rows.length > 0 && canEdit ? <SemenBullDialog /> : null}
+      action={
+        rows.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <ExportMenu
+              title="Touros"
+              formats={["xlsx", "print"]}
+              current={{
+                label: "Touros",
+                detail: `${rows.length === 1 ? "1 touro" : `${formatNumber(rows.length)} touros`} · ${
+                  purchases === 1 ? "1 compra" : `${formatNumber(purchases)} compras`
+                }`,
+                build: () => {
+                  const bulls = rows.map(({ bull }) => bull);
+                  return [semenBullsExportTable(bulls, animals), semenPurchasesExportTable(bulls)];
+                },
+              }}
+              hint="Duas tabelas: os touros com estoque e taxa de prenhez, e todas as compras de doses."
+            />
+            {canEdit ? <SemenBullDialog /> : null}
+          </div>
+        ) : null
+      }
     >
       {rows.length === 0 ? (
         <div className="pb-6">

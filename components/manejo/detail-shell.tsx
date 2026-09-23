@@ -22,6 +22,9 @@ import type { ManejoAction } from "@/components/manejo/helpers";
 import { ManejoTypePill } from "@/components/manejo/manejo-type-pill";
 import { DeleteManejoDialog } from "@/components/manejo/delete-manejo-dialog";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ExportMenu, type ExportFormat } from "@/components/export/ExportMenu";
+import type { DetailExportNames } from "@/lib/export/datasets/manejo";
+import type { ExportTable } from "@/lib/export/table";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -108,6 +111,57 @@ export function useHerdLookup() {
   }, [animals, lots, customCategories]);
 }
 
+/** The herd the exports of a details page read categoria, raça and lote from. */
+export function useDetailExportNames(): DetailExportNames {
+  const animals = useHerdStore((s) => s.animals);
+  const lots = useHerdStore((s) => s.lots);
+  const customCategories = useHerdStore((s) => s.customCategories);
+  return useMemo(
+    () => ({ animals, lotNames: new Map(lots.map((lot) => [lot.id, lot.name])), customCategories }),
+    [animals, lots, customCategories]
+  );
+}
+
+const animalsLabel = (n: number) => (n === 1 ? "1 animal" : `${formatNumber(n)} animais`);
+
+/**
+ * Exportar of a details page: the animals the card lists now (its scope and
+ * search), and every animal of the manejo when those narrow the list.
+ */
+export function LinesExportMenu<T>({
+  title,
+  lines,
+  visible,
+  build,
+  formats,
+}: {
+  title: string;
+  /** Every line of the manejo. */
+  lines: readonly T[];
+  /** The lines the animals card shows now. */
+  visible: readonly T[];
+  build: (lines: readonly T[]) => ExportTable;
+  formats?: readonly ExportFormat[];
+}) {
+  return (
+    <ExportMenu
+      title={title}
+      formats={formats}
+      current={{
+        label: "Lista atual",
+        detail: animalsLabel(visible.length),
+        build: () => [build(visible)],
+      }}
+      all={
+        visible.length === lines.length
+          ? undefined
+          : { label: "Todos os animais do manejo", detail: animalsLabel(lines.length), build: () => [build(lines)] }
+      }
+      hint="Os animais do manejo, com as colunas da tabela."
+    />
+  );
+}
+
 /** "Voltar ao manejo", in every header and on the dead ends. */
 export function BackToManejo() {
   return (
@@ -139,9 +193,11 @@ interface DetailHeaderProps {
   subtitle: string;
   /** The session behind the page; without one there is no "Excluir manejo" here. */
   session?: ManejoSession;
+  /** More header actions, before "Excluir manejo": the Exportar, the Romaneio. */
+  extra?: ReactNode;
 }
 
-export function DetailHeader({ title, action, subtitle, session }: DetailHeaderProps) {
+export function DetailHeader({ title, action, subtitle, session, extra }: DetailHeaderProps) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
   const permissions = useActivePermissions();
@@ -154,6 +210,7 @@ export function DetailHeader({ title, action, subtitle, session }: DetailHeaderP
         subtitle={subtitle}
         actions={
           <div className="flex flex-wrap items-center gap-3">
+            {extra}
             {deletable ? (
               <Button
                 type="button"

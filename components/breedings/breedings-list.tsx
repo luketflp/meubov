@@ -36,6 +36,8 @@ import { RowDiagnosisDialog } from "@/components/breedings/row-diagnosis-dialog"
 import { semenBullHref } from "@/components/semen/helpers";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { breedingsExportTable } from "@/lib/export/datasets/reproduction";
 import {
   Select,
   SelectContent,
@@ -138,6 +140,35 @@ export function BreedingsList() {
   const filtering = filter !== "all";
   const openByDefault = lotCount <= OPEN_BY_DEFAULT_MAX;
   const today = todayISO();
+  const lotNames = useMemo(() => new Map(lots.map((lot) => [lot.id, lot.name])), [lots]);
+  const exportMenu = (
+    <ExportMenu
+      title="Coberturas"
+      current={{
+        label: "Filtro atual",
+        detail: filtering
+          ? `${breedingsLabel(shown.length)} · ${FILTER_LABEL[filter]}`
+          : breedingsLabel(shown.length),
+        filters: filtering ? [`Diagnóstico: ${FILTER_LABEL[filter]}`] : [],
+        build: () => [breedingsExportTable(groups.flatMap((group) => group.rows), lotNames)],
+      }}
+      all={
+        filtering
+          ? {
+              label: "Coberturas todas",
+              detail: breedingsLabel(rows.length),
+              build: () => [
+                breedingsExportTable(
+                  breedingsByLot(rows, lots).flatMap((group) => group.rows),
+                  lotNames
+                ),
+              ],
+            }
+          : undefined
+      }
+      hint="Na ordem da tela, lote a lote, com data e observação do diagnóstico."
+    />
+  );
 
   function isOpen(key: string): boolean {
     if (filtering) return !closedInFilter.has(key);
@@ -167,18 +198,21 @@ export function BreedingsList() {
       title="Coberturas registradas"
       action={
         rows.length > 0 ? (
-          <Select value={filter} onValueChange={(value) => changeFilter(value as BreedingFilter)}>
-            <SelectTrigger className="min-h-11 md:min-h-8" aria-label="Filtrar coberturas">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {FILTER_LIST.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {FILTER_LABEL[option]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={filter} onValueChange={(value) => changeFilter(value as BreedingFilter)}>
+              <SelectTrigger className="min-h-11 md:min-h-8" aria-label="Filtrar coberturas">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FILTER_LIST.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {FILTER_LABEL[option]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {exportMenu}
+          </div>
         ) : null
       }
     >

@@ -2,7 +2,8 @@
 
 /**
  * "Weight evolution" section: line chart of the weighings, ADG summary
- * and the new weighing form beside it (stacked on mobile).
+ * and the new weighing form beside it (stacked on mobile). Its "Exportar"
+ * takes the weighings alone, with the GMD since the previous one.
  */
 import { Scale } from "lucide-react";
 import type { Animal } from "@/lib/types";
@@ -13,6 +14,8 @@ import { SectionCard } from "@/components/ui/section-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LineChart } from "@/components/charts/line-chart";
 import { WeighingForm } from "@/components/animal/WeighingForm";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { animalWeighingsTable } from "@/lib/export/datasets/animal";
 
 /** Short date "dd/mm" for the chart axis labels. */
 function shortDate(iso: string): string {
@@ -30,7 +33,22 @@ export function WeightEvolution({ animal, adg }: WeightEvolutionProps) {
   const points = weighings.map((w) => ({ label: shortDate(w.date), value: w.weightKg }));
 
   return (
-    <SectionCard title="Evolução de peso">
+    <SectionCard
+      title="Evolução de peso"
+      action={
+        weighings.length > 0 ? (
+          <ExportMenu
+            title={`Pesagens ${animal.earTag}`}
+            current={{
+              label: "Pesagens",
+              detail: `${weighings.length} ${weighings.length === 1 ? "pesagem" : "pesagens"} do animal ${animal.earTag}`,
+              build: () => [animalWeighingsTable(animal)],
+            }}
+            formats={["xlsx", "csv"]}
+          />
+        ) : null
+      }
+    >
       <div
         className={
           canEditHerd ? "grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]" : "grid gap-6"

@@ -14,23 +14,25 @@ import {
   calendarTotals,
   calendarTreatmentGroup,
   outcomeNote,
-  type DetailLine,
 } from "@/lib/domain/manejoDetail";
+import {
+  calendarApplicationsExportTable,
+  type CalendarApplicationLine,
+} from "@/lib/export/datasets/manejo";
 import {
   AnimalsCard,
   DetailHeader,
+  LinesExportMenu,
   NotFoundCard,
   ResumoCard,
+  useDetailExportNames,
   useHerdLookup,
   useLinesView,
   type LineColumn,
   type ResumoColumn,
 } from "@/components/manejo/detail-shell";
 
-interface CalendarLine extends DetailLine {
-  dose?: string;
-  costBrl: number | null;
-}
+type CalendarLine = CalendarApplicationLine;
 
 export function CalendarTreatmentsDetail({ treatmentId }: { treatmentId: string }) {
   const treatments = useHerdStore((s) => s.treatments);
@@ -52,6 +54,7 @@ export function CalendarTreatmentsDetail({ treatmentId }: { treatmentId: string 
   );
   const view = useLinesView(lines, false);
   const lookup = useHerdLookup();
+  const exportNames = useDetailExportNames();
 
   if (!group) {
     return (
@@ -133,6 +136,14 @@ export function CalendarTreatmentsDetail({ treatmentId }: { treatmentId: string 
         title={group.name}
         action={group.type}
         subtitle={`${formatDate(group.date)} · Calendário sanitário`}
+        extra={
+          <LinesExportMenu
+            title={group.name}
+            lines={lines}
+            visible={view.visible}
+            build={(rows) => calendarApplicationsExportTable(group.name, rows, exportNames)}
+          />
+        }
       />
 
       <ResumoCard

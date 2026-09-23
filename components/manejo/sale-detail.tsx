@@ -8,7 +8,8 @@
  * `ManejoScreen` only renders this record once the venda is closed.
  */
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import Link from "next/link";
+import { FileText, Search } from "lucide-react";
 import type { ManejoSession } from "@/lib/types";
 import { formatDate } from "@/lib/domain/dates";
 import { formatArroba, formatCurrency, formatKg } from "@/lib/domain/format";
@@ -19,7 +20,14 @@ import {
   type SaleRowScope,
 } from "@/components/manejo/helpers";
 import { SaleSummaryCard } from "@/components/manejo/sale-summary";
-import { DetailHeader } from "@/components/manejo/detail-shell";
+import {
+  DetailHeader,
+  LinesExportMenu,
+  useDetailExportNames,
+} from "@/components/manejo/detail-shell";
+import { saleLinesExportTable } from "@/lib/export/datasets/manejo";
+import { useCan } from "@/lib/store/usePermissions";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SectionCard } from "@/components/ui/section-card";
 import {
@@ -50,6 +58,9 @@ export function SaleDetail({ session }: SaleDetailProps) {
   const [scope, setScope] = useState<SaleRowScope>("sold");
 
   const rows = useMemo(() => saleRows(session), [session]);
+  const exportNames = useDetailExportNames();
+  // The romaneio prints the money of the venda: Financeiro only.
+  const seeMoney = useCan("finance", "view");
 
   const perArroba = session.pricePerArroba !== undefined;
   // A venda closed at one price has no per-head money: the column would be a
@@ -70,6 +81,24 @@ export function SaleDetail({ session }: SaleDetailProps) {
         action="sale"
         subtitle={`${formatDate(session.date)} · ${movementSubtitle(session, undefined)}`}
         session={session}
+        extra={
+          <>
+            {seeMoney ? (
+              <Button asChild variant="outline" className="h-11 md:h-8">
+                <Link href={`/relatorios/romaneio?manejo=${encodeURIComponent(session.id)}`}>
+                  <FileText aria-hidden />
+                  Romaneio
+                </Link>
+              </Button>
+            ) : null}
+            <LinesExportMenu
+              title={session.name}
+              lines={rows}
+              visible={visible}
+              build={(lines) => saleLinesExportTable(session.name, lines, exportNames)}
+            />
+          </>
+        }
       />
 
       <SaleSummaryCard session={session} />

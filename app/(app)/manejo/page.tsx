@@ -11,6 +11,7 @@ import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
 import { useCan } from "@/lib/store/usePermissions";
 import { ActivityPanel } from "@/components/manejo/activity-panel";
 import { ManejoHistory } from "@/components/manejo/manejo-history";
+import { ManejoHistoryExport } from "@/components/manejo/manejo-history-export";
 import { OpenManejoSessions } from "@/components/manejo/open-sessions";
 import { RegisterManejoDialog } from "@/components/manejo/register-manejo-dialog";
 
@@ -22,7 +23,15 @@ export default function ManejoPage() {
         title="Manejo"
         subtitle="Vacinas, vermifugações, pesagens e atividades pendentes do curral"
         badges={canEdit ? undefined : <ReadOnlyPill />}
-        actions={canEdit ? <RegisterManejoDialog /> : undefined}
+        actions={
+          <>
+            {/* The export follows the history's filter, read from the URL inside a Suspense boundary. */}
+            <Suspense fallback={null}>
+              <ManejoHistoryExport />
+            </Suspense>
+            {canEdit ? <RegisterManejoDialog /> : null}
+          </>
+        }
       />
       <OpenManejoSessions />
       <ActivityPanel />

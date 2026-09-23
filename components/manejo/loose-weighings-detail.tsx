@@ -21,16 +21,19 @@ import {
 import {
   AnimalsCard,
   DetailHeader,
+  LinesExportMenu,
   NotFoundCard,
   ResumoCard,
   formatAdg,
   shortDate,
+  useDetailExportNames,
   useHerdLookup,
   useLinesView,
   type LineColumn,
   type ResumoColumn,
 } from "@/components/manejo/detail-shell";
 import { WeighingCardHerdLine, WeighingTrail } from "@/components/manejo/weighing-detail";
+import { weighingLinesExportTable } from "@/lib/export/datasets/manejo";
 
 /** The badge that takes the previous weighing's place on a peso ao nascer. */
 function AtBirthBadge() {
@@ -50,6 +53,7 @@ export function LooseWeighingsDetail({ date }: { date: string }) {
     [date, animals, sessions]
   );
   const view = useLinesView(lines, false);
+  const exportNames = useDetailExportNames();
 
   if (lines.length === 0) {
     return (
@@ -143,6 +147,14 @@ export function LooseWeighingsDetail({ date }: { date: string }) {
         title="Pesagens avulsas"
         action="weighing"
         subtitle={`${formatDate(date)} · fora do brete`}
+        extra={
+          <LinesExportMenu
+            title={`Pesagens avulsas ${formatDate(date)}`}
+            lines={lines}
+            visible={view.visible}
+            build={(rows) => weighingLinesExportTable("Pesagens avulsas", rows, exportNames)}
+          />
+        }
       />
 
       <div className="flex gap-2.5 rounded-lg border border-hairline bg-surface px-4 py-3 text-sm text-ink-soft">

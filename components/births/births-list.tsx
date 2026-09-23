@@ -9,7 +9,7 @@
  * The rows come straight from the herd store: a calving already travels inside
  * its dam's reproduction record, so this screen needs no request of its own.
  */
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, Baby, ChevronsUpDown } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
@@ -19,7 +19,6 @@ import { formatKg } from "@/lib/domain/format";
 import { SEX_LABEL } from "@/lib/domain/labels";
 import { cn } from "@/lib/utils";
 import {
-  DEFAULT_BIRTH_SORT,
   nextBirthSort,
   sortBirths,
   type BirthSort,
@@ -108,10 +107,16 @@ function weightLabel(birth: Birth): string {
   return birth.birthWeightKg === null ? "—" : formatKg(birth.birthWeightKg);
 }
 
-export function BirthsList() {
+/** The sort lives with the page, so its Exportar writes the rows in the table's order. */
+export function BirthsList({
+  sort,
+  onSortChange,
+}: {
+  sort: BirthSort;
+  onSortChange: (sort: BirthSort) => void;
+}) {
   const animals = useHerdStore((s) => s.animals);
   const lots = useHerdStore((s) => s.lots);
-  const [sort, setSort] = useState<BirthSort>(DEFAULT_BIRTH_SORT);
 
   const lotNames = useMemo(() => new Map(lots.map((lot) => [lot.id, lot.name])), [lots]);
   const births = useMemo(
@@ -140,7 +145,7 @@ export function BirthsList() {
                       key={column.key}
                       column={column}
                       sort={sort}
-                      onSort={(key) => setSort((current) => nextBirthSort(current, key))}
+                      onSort={(key) => onSortChange(nextBirthSort(sort, key))}
                     />
                   ))}
                 </TableRow>

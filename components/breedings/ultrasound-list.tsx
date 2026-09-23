@@ -53,6 +53,8 @@ import {
   linkClass,
   ultrasoundBreteHref,
 } from "@/components/breedings/ultrasound-parts";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { ultrasoundExportTable } from "@/lib/export/datasets/reproduction";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -290,6 +292,10 @@ export function UltrasoundList({ brete }: { brete: string | null }) {
   const tapDate = dateError === null ? examDate : null;
   const searching = search.trim() !== "";
   const openByDefault = groups.length <= OPEN_BY_DEFAULT_MAX;
+  const cowsLabel = (list: UltrasoundGroup[]) => {
+    const n = list.reduce((total, group) => total + group.rows.length, 0);
+    return n === 1 ? "1 vaca" : `${formatNumber(n)} vacas`;
+  };
 
   function isOpen(key: string): boolean {
     if (searching) return !closedInSearch.has(key);
@@ -378,6 +384,26 @@ export function UltrasoundList({ brete }: { brete: string | null }) {
           <span className="font-mono font-medium text-ink">{pendingDiagnosisCount(groups)}</span>{" "}
           aguardando diagnóstico
         </p>
+        <ExportMenu
+          title="Ultrassom"
+          className="self-start md:self-auto"
+          current={{
+            label: "Busca atual",
+            detail: searching ? `${cowsLabel(shown)} · brinco ${search.trim()}` : cowsLabel(shown),
+            filters: searching ? [`Busca: ${search.trim()}`] : [],
+            build: () => [ultrasoundExportTable(shown)],
+          }}
+          all={
+            searching
+              ? {
+                  label: "Lista toda",
+                  detail: cowsLabel(groups),
+                  build: () => [ultrasoundExportTable(groups)],
+                }
+              : undefined
+          }
+          hint="Lote a lote, na ordem da tela, com o diagnóstico e a observação de cada vaca."
+        />
       </div>
 
       <section className="rounded-lg border border-hairline bg-panel p-4">

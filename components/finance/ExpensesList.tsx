@@ -2,8 +2,8 @@
 
 /**
  * "Despesas" section: date-desc list of the farm expenses with removal, plus
- * the register dialog in the header. Feeds (with the sanitary treatment
- * costs) every cost figure of the finance screens.
+ * the register dialog and the export of every despesa in the header. Feeds
+ * (with the sanitary treatment costs) every cost figure of the finance screens.
  */
 import { Trash2, Wallet } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import { RegisterExpenseDialog } from "@/components/finance/RegisterExpenseDialog";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { expensesExportTable, expensesNewestFirst } from "@/lib/export/datasets/finance";
 
 /** How many rows the list shows (newest first) before summarizing. */
 const MAX_ROWS = 8;
@@ -27,7 +29,7 @@ export function ExpensesList() {
   const canEdit = useCan("finance", "edit");
   const { addToast } = useToast();
 
-  const sorted = [...expenses].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const sorted = expensesNewestFirst(expenses);
   const visible = sorted.slice(0, MAX_ROWS);
 
   async function onRemove(id: string) {
@@ -36,7 +38,27 @@ export function ExpensesList() {
   }
 
   return (
-    <SectionCard title="Despesas" action={canEdit ? <RegisterExpenseDialog /> : undefined}>
+    <SectionCard
+      title="Despesas"
+      action={
+        sorted.length > 0 || canEdit ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {sorted.length > 0 ? (
+              <ExportMenu
+                title="Despesas"
+                current={{
+                  label: "Despesas",
+                  detail: sorted.length === 1 ? "1 despesa" : `${sorted.length} despesas`,
+                  build: () => [expensesExportTable(expenses)],
+                }}
+                hint="Todas as despesas, não só as mais recentes da tela."
+              />
+            ) : null}
+            {canEdit ? <RegisterExpenseDialog /> : null}
+          </div>
+        ) : undefined
+      }
+    >
       {sorted.length === 0 ? (
         <EmptyState
           icon={Wallet}

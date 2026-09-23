@@ -18,11 +18,14 @@ import {
   type TreatmentLine,
 } from "@/lib/domain/manejoDetail";
 import { sessionKind } from "@/components/manejo/helpers";
+import { treatmentLinesExportTable } from "@/lib/export/datasets/manejo";
 import {
   AnimalsCard,
   DetailHeader,
   HeadsLead,
+  LinesExportMenu,
   ResumoCard,
+  useDetailExportNames,
   useHerdLookup,
   useLinesView,
   type LineColumn,
@@ -42,6 +45,7 @@ export function TreatmentDetail({ session }: { session: ManejoSession }) {
   const totals = useMemo(() => treatmentTotals(session), [session]);
   const view = useLinesView(lines, true);
   const lookup = useHerdLookup();
+  const exportNames = useDetailExportNames();
 
   // Weight and cost columns only when the manejo weighed or the plan was
   // priced; otherwise they would be a stack of dashes.
@@ -141,6 +145,14 @@ export function TreatmentDetail({ session }: { session: ManejoSession }) {
         action={sessionKind(session)}
         subtitle={subtitle}
         session={session}
+        extra={
+          <LinesExportMenu
+            title={session.name}
+            lines={lines}
+            visible={view.visible}
+            build={(rows) => treatmentLinesExportTable(session.name, rows, exportNames)}
+          />
+        }
       />
 
       <ResumoCard

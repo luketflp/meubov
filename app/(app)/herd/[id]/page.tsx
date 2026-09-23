@@ -19,6 +19,9 @@ import { WeightEvolution } from "@/components/animal/WeightEvolution";
 import { Timeline } from "@/components/animal/Timeline";
 import { HealthHistory } from "@/components/animal/HealthHistory";
 import { AnimalReproduction } from "@/components/animal/AnimalReproduction";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { animalExportTables } from "@/lib/export/datasets/animal";
+import { invernadaLabel } from "@/lib/export/datasets/lots";
 
 function BackLink() {
   return (
@@ -41,6 +44,7 @@ export default function AnimalRecordPage() {
   const invernadas = useHerdStore((s) => s.invernadas);
   const lotPlacements = useHerdStore((s) => s.lotPlacements);
   const semenBulls = useHerdStore((s) => s.semenBulls);
+  const customCategories = useHerdStore((s) => s.customCategories);
   const canEditHerd = useCan("herd", "edit");
 
   const animal = animalById(animals, params.id);
@@ -77,22 +81,44 @@ export default function AnimalRecordPage() {
   const invernada = placement
     ? invernadas.find((item) => item.id === placement.invernadaId) ?? null
     : null;
+  const invernadaName = invernada ? invernadaLabel(invernada) : null;
+
+  const exportMenu = (
+    <ExportMenu
+      title={`Ficha ${animal.earTag}`}
+      current={{
+        label: "Ficha do animal",
+        detail:
+          animal.sex === "female"
+            ? "Dados, pesagens, sanidade e reprodução"
+            : "Dados, pesagens e sanidade",
+        build: () =>
+          animalExportTables(
+            derived,
+            forAnimal,
+            { lotName: lot?.name ?? null, invernadaName, customCategories, semenBulls },
+            todayISO()
+          ),
+      }}
+      formats={["xlsx", "print"]}
+      hint="Uma aba por seção da ficha; as pesagens trazem o GMD desde a anterior."
+    />
+  );
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 md:px-8">
       <div className="flex items-center justify-between gap-3">
         <BackLink />
-        {canEditHerd ? <EditAnimalDialog animal={animal} /> : <ReadOnlyPill />}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {exportMenu}
+          {canEditHerd ? <EditAnimalDialog animal={animal} /> : <ReadOnlyPill />}
+        </div>
       </div>
 
       <AnimalHeader
         derived={derived}
         lotName={lot?.name ?? null}
-        invernadaName={
-          invernada
-            ? `${invernada.code}${invernada.name ? ` · ${invernada.name}` : ""}`
-            : null
-        }
+        invernadaName={invernadaName}
       />
 
       <WeightEvolution animal={animal} adg={derived.adg} />

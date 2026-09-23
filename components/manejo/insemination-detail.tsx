@@ -10,33 +10,37 @@
  * sees Financeiro.
  */
 import { useMemo } from "react";
-import type { DiagnosisResult, ManejoSession } from "@/lib/types";
+import type { ManejoSession } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
 import { formatDate } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
-import type { DetailLine } from "@/lib/domain/manejoDetail";
 import { breedingOutcome } from "@/lib/domain/reproduction";
 import { sessionSemenCost } from "@/lib/domain/semen";
 import { ResultPill } from "@/components/animal/reproduction-pills";
 import { bullDisplay } from "@/components/semen/helpers";
+import {
+  inseminationLinesExportTable,
+  type InseminationExportLine,
+} from "@/lib/export/datasets/manejo";
 import { inseminationTitle, passBreeding } from "@/components/manejo/insemination-chute-form";
 import {
   AnimalsCard,
   DetailHeader,
+  LinesExportMenu,
   ResumoCard,
+  useDetailExportNames,
   useHerdLookup,
   useLinesView,
   type LineColumn,
   type ResumoRow,
 } from "@/components/manejo/detail-shell";
 
-interface InseminationLine extends DetailLine {
-  /** Bull whose dose the cow took; null when she did not pass. */
-  bull: string | null;
-  /** What the ultrassom said of her cobertura; null when she did not pass. */
-  result: DiagnosisResult | null;
-}
+/**
+ * A cow of the inseminação: the bull whose dose she took and what the
+ * ultrassom said of her cobertura, both null when she did not pass.
+ */
+type InseminationLine = InseminationExportLine;
 
 /** The line's note, prefixed by "pulada" or "não passou" when the cow took no dose. */
 function inseminationNote(line: InseminationLine): string {
@@ -56,6 +60,7 @@ export function InseminationDetail({ session }: { session: ManejoSession }) {
   const bulls = useHerdStore((s) => s.semenBulls);
   const seeMoney = useCan("finance", "view");
   const lookup = useHerdLookup();
+  const exportNames = useDetailExportNames();
 
   const lines = useMemo<InseminationLine[]>(() => {
     const byTag = new Map(animals.map((animal) => [animal.earTag, animal]));
@@ -133,6 +138,16 @@ export function InseminationDetail({ session }: { session: ManejoSession }) {
         action="insemination"
         subtitle={subtitle}
         session={session}
+        extra={
+          <LinesExportMenu
+            title={inseminationTitle(session, animals, lots)}
+            lines={lines}
+            visible={view.visible}
+            build={(rows) =>
+              inseminationLinesExportTable(inseminationTitle(session, animals, lots), rows, exportNames)
+            }
+          />
+        }
       />
 
       <ResumoCard

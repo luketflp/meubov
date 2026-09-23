@@ -14,7 +14,7 @@ import type { Animal, Category } from "@/lib/types";
 import { herdValue } from "@/lib/domain/finance";
 import { formatArroba, formatCurrency, formatNumber } from "@/lib/domain/format";
 import { kgToArroba, totalWeightKg } from "@/lib/domain/weights";
-import { pluralCategory } from "@/lib/domain/labels";
+import { pluralCategoryLabel, type CategorySalesRow } from "@/lib/export/datasets/finance";
 
 interface CategorySalesTableProps {
   animals: Animal[];
@@ -22,24 +22,10 @@ interface CategorySalesTableProps {
   arrobaPrice: number | null;
 }
 
-/** Capitalized plural label of the category, e.g.: "Bezerros". */
-function pluralCategoryLabel(category: Category): string {
-  const plural = pluralCategory(category, 2);
-  return plural.charAt(0).toUpperCase() + plural.slice(1);
-}
-
 const CATEGORY_ORDER: Category[] = ["steer", "cow", "heifer", "calf", "bull"];
 
-interface CategoryRow {
-  category: Category;
-  headCount: number;
-  averageArrobas: number;
-  totalArrobas: number;
-  estimatedValue: number;
-}
-
 /** Derives one row per category present among the received active animals. */
-function buildRows(animals: Animal[], arrobaPrice: number): CategoryRow[] {
+export function categorySalesRows(animals: Animal[], arrobaPrice: number): CategorySalesRow[] {
   return CATEGORY_ORDER.map((category) => {
     const inGroup = animals.filter((animal) => animal.category === category);
     const headCount = inGroup.length;
@@ -55,7 +41,7 @@ function buildRows(animals: Animal[], arrobaPrice: number): CategoryRow[] {
 }
 
 /** Sums the rows into a grand total (average @ weighted by head count). */
-function totalize(rows: CategoryRow[]): Omit<CategoryRow, "category"> {
+export function categorySalesTotal(rows: CategorySalesRow[]): Omit<CategorySalesRow, "category"> {
   const headCount = rows.reduce((sum, row) => sum + row.headCount, 0);
   const totalArrobas = rows.reduce((sum, row) => sum + row.totalArrobas, 0);
   return {
@@ -80,8 +66,8 @@ export function CategorySalesTable({ animals, arrobaPrice }: CategorySalesTableP
     );
   }
 
-  const rows = buildRows(animals, arrobaPrice);
-  const total = totalize(rows);
+  const rows = categorySalesRows(animals, arrobaPrice);
+  const total = categorySalesTotal(rows);
 
   if (rows.length === 0) {
     return (

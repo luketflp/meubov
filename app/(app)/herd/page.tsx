@@ -16,6 +16,9 @@ import { AnimalCard } from "@/components/herd/AnimalCard";
 import { AddAnimalsButton } from "@/components/herd/AddAnimalsButton";
 import { ImportHerdDialog } from "@/components/herd/ImportHerdDialog";
 import { useHerdView } from "@/components/herd/useHerdView";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { herdExportTable } from "@/lib/export/datasets/herd";
+import { currentInvernadaNames } from "@/lib/export/datasets/lots";
 import { paginate } from "@/components/herd/pagination";
 import {
   LOT_ALL,
@@ -23,6 +26,8 @@ import {
   sortHerd,
   herdSubtitle,
   hasActiveFilter,
+  CATEGORY_LABELS,
+  STATUS_LABELS,
 } from "@/components/herd/filters";
 
 // The view lives in the URL query, which useSearchParams reads inside a Suspense boundary.
@@ -40,6 +45,7 @@ function HerdScreen() {
   const lots = useHerdStore((state) => state.lots);
   const invernadas = useHerdStore((state) => state.invernadas);
   const lotPlacements = useHerdStore((state) => state.lotPlacements);
+  const customCategories = useHerdStore((state) => state.customCategories);
   const canEdit = useCan("herd", "edit");
   const canEditLots = useCan("lots", "edit");
 
@@ -56,22 +62,10 @@ function HerdScreen() {
     [lots]
   );
 
-  const invernadaNames = useMemo(() => {
-    const byId = new Map(invernadas.map((invernada) => [invernada.id, invernada]));
-    return new Map(
-      lotPlacements
-        .filter((placement) => placement.endedOn === undefined)
-        .map((placement) => {
-          const invernada = byId.get(placement.invernadaId);
-          return [
-            placement.lotId,
-            invernada
-              ? `${invernada.code}${invernada.name ? ` · ${invernada.name}` : ""}`
-              : "—",
-          ] as const;
-        })
-    );
-  }, [invernadas, lotPlacements]);
+  const invernadaNames = useMemo(
+    () => currentInvernadaNames(invernadas, lotPlacements),
+    [invernadas, lotPlacements]
+  );
 
   // A link to a lot that no longer exists shows the whole herd.
   const lotId = lotNames.has(view.filters.lotId) ? view.filters.lotId : LOT_ALL;
@@ -97,6 +91,36 @@ function HerdScreen() {
 
   const filterActive = hasActiveFilter(filters);
 
+  const exportNames = { lotNames, invernadaNames, customCategories };
+  const filterWords = [
+    filters.search.trim() ? `Busca: ${filters.search.trim()}` : "",
+    filters.category !== "todas" ? `Categoria: ${CATEGORY_LABELS[filters.category]}` : "",
+    filters.lotId !== LOT_ALL ? `Lote: ${lotNames.get(filters.lotId) ?? ""}` : "",
+    filters.status !== "todos" ? `Status: ${STATUS_LABELS[filters.status]}` : "",
+  ].filter(Boolean);
+  const countLabel = (n: number) => (n === 1 ? "1 animal" : `${n} animais`);
+  const exportMenu = (
+    <ExportMenu
+      title="Rebanho"
+      current={{
+        label: "Filtro atual",
+        detail: [countLabel(sorted.length), ...filterWords].join(" · "),
+        filters: filterWords,
+        build: () => [herdExportTable(sorted, exportNames, todayISO())],
+      }}
+      all={
+        filterActive
+          ? {
+              label: "Rebanho todo",
+              detail: `${countLabel(derived.length)} ativos`,
+              build: () => [herdExportTable(sortHerd(derived, view.sort, lotNames), exportNames, todayISO())],
+            }
+          : undefined
+      }
+      hint="Mesmas colunas e ordem da tabela, mais invernada, idade em meses e data da última pesagem."
+    />
+  );
+
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 pt-6 md:px-8">
       <PageHeader
@@ -104,13 +128,12 @@ function HerdScreen() {
         subtitle={herdSubtitle(derived.length, filtered.length, filterActive)}
         badges={canEdit ? undefined : <ReadOnlyPill />}
         actions={
-          canEdit ? (
-            <div className="flex flex-wrap gap-2">
-              {/* The import creates the sheet's new lots, so the server also asks for Lotes edit. */}
-              {canEditLots ? <ImportHerdDialog /> : null}
-              <AddAnimalsButton />
-            </div>
-          ) : undefined
+          <div className="flex flex-wrap gap-2">
+            {/* The import creates the sheet's new lots, so the server also asks for Lotes edit. */}
+            {canEdit && canEditLots ? <ImportHerdDialog /> : null}
+            {exportMenu}
+            {canEdit ? <AddAnimalsButton /> : null}
+          </div>
         }
       />
 

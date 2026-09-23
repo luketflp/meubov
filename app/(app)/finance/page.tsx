@@ -10,7 +10,14 @@ import { RevenueCostChart } from "@/components/finance/RevenueCostChart";
 import { QuoteChart } from "@/components/finance/QuoteChart";
 import { CostBreakdownChart } from "@/components/finance/CostBreakdownChart";
 import { LivestockIndicators } from "@/components/finance/LivestockIndicators";
-import { CategorySalesTable } from "@/components/finance/CategorySalesTable";
+import {
+  CategorySalesTable,
+  categorySalesRows,
+  categorySalesTotal,
+} from "@/components/finance/CategorySalesTable";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { categorySalesExportTable, expensesExportTable } from "@/lib/export/datasets/finance";
+import { formatCurrency } from "@/lib/domain/format";
 import { ExpensesList } from "@/components/finance/ExpensesList";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
@@ -95,12 +102,37 @@ function FinanceContent() {
     averageCalfPrice(movements, todayISO())
   );
 
+  // The export: every despesa, and the vendas by categoria while the quote is live.
+  const salesRows = quote.price === null ? [] : categorySalesRows(active, quote.price);
+  const expensesCount = expenses.length === 1 ? "1 despesa" : `${expenses.length} despesas`;
+  const exportMenu = (
+    <ExportMenu
+      title="Financeiro"
+      formats={["xlsx", "print"]}
+      current={{
+        label: "Financeiro",
+        detail:
+          salesRows.length > 0 ? `${expensesCount} · vendas por categoria` : expensesCount,
+        filters:
+          quote.price === null ? [] : [`Cotação da arroba: ${formatCurrency(quote.price)}`],
+        build: () => [
+          expensesExportTable(expenses),
+          ...(salesRows.length > 0
+            ? [categorySalesExportTable(salesRows, categorySalesTotal(salesRows))]
+            : []),
+        ],
+      }}
+      hint="Duas tabelas: todas as despesas e o faturamento estimado por categoria na cotação do dia. O CSV das despesas fica no card Despesas."
+    />
+  );
+
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 md:px-8">
       <PageHeader
         title="Financeiro"
         subtitle="Indicadores da pecuária de corte"
         badges={canEdit ? undefined : <ReadOnlyPill />}
+        actions={exportMenu}
       />
 
       <MarketNotice

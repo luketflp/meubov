@@ -19,6 +19,8 @@ import { MonthlyGrid } from "@/components/calendar/MonthlyGrid";
 import { MonthList } from "@/components/calendar/MonthList";
 import { OverdueSection } from "@/components/calendar/OverdueSection";
 import { HealthProtocols } from "@/components/calendar/HealthProtocols";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { calendarTreatments, treatmentsExportTable } from "@/lib/export/datasets/calendar";
 import { cn } from "@/lib/utils";
 import {
   yearMonthOf,
@@ -45,6 +47,8 @@ export default function CalendarPage({ searchParams }: CalendarPageProps) {
   const activeTab = query.tab === "protocolos" ? "protocolos" : "agenda";
   const treatments = useHerdStore((s) => s.treatments);
   const protocols = useHerdStore((s) => s.protocols);
+  const animals = useHerdStore((s) => s.animals);
+  const lots = useHerdStore((s) => s.lots);
   const markTreatmentDone = useHerdStore((s) => s.markTreatmentDone);
   const deleteTreatment = useHerdStore((s) => s.deleteTreatment);
   const canEdit = useCan("sanitary", "edit");
@@ -112,6 +116,31 @@ export default function CalendarPage({ searchParams }: CalendarPageProps) {
     (campaign !== null && campaign.year === yearMonth.year && campaign.month === yearMonth.month);
   const ofOpenDay = openDay === null ? [] : ofMonth.filter((t) => t.date === openDay);
 
+  const month = monthLabel(yearMonth);
+  const onScreen = calendarTreatments(ofMonth, overdue);
+  const treatmentsLabel = (n: number) => (n === 1 ? "1 tratamento" : `${n} tratamentos`);
+  const exportMenu = (
+    <ExportMenu
+      title={`Calendário sanitário ${month}`}
+      current={{
+        label: "Mês na tela",
+        detail: `${treatmentsLabel(onScreen.length)} · ${month} e atrasados`,
+        filters: [`Mês: ${month}`, "Mais os atrasados de outros meses"],
+        build: () => [treatmentsExportTable(onScreen, animals, lots, todayISO(), "Calendário sanitário")],
+      }}
+      all={
+        treatments.length !== onScreen.length
+          ? {
+              label: "Todos os tratamentos",
+              detail: treatmentsLabel(treatments.length),
+              build: () => [treatmentsExportTable(treatments, animals, lots, todayISO())],
+            }
+          : undefined
+      }
+      hint="Os tratamentos do mês e os atrasados, por data, com status, carência e custo."
+    />
+  );
+
   const navigateTo = (destination: YearMonth): void => {
     setOpenDay(null);
     setYearMonth(destination);
@@ -129,7 +158,7 @@ export default function CalendarPage({ searchParams }: CalendarPageProps) {
         }
         actions={
           activeTab === "agenda" ? (
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center gap-1">
               <Button
                 variant="outline"
                 size="icon"
@@ -158,6 +187,7 @@ export default function CalendarPage({ searchParams }: CalendarPageProps) {
               >
                 Hoje
               </Button>
+              <div className="ml-1">{exportMenu}</div>
             </div>
           ) : undefined
         }

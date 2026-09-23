@@ -24,15 +24,18 @@ import {
   AnimalsCard,
   DetailHeader,
   HeadsLead,
+  LinesExportMenu,
   ResumoCard,
   formatAdg,
   shortDate,
   signedKg,
+  useDetailExportNames,
   useHerdLookup,
   useLinesView,
   type LineColumn,
   type ResumoRow,
 } from "@/components/manejo/detail-shell";
+import { weighingLinesExportTable } from "@/lib/export/datasets/manejo";
 import { cn } from "@/lib/utils";
 
 /** Soft-red for a gain below zero: the animal lost weight since the last pesagem. */
@@ -90,6 +93,7 @@ export function WeighingDetail({ session }: { session: ManejoSession }) {
   const totals = weighingTotals(lines);
   // Opens on the animals weighed; the skipped and the pending are one switch away.
   const view = useLinesView(lines, true);
+  const exportNames = useDetailExportNames();
 
   const heads = session.animals.length;
   const subtitle = `${formatDate(session.date)} · Manejo de ${
@@ -201,7 +205,20 @@ export function WeighingDetail({ session }: { session: ManejoSession }) {
 
   return (
     <div className="space-y-6">
-      <DetailHeader title={session.name} action="weighing" subtitle={subtitle} session={session} />
+      <DetailHeader
+        title={session.name}
+        action="weighing"
+        subtitle={subtitle}
+        session={session}
+        extra={
+          <LinesExportMenu
+            title={session.name}
+            lines={lines}
+            visible={view.visible}
+            build={(rows) => weighingLinesExportTable(session.name, rows, exportNames)}
+          />
+        }
+      />
 
       <ResumoCard
         title="Resumo da pesagem"

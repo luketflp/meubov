@@ -38,18 +38,14 @@ import {
   isMovementAction,
   MANEJO_ACTION_LABEL,
   MANEJO_ACTION_LIST,
+  MANEJO_FILTER_ALL as ALL,
   manejoHistory,
-  type ManejoAction,
+  parseManejoFilter as parseFilter,
+  type ManejoFilter,
   type ManejoHistoryRow,
 } from "@/components/manejo/helpers";
 import { ManejoTypePill } from "@/components/manejo/manejo-type-pill";
 import { ManejoRowMenu } from "@/components/manejo/manejo-row-menu";
-
-const ALL = "all";
-
-function parseFilter(value: string | null): ManejoAction | typeof ALL {
-  return MANEJO_ACTION_LIST.find((action) => action === value) ?? ALL;
-}
 
 function headsLabel(session: ManejoHistoryRow): string {
   return session.headCount === 1 ? "animal" : "animais";
@@ -95,7 +91,7 @@ export function ManejoHistory() {
   const router = useRouter();
   const pathname = usePathname();
   const filter = parseFilter(useSearchParams().get("tipo"));
-  const setFilter = (next: ManejoAction | typeof ALL): void => {
+  const setFilter = (next: ManejoFilter): void => {
     router.replace(next === ALL ? pathname : `${pathname}?tipo=${next}`, { scroll: false });
   };
   // Without Financeiro the server sends no values: the column would be all dashes.
@@ -116,7 +112,7 @@ export function ManejoHistory() {
       id="historico"
       title="Histórico de manejos"
       action={
-        <Select value={filter} onValueChange={(v) => setFilter(v as ManejoAction | typeof ALL)}>
+        <Select value={filter} onValueChange={(v) => setFilter(v as ManejoFilter)}>
           <SelectTrigger className="min-h-9" aria-label="Filtrar por tipo de manejo">
             <SelectValue />
           </SelectTrigger>

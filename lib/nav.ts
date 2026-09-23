@@ -14,6 +14,7 @@ import {
   CircleDollarSign,
   Dna,
   Fence,
+  FileChartColumn,
   LayoutDashboard,
   Map,
   Settings,
@@ -54,6 +55,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: "Lotes", href: "/lots", icon: Fence },
   { label: "Mapa", href: "/map", icon: Map },
   { label: "Financeiro", href: "/finance", icon: CircleDollarSign, area: "finance" },
+  { label: "Relatórios", href: "/relatorios", icon: FileChartColumn },
   {
     label: "Configurações",
     href: "/settings",
