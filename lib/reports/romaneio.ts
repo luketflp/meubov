@@ -21,7 +21,7 @@ export interface RomaneioRow {
   /** Age in complete months on the sale date; null without a birth date. */
   ageMonths: number | null;
   weightKg: number | null;
-  /** Carcass arrobas at the sale's yield; null without a weight. */
+  /** Carcass arrobas at the animal's rendimento; null without a weight. */
   arrobas: number | null;
   /** Per-head value; null on a sale closed as one lot. */
   valueBrl: number | null;
@@ -42,8 +42,13 @@ export interface Romaneio {
     valueBrl: number | null;
   };
   pricePerArroba: number | null;
-  /** The session's carcass yield, or the default when it set none. */
+  /**
+   * Rendimento of the boiada: the weighted average of the animals' own (an
+   * apartação prices each one at its own), else the session's, else the default.
+   */
   yieldPct: number;
+  /** True when the boiada's animals were priced at different rendimentos. */
+  yieldVaries: boolean;
   counterparty: string | null;
   originLot: string | null;
 }
@@ -58,14 +63,16 @@ export function saleSessions(sessions: ManejoSession[]): ManejoSession[] {
 /**
  * The romaneio of a sale manejo: its done lines in session order, with the
  * animal's category, breed and age on the sale date, and the carcass arrobas
- * at the session's yield (the default one when it set none). Null for an
+ * at each animal's rendimento (its own, else the session's, else the default
+ * one). Refugo and dúvida are not sold, so they are not listed. Null for an
  * unknown session or one that is not a sale.
  */
 export function saleRomaneio(data: HerdData, sessionId: string): Romaneio | null {
   const session = data.manejoSessions.find((item) => item.id === sessionId);
   if (!session || session.kind !== "sale") return null;
 
-  const yieldPct = session.carcassYieldPct ?? DEFAULT_CARCASS_YIELD_PCT;
+  const summary = saleSummary(session);
+  const yieldPct = summary?.carcassYieldPct ?? session.carcassYieldPct ?? DEFAULT_CARCASS_YIELD_PCT;
   const byEarTag = new Map(data.animals.map((animal) => [animal.earTag, animal]));
   const rows: RomaneioRow[] = saleRows(session)
     .filter((line) => line.outcome === "done")
@@ -86,7 +93,6 @@ export function saleRomaneio(data: HerdData, sessionId: string): Romaneio | null
 
   const weighed = rows.filter((row) => row.weightKg !== null);
   const weightKg = weighed.reduce((sum, row) => sum + (row.weightKg ?? 0), 0);
-  const summary = saleSummary(session);
   const counterparty = session.counterparty?.trim() || null;
 
   return {
@@ -96,11 +102,12 @@ export function saleRomaneio(data: HerdData, sessionId: string): Romaneio | null
       heads: rows.length,
       weightKg,
       avgKg: weighed.length === 0 ? null : weightKg / weighed.length,
-      arrobas: weighed.length === 0 ? 0 : carcassArrobas(weightKg, yieldPct),
+      arrobas: rows.reduce((sum, row) => sum + (row.arrobas ?? 0), 0),
       valueBrl: summary?.grossBrl ?? null,
     },
     pricePerArroba: session.pricePerArroba ?? null,
     yieldPct,
+    yieldVaries: summary?.yieldVaries ?? false,
     counterparty,
     originLot: originLotName(session, data),
   };

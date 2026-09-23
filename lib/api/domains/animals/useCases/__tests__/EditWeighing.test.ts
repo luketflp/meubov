@@ -113,7 +113,16 @@ describe("editWeighing", () => {
   it("recalculates the value of a venda priced by the arroba", async () => {
     state.selectResults = [
       [weighing],
-      [{ sessionId: "s-venda", kind: "sale", pricePerArroba: 310, carcassYieldPct: 52 }],
+      [
+        {
+          sessionId: "s-venda",
+          kind: "sale",
+          pricePerArroba: 310,
+          carcassYieldPct: 52,
+          outcome: "done",
+          entryYieldPct: null,
+        },
+      ],
     ];
 
     const result = await edit({ date: "2026-07-01", weightKg: 540 });
@@ -132,12 +141,72 @@ describe("editWeighing", () => {
   it("prices a venda that never set a yield at the default one", async () => {
     state.selectResults = [
       [weighing],
-      [{ sessionId: "s-venda", kind: "sale", pricePerArroba: 310, carcassYieldPct: null }],
+      [
+        {
+          sessionId: "s-venda",
+          kind: "sale",
+          pricePerArroba: 310,
+          carcassYieldPct: null,
+          outcome: "done",
+          entryYieldPct: null,
+        },
+      ],
     ];
 
     const result = await edit({ date: "2026-07-01", weightKg: 540 });
 
     expect(result).toMatchObject({ manejo: { amountBrl: saleAmount(540, 310) } });
+  });
+
+  it("does not price a refugo or a dúvida: they were never sold", async () => {
+    state.selectResults = [
+      [weighing],
+      [
+        {
+          sessionId: "s-venda",
+          kind: "sale",
+          pricePerArroba: 300,
+          carcassYieldPct: 50,
+          outcome: "rejected",
+          entryYieldPct: null,
+        },
+      ],
+    ];
+
+    const result = await edit({ date: "2026-07-01", weightKg: 540 });
+
+    expect(result).toEqual({
+      weighing: { id: 42, date: "2026-07-01", weightKg: 540 },
+      manejo: { sessionId: "s-venda", weightKg: 540 },
+    });
+    expect(state.updates[1]).toEqual({
+      table: manejoSessionAnimals,
+      columns: { weightKg: 540 },
+    });
+  });
+
+  it("prices a boiada at its own rendimento, set at the brete, not the venda's padrão", async () => {
+    state.selectResults = [
+      [weighing],
+      [
+        {
+          sessionId: "s-venda",
+          kind: "sale",
+          pricePerArroba: 300,
+          carcassYieldPct: 50,
+          outcome: "done",
+          entryYieldPct: 54,
+        },
+      ],
+    ];
+
+    const result = await edit({ date: "2026-07-01", weightKg: 546 });
+
+    const amountBrl = saleAmount(546, 300, 54);
+    expect(result).toEqual({
+      weighing: { id: 42, date: "2026-07-01", weightKg: 546 },
+      manejo: { sessionId: "s-venda", weightKg: 546, amountBrl },
+    });
   });
 
   it("refuses to move a manejo weighing off the session's day", async () => {

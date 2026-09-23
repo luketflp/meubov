@@ -42,6 +42,7 @@ export const ROUTE_REQUIREMENTS: Readonly<Record<string, RouteRequirement>> = {
   "POST /api/herd/manejo/:id/animals/:animalId/baixa": edit("manejo", "herd"),
   "POST /api/herd/manejo/:id/animals/:animalId/complete": edit("manejo"),
   "POST /api/herd/manejo/:id/animals/:animalId/reopen": edit("manejo"),
+  "POST /api/herd/manejo/:id/animals/:animalId/set-aside": edit("manejo"),
   "POST /api/herd/manejo/:id/animals/:animalId/skip": edit("manejo"),
   "POST /api/herd/manejo/:id/close": edit("manejo"),
   "POST /api/herd/manejo/:id/carcass-yield": edit("manejo", "finance"),

@@ -272,6 +272,7 @@ export function toManejoSessionAnimal(
     boosterId: orNothing(row.boosterId),
     weighingId: orNothing(row.weighingId),
     amountBrl: orNothing(row.amountBrl),
+    carcassYieldPct: orNothing(row.carcassYieldPct),
     previousLotId: orNothing(row.previousLotId),
     createdAnimal: row.createdAnimal,
     breedingId: orNothing(row.breedingId),

@@ -54,6 +54,17 @@ export function saleAmount(
   return carcassArrobas(weightKg, carcassYieldPct) * pricePerArroba;
 }
 
+/**
+ * Rendimento one boiada pass is priced at: the animal's own, set at the brete
+ * when it differed from the venda's padrão; else the padrão; else 50%.
+ */
+export function passYieldPct(
+  session: { carcassYieldPct?: number },
+  entry: { carcassYieldPct?: number }
+): number {
+  return entry.carcassYieldPct ?? session.carcassYieldPct ?? DEFAULT_CARCASS_YIELD_PCT;
+}
+
 /** FUNRURAL withheld on the gross value of a venda (pessoa física). */
 export const FUNRURAL_RATE = 0.015;
 
@@ -75,10 +86,16 @@ export interface SaleSummary {
   avgWeightKg: number | null;
   /** Média @ viva per weighed head (live kg / 30). */
   avgLiveArrobas: number | null;
-  /** Yield the money math used, when the sale prices the carcass. */
+  /** Rendimento médio (carcass kg ÷ live kg) the money math used, when the sale prices the carcass. */
   carcassYieldPct: number | null;
   /** Peso líquido: total carcass weight at that yield. */
   totalCarcassKg: number | null;
+  /** True when the boiada's animals were priced at different rendimentos. */
+  yieldVaries: boolean;
+  /** Refugo: passed the scale and stayed on the farm. */
+  rejectedHeads: number;
+  /** Dúvida still waiting to be decided. */
+  heldHeads: number;
   /** Total @ morta (carcass kg / 15). */
   totalCarcassArrobas: number | null;
   /** Média @ morta per weighed head. */
@@ -104,14 +121,21 @@ export function saleSummary(session: ManejoSession): SaleSummary | null {
       ? null
       : weighed.reduce((sum, a) => sum + (a.weightKg ?? 0), 0);
 
-  // Carcass figures only make sense when the sale priced the carcass: a yield
-  // chosen for the session, applied over the weights read at the chute.
-  const yieldPct =
-    session.pricePerArroba !== undefined
-      ? (session.carcassYieldPct ?? DEFAULT_CARCASS_YIELD_PCT)
-      : null;
+  // Carcass figures only make sense when the sale priced the carcass: each
+  // animal's own rendimento (or the session's padrão) applied over the weight
+  // read at its chute pass — an apartação prices each boiada differently.
+  const priced = session.pricePerArroba !== undefined;
+  const padrao = session.carcassYieldPct ?? DEFAULT_CARCASS_YIELD_PCT;
   const totalCarcassKg =
-    yieldPct === null || totalWeightKg === null ? null : carcassKg(totalWeightKg, yieldPct);
+    !priced || weighed.length === 0
+      ? null
+      : weighed.reduce((sum, a) => sum + carcassKg(a.weightKg ?? 0, passYieldPct(session, a)), 0);
+  const yieldPct = !priced
+    ? null
+    : totalCarcassKg !== null && totalWeightKg
+      ? (totalCarcassKg / totalWeightKg) * 100
+      : padrao;
+  const yieldVaries = priced && new Set(weighed.map((a) => passYieldPct(session, a))).size > 1;
 
   let grossBrl: number | null = session.totalAmountBrl ?? null;
   if (grossBrl === null) {
@@ -147,6 +171,9 @@ export function saleSummary(session: ManejoSession): SaleSummary | null {
     netBrl,
     grossPerHeadBrl: grossBrl === null ? null : grossBrl / done.length,
     netPerHeadBrl: netBrl === null ? null : netBrl / done.length,
+    yieldVaries,
+    rejectedHeads: session.animals.filter((a) => a.outcome === "rejected").length,
+    heldHeads: session.animals.filter((a) => a.outcome === "held").length,
   };
 }
 
@@ -158,6 +185,8 @@ export interface SaleRow {
   weightKg: number | null;
   /** Carcass arrobas paid by the R$/@; null on a venda closed as one lot. */
   carcassArrobas: number | null;
+  /** Rendimento the arrobas used; null when not priced. */
+  carcassYieldPct: number | null;
   /** What this animal was worth; null when only the batch has a price. */
   amountBrl: number | null;
   notes?: string;
@@ -166,24 +195,25 @@ export interface SaleRow {
 /**
  * Per-animal lines of a venda, in the order the session holds them. Money and
  * carcass figures only exist for animals that passed a venda priced per arroba:
- * a batch closed at one price has no per-head value to show.
+ * a batch closed at one price has no per-head value to show. Refugo and dúvida
+ * passed the scale too, so their weight shows even though they were not sold.
  */
 export function saleRows(session: ManejoSession): SaleRow[] {
   if (session.kind !== "sale") return [];
-  const yieldPct =
-    session.pricePerArroba !== undefined
-      ? (session.carcassYieldPct ?? DEFAULT_CARCASS_YIELD_PCT)
-      : null;
+  const priced = session.pricePerArroba !== undefined;
 
   return session.animals.map((entry) => {
     const passed = entry.outcome === "done";
-    const weightKg = passed ? (entry.weightKg ?? null) : null;
+    // Refugo and dúvida passed the scale too: their weight shows, unpriced.
+    const weighedHere = passed || entry.outcome === "rejected" || entry.outcome === "held";
+    const weightKg = weighedHere ? (entry.weightKg ?? null) : null;
+    const yieldPct = passed && priced ? passYieldPct(session, entry) : null;
     return {
       earTag: entry.earTag,
       outcome: entry.outcome,
       weightKg,
-      carcassArrobas:
-        yieldPct === null || weightKg === null ? null : carcassArrobas(weightKg, yieldPct),
+      carcassArrobas: yieldPct === null || weightKg === null ? null : carcassArrobas(weightKg, yieldPct),
+      carcassYieldPct: yieldPct,
       amountBrl: passed ? (entry.amountBrl ?? null) : null,
       notes: entry.notes,
     };

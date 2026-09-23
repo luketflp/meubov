@@ -6,8 +6,10 @@
  * "Pular", and the next pending animal takes the focus. Every action applies
  * its effects immediately (treatment, weighing), so the session can stop and
  * resume at any point without losing work — a manejo takes hours. An entrada
- * and an inseminação bring their own chute form. The animal in the brete can
- * be edited on the spot, a baixa included (chute-animal.tsx).
+ * and an inseminação bring their own chute form, and a venda its three
+ * porteiras — boiada, dúvida, refugo (sale-chute.tsx, sale-lists.tsx). The
+ * animal in the brete can be edited on the spot, a baixa included
+ * (chute-animal.tsx).
  */
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
@@ -15,6 +17,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   CheckCircle2,
+  CircleHelp,
   ClipboardX,
   Percent,
   Search,
@@ -28,13 +31,8 @@ import { useToast } from "@/components/providers/Toasts";
 import type { ManejoSessionAnimal } from "@/lib/types";
 import { formatDate, todayISO } from "@/lib/domain/dates";
 import { CATEGORY_LABEL } from "@/lib/domain/labels";
-import {
-  carcassArrobas,
-  currentWeight,
-  DEFAULT_CARCASS_YIELD_PCT,
-} from "@/lib/domain/weights";
-import { formatArroba, formatCurrency, formatKg, formatPercent } from "@/lib/domain/format";
-import { saleAmount } from "@/lib/domain/movements";
+import { currentWeight } from "@/lib/domain/weights";
+import { formatCurrency, formatKg } from "@/lib/domain/format";
 import { inseminationBulls } from "@/lib/domain/semen";
 import { breedLabel, ChuteEditAnimal } from "@/components/manejo/chute-animal";
 import { EntryChuteForm } from "@/components/manejo/entry-chute-form";
@@ -44,6 +42,8 @@ import {
   inseminationTitle,
   passBreeding,
 } from "@/components/manejo/insemination-chute-form";
+import { SaleChuteCard, type SaleChutePrefill } from "@/components/manejo/sale-chute";
+import { SaleLists } from "@/components/manejo/sale-lists";
 import { SaleSummaryCard } from "@/components/manejo/sale-summary";
 import { SaleYieldDialog } from "@/components/manejo/sale-yield-dialog";
 import { DeleteManejoDialog } from "@/components/manejo/delete-manejo-dialog";
@@ -58,6 +58,7 @@ import { SectionCard } from "@/components/ui/section-card";
 import { ManejoProgressBar } from "@/components/manejo/progress-bar";
 import { ManejoTypePill } from "@/components/manejo/manejo-type-pill";
 import {
+  heldCloseNotice,
   movementSubtitle,
   reviewBeforeClosing,
   sessionKind,
@@ -96,6 +97,12 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
   const [busy, setBusy] = useState(false);
   /** Rendimento modal: null = auto (opens while the venda has no yield). */
   const [yieldDialogOpen, setYieldDialogOpen] = useState<boolean | null>(null);
+  /**
+   * What the venda's brete opens filled with, for one brinco: a dúvida sent
+   * back with the weight and note it had, or what was typed before an edit
+   * renamed the animal in the brete.
+   */
+  const [prefill, setPrefill] = useState<(SaleChutePrefill & { earTag: string }) | undefined>();
 
   const byTag = useMemo(() => new Map(animals.map((a) => [a.earTag, a])), [animals]);
 
@@ -141,16 +148,6 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
   // are repriced once it is set. A vaqueiro never receives the price at all.
   const perArroba = isSale && session.pricePerArroba !== undefined;
   const needsYield = setsYield && perArroba && session.carcassYieldPct === undefined;
-  // Live value of the animal on the scale, in a venda priced per arroba.
-  const typedWeight = Number(weight);
-  const passWeight =
-    weight.trim() === "" || !Number.isFinite(typedWeight) || typedWeight <= 0
-      ? null
-      : typedWeight;
-  const passValue =
-    isSale && session.pricePerArroba !== undefined && passWeight !== null
-      ? saleAmount(passWeight, session.pricePerArroba, session.carcassYieldPct)
-      : null;
 
   const term = search.trim().toLowerCase();
   const visiblePending =
@@ -164,6 +161,9 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
   // whose own sale took it out of the herd, can be undone.
   const leftHerd = (entry: ManejoSessionAnimal) =>
     byTag.get(entry.earTag)?.active === false && !(isSale && entry.outcome === "done");
+  // A venda's brete sits beside the fila. Kept while the fila has animals, so
+  // a search that matches none does not move the fila (and its focus) away.
+  const saleBrete = operable && isSale && !needsYield && pending.length > 0;
 
   function resetPassForm() {
     setWeight("");
@@ -171,6 +171,18 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
     setError(null);
     setSelectedTag(null);
     setSearch("");
+    setPrefill(undefined);
+  }
+
+  // Decidir: the dúvida goes back to the queue and straight into the brete.
+  async function onDecide(entry: ManejoSessionAnimal) {
+    if (!session) return;
+    // Set before the reopen: its store update renders the brete before the
+    // await resumes, and the card reads the prefill only when it mounts. Until
+    // the animal is pending again, neither applies (the card matches the brinco).
+    setPrefill({ earTag: entry.earTag, weightText: entry.weightKg?.toString(), notes: entry.notes });
+    setSelectedTag(entry.earTag);
+    await reopenManejoAnimal(session.id, entry.earTag);
   }
 
   async function onComplete(event: FormEvent<HTMLFormElement>) {
@@ -199,7 +211,11 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
   async function closeSession() {
     if (!session) return;
     await closeManejoSession(session.id);
-    addToast({ messageType: "success", text: "Manejo encerrado" });
+    // A dúvida set apart on another screen meanwhile keeps a venda open.
+    const closed =
+      useHerdStore.getState().manejoSessions.find((m) => m.id === session.id)?.status ===
+      "closed";
+    if (closed) addToast({ messageType: "success", text: "Manejo encerrado" });
   }
 
   async function onSkip() {
@@ -216,6 +232,68 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
       setBusy(false);
     }
   }
+
+  // The fila: beside the brete of a venda, beside the handled lists otherwise.
+  const pendingCard = (
+    <SectionCard title={`Pendentes (${pending.length})`}>
+      {open ? (
+        <div className="relative mb-2">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-soft"
+            aria-hidden
+          />
+          <Input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar brinco na fila"
+            aria-label="Buscar animal pendente por brinco"
+            className="min-h-11 pl-9 font-mono md:min-h-9"
+          />
+        </div>
+      ) : null}
+      {visiblePending.length === 0 ? (
+        <p className="py-1 text-xs text-ink-soft">
+          {pending.length === 0 ? "Nenhum animal pendente." : "Nenhum brinco corresponde à busca."}
+        </p>
+      ) : (
+        <ul className="-my-1 max-h-72 divide-y divide-hairline overflow-y-auto">
+          {visiblePending.map((entry) => {
+            const animal = byTag.get(entry.earTag);
+            const isCurrent = current?.earTag === entry.earTag;
+            return (
+              <li key={entry.earTag}>
+                <button
+                  type="button"
+                  disabled={!operable}
+                  onClick={() => {
+                    setSelectedTag(entry.earTag);
+                    setError(null);
+                  }}
+                  className={cn(
+                    "flex min-h-11 w-full items-center gap-2 rounded-md px-1 py-2 text-left transition-colors hover:bg-surface",
+                    isCurrent && "bg-brand-soft"
+                  )}
+                >
+                  <span className="font-mono text-sm font-medium text-ink">
+                    {entry.earTag}
+                  </span>
+                  {animal ? (
+                    <span className="text-xs text-ink-soft">
+                      {CATEGORY_LABEL[animal.category]}
+                    </span>
+                  ) : null}
+                  {isCurrent ? (
+                    <span className="ml-auto text-xs font-medium text-brand">no brete</span>
+                  ) : null}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </SectionCard>
+  );
 
   return (
     <div className="space-y-6">
@@ -273,7 +351,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         title="Andamento"
         action={<ManejoTypePill action={sessionKind(session)} />}
       >
-        <ManejoProgressBar progress={progress} />
+        <ManejoProgressBar progress={progress} sale={isSale} />
         {isInsemination ? <DosesUsedToday session={session} /> : null}
         {!open ? (
           <p className="mt-2 text-xs text-ink-soft">
@@ -320,7 +398,31 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         </SectionCard>
       ) : null}
 
-      {operable && !isEntry && !isInsemination && !needsYield && current ? (
+      {saleBrete ? (
+        <div className="grid items-start gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            {current ? (
+              <SaleChuteCard
+                // A prefill that lands after the card mounted remounts it, filled.
+                key={`${current.earTag}:${prefill?.earTag === current.earTag}`}
+                session={session}
+                entry={current}
+                animal={currentAnimal}
+                prefill={prefill?.earTag === current.earTag ? prefill : undefined}
+                setsYield={setsYield && perArroba}
+                onDone={resetPassForm}
+                onSaved={(earTag, typed) => {
+                  setPrefill({ earTag, ...typed });
+                  setSelectedTag(earTag);
+                }}
+              />
+            ) : null}
+          </div>
+          {pendingCard}
+        </div>
+      ) : null}
+
+      {operable && !isEntry && !isInsemination && !isSale && !needsYield && current ? (
         <SectionCard title="No brete agora">
           <div className="space-y-4">
             {/* Outside the chute form: the edit dialog's own submit would bubble
@@ -392,28 +494,6 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
                 </div>
               </div>
 
-              {isSale && session.pricePerArroba !== undefined ? (
-                <p className="text-sm text-ink-soft">
-                  {passWeight === null ? (
-                    "Digite o peso para calcular o valor deste animal."
-                  ) : (
-                    <>
-                      {formatArroba(
-                        carcassArrobas(
-                          passWeight,
-                          session.carcassYieldPct ?? DEFAULT_CARCASS_YIELD_PCT
-                        )
-                      )}{" "}
-                      de carcaça (rend.{" "}
-                      {formatPercent(session.carcassYieldPct ?? DEFAULT_CARCASS_YIELD_PCT)}) ×{" "}
-                      {formatCurrency(session.pricePerArroba)}/@ ={" "}
-                      <span className="font-mono font-medium text-ink">
-                        {formatCurrency(passValue ?? 0)}
-                      </span>
-                    </>
-                  )}
-                </p>
-              ) : null}
               {error ? <p className="text-xs text-overdue">{error}</p> : null}
 
               <div className="flex flex-wrap gap-2">
@@ -445,130 +525,101 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
           <EmptyState
             icon={CheckCircle2}
             title="Todos os animais manejados"
-            description="Revise os pulados abaixo, se houver, e encerre o manejo."
+            description={
+              isSale
+                ? "Decida as dúvidas, se houver, e encerre a venda."
+                : "Revise os pulados abaixo, se houver, e encerre o manejo."
+            }
           />
         </SectionCard>
       ) : null}
 
       {isSale ? (
-        <SaleSummaryCard
-          session={session}
-          onEditYield={
-            setsYield && perArroba ? () => setYieldDialogOpen(true) : undefined
-          }
-        />
-      ) : null}
+        <>
+          {saleBrete ? null : pendingCard}
+          <SaleLists
+            session={session}
+            operable={operable}
+            onUndo={(earTag) => reopenManejoAnimal(session.id, earTag)}
+            onDecide={onDecide}
+            leftHerd={leftHerd}
+          />
+          <SaleSummaryCard
+            session={session}
+            onEditYield={
+              setsYield && perArroba ? () => setYieldDialogOpen(true) : undefined
+            }
+          />
+        </>
+      ) : (
+        <div
+          className={cn("grid items-start gap-4", !isEntry && "lg:grid-cols-2")}
+        >
+          {isEntry ? null : pendingCard}
 
-      <div
-        className={cn("grid items-start gap-4", !isEntry && "lg:grid-cols-2")}
-      >
-        {isEntry ? null : (
-        <SectionCard title={`Pendentes (${pending.length})`}>
-          {open ? (
-            <div className="relative mb-2">
-              <Search
-                className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-soft"
-                aria-hidden
-              />
-              <Input
-                type="search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar brinco na fila"
-                aria-label="Buscar animal pendente por brinco"
-                className="min-h-11 pl-9 font-mono md:min-h-9"
-              />
-            </div>
-          ) : null}
-          {visiblePending.length === 0 ? (
-            <p className="py-1 text-xs text-ink-soft">
-              {pending.length === 0 ? "Nenhum animal pendente." : "Nenhum brinco corresponde à busca."}
-            </p>
-          ) : (
-            <ul className="-my-1 max-h-72 divide-y divide-hairline overflow-y-auto">
-              {visiblePending.map((entry) => {
-                const animal = byTag.get(entry.earTag);
-                const isCurrent = current?.earTag === entry.earTag;
-                return (
-                  <li key={entry.earTag}>
-                    <button
-                      type="button"
-                      disabled={!operable}
-                      onClick={() => {
-                        setSelectedTag(entry.earTag);
-                        setError(null);
-                      }}
-                      className={cn(
-                        "flex min-h-11 w-full items-center gap-2 rounded-md px-1 py-2 text-left transition-colors hover:bg-surface",
-                        isCurrent && "bg-brand-soft"
-                      )}
-                    >
-                      <span className="font-mono text-sm font-medium text-ink">
-                        {entry.earTag}
-                      </span>
-                      {animal ? (
-                        <span className="text-xs text-ink-soft">
-                          {CATEGORY_LABEL[animal.category]}
-                        </span>
-                      ) : null}
-                      {isCurrent ? (
-                        <span className="ml-auto text-xs font-medium text-brand">no brete</span>
-                      ) : null}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </SectionCard>
-        )}
-
-        <div className="space-y-4">
-          <SectionCard
-            title={`${isEntry ? "Registrados" : isInsemination ? "Inseminadas" : "Manejados"} (${done.length})`}
-          >
-            {done.length === 0 ? (
-              <p className="py-1 text-xs text-ink-soft">
-                {isEntry
-                  ? "Nenhum animal registrado ainda."
-                  : isInsemination
-                    ? "Nenhuma vaca inseminada ainda."
-                    : "Nenhum animal manejado ainda."}
-              </p>
-            ) : (
-              <HandledList
-                entries={done}
-                open={operable}
-                onUndo={(earTag) => reopenManejoAnimal(session.id, earTag)}
-                leftHerd={leftHerd}
-                detail={
-                  isInsemination
-                    ? (entry) =>
-                        bullName(passBreeding(entry, byTag.get(entry.earTag))?.semenBullId)
-                    : undefined
-                }
-              />
-            )}
-          </SectionCard>
-
-          {skipped.length > 0 ? (
-            <SectionCard title={`${isInsemination ? "Puladas" : "Pulados"} (${skipped.length})`}>
-              <HandledList
-                entries={skipped}
-                open={operable}
-                onUndo={(earTag) => reopenManejoAnimal(session.id, earTag)}
-                leftHerd={leftHerd}
-              />
+          <div className="space-y-4">
+            <SectionCard
+              title={`${isEntry ? "Registrados" : isInsemination ? "Inseminadas" : "Manejados"} (${done.length})`}
+            >
+              {done.length === 0 ? (
+                <p className="py-1 text-xs text-ink-soft">
+                  {isEntry
+                    ? "Nenhum animal registrado ainda."
+                    : isInsemination
+                      ? "Nenhuma vaca inseminada ainda."
+                      : "Nenhum animal manejado ainda."}
+                </p>
+              ) : (
+                <HandledList
+                  entries={done}
+                  open={operable}
+                  onUndo={(earTag) => reopenManejoAnimal(session.id, earTag)}
+                  leftHerd={leftHerd}
+                  detail={
+                    isInsemination
+                      ? (entry) =>
+                          bullName(passBreeding(entry, byTag.get(entry.earTag))?.semenBullId)
+                      : undefined
+                  }
+                />
+              )}
             </SectionCard>
-          ) : null}
+
+            {skipped.length > 0 ? (
+              <SectionCard title={`${isInsemination ? "Puladas" : "Pulados"} (${skipped.length})`}>
+                <HandledList
+                  entries={skipped}
+                  open={operable}
+                  onUndo={(earTag) => reopenManejoAnimal(session.id, earTag)}
+                  leftHerd={leftHerd}
+                />
+              </SectionCard>
+            ) : null}
+          </div>
         </div>
-      </div>
+      )}
 
       {operable ? (
-        <div className="flex justify-end">
+        <div
+          className={cn(
+            "flex",
+            isSale
+              ? "flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-end"
+              : "justify-end"
+          )}
+        >
+          {/* A venda closes only once every dúvida went to the boiada or the refugo. */}
+          {isSale && progress.held > 0 ? (
+            <p className="flex items-center gap-1.5 text-sm text-attention">
+              <CircleHelp className="size-4" aria-hidden />
+              {heldCloseNotice(progress.held)}
+            </p>
+          ) : null}
           <Button
             variant="outline"
             className="min-h-11"
+            // A venda closes only once every dúvida is decided: no dialog before that.
+            disabled={isSale && progress.held > 0}
             onClick={() => (reviewBeforeClosing(progress) ? setReviewingClose(true) : closeSession())}
           >
             {progress.pending > 0
@@ -582,7 +633,8 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         <CloseSessionDialog
           open={reviewingClose}
           onOpenChange={setReviewingClose}
-          done={done.length}
+          // A refugo passed the scale too; only pending and pulados did not pass.
+          done={done.length + progress.rejected}
           pending={pending}
           skipped={skipped}
           byTag={byTag}
@@ -591,6 +643,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
           onBring={(earTag) => {
             setSearch("");
             setSelectedTag(earTag);
+            setPrefill(undefined);
             setWeight("");
             setNote("");
             setError(null);

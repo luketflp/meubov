@@ -175,8 +175,12 @@ export interface ScheduleTreatmentsInput {
   source: TreatmentScheduleSource;
 }
 
-/** Outcome of one animal inside a manejo session. */
-export type ManejoOutcome = "pending" | "done" | "skipped";
+/**
+ * `rejected` (refugo) and `held` (dúvida) exist only on a venda: the animal
+ * passed the scale but was not sold — refugo stays in the herd, dúvida waits
+ * to be decided before the venda closes.
+ */
+export type ManejoOutcome = "pending" | "done" | "skipped" | "rejected" | "held";
 
 /** Per-animal state of a manejo session (the chute line). */
 export interface ManejoSessionAnimal {
@@ -194,6 +198,11 @@ export interface ManejoSessionAnimal {
   weighingId?: number;
   /** What this animal was worth in a priced sale (R$/@ × its chute weight). */
   amountBrl?: number;
+  /**
+   * Rendimento (%) this boiada pass was priced at, when the brete changed it
+   * from the venda's padrão. Absent: the pass follows the padrão.
+   */
+  carcassYieldPct?: number;
   /** Lot the animal came from, so undoing a transfer pass can restore it. */
   previousLotId?: string;
   /** True when an entry session registered this animal — undo deletes it. */

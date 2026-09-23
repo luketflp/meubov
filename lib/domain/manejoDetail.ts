@@ -48,10 +48,22 @@ export function visibleLines<T extends DetailLine>(
   return inScope.filter((line) => line.earTag.toLowerCase().includes(term));
 }
 
-/** A line's note, prefixed by "pulado" or "não passou" when the animal did not pass. */
+const OUTCOME_LABEL: Record<Exclude<ManejoOutcome, "done">, string> = {
+  pending: "não passou",
+  skipped: "pulado",
+  rejected: "refugo",
+  held: "dúvida",
+};
+
+/** Word for an animal that was not simply handled; null for a done pass. */
+export function outcomeLabel(outcome: ManejoOutcome): string | null {
+  return outcome === "done" ? null : OUTCOME_LABEL[outcome];
+}
+
+/** A line's note, prefixed by "pulado", "refugo", "dúvida" or "não passou". */
 export function outcomeNote(line: DetailLine): string {
-  if (line.outcome === "done") return line.notes ?? "";
-  const label = line.outcome === "skipped" ? "pulado" : "não passou";
+  const label = outcomeLabel(line.outcome);
+  if (label === null) return line.notes ?? "";
   return line.notes ? `${label} · ${line.notes}` : label;
 }
 
@@ -155,7 +167,9 @@ export function sessionWeighingLines(session: ManejoSession, animals: Animal[]):
       { earTag: entry.earTag, outcome: entry.outcome, notes: entry.notes },
       byTag.get(entry.earTag),
       session.date,
-      entry.outcome === "done" ? (entry.weightKg ?? null) : null
+      entry.outcome === "done" || entry.outcome === "rejected" || entry.outcome === "held"
+        ? (entry.weightKg ?? null)
+        : null
     )
   );
 }

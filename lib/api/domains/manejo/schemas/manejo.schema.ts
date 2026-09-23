@@ -91,6 +91,18 @@ export const ManejoPassBody = t.Object({
   /** Bull whose dose an inseminação pass uses; the session's first touro when absent. */
   semenBullId: t.Optional(t.String({ minLength: 1 })),
   notes: t.Optional(t.String()),
+  /** Rendimento (%) of this boiada, set at the brete of a venda per arroba. */
+  carcassYieldPct: t.Optional(t.Number({ exclusiveMinimum: 0, maximum: 100 })),
+});
+
+/**
+ * Body of POST /manejo/:id/animals/:animalId/set-aside — a venda's animal sent
+ * to the refugo (stays on the farm) or to the dúvida (decided before closing).
+ */
+export const SetAsideBody = t.Object({
+  list: t.Union([t.Literal("rejected"), t.Literal("held")]),
+  weightKg: t.Optional(t.Number({ exclusiveMinimum: 0 })),
+  notes: t.Optional(t.String()),
 });
 
 /** Body of POST /manejo/:id/animals/:animalId/skip. */

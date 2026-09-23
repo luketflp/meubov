@@ -3,6 +3,7 @@ import {
   EXTERNAL,
   herdMovements,
   isMovementKind,
+  passYieldPct,
   predominantCategory,
   saleAmount,
   saleRows,
@@ -147,6 +148,7 @@ describe("saleRows", () => {
         outcome: "done",
         weightKg: 488,
         carcassArrobas: carcassArrobas(488, 48.5),
+        carcassYieldPct: 48.5,
         amountBrl: saleAmount(488, 300, 48.5),
         notes: undefined,
       },
@@ -190,6 +192,7 @@ describe("saleRows", () => {
       outcome: "skipped",
       weightKg: null,
       carcassArrobas: null,
+      carcassYieldPct: null,
       amountBrl: null,
       notes: "não passou",
     });
@@ -320,5 +323,66 @@ describe("herdMovements", () => {
     ];
     const ledger = herdMovements([legacy], sessions, herd, LOT_NAMES);
     expect(ledger.map((m) => m.id)).toEqual(["mov-legacy", "sess-new"]);
+  });
+});
+
+describe("saleSummary — apartação", () => {
+  it("sums the carcass animal by animal and reports the rendimento médio", () => {
+    const session = makeSession({
+      pricePerArroba: 300,
+      carcassYieldPct: 50,
+      animals: [
+        entry({ earTag: "A", weightKg: 500, amountBrl: saleAmount(500, 300, 50) }),
+        entry({ earTag: "B", weightKg: 500, carcassYieldPct: 54, amountBrl: saleAmount(500, 300, 54) }),
+        entry({ earTag: "C", outcome: "rejected", weightKg: 400 }),
+        entry({ earTag: "D", outcome: "held", weightKg: 450 }),
+      ],
+    });
+    const summary = saleSummary(session);
+    expect(summary?.heads).toBe(2);
+    expect(summary?.totalWeightKg).toBe(1000);
+    expect(summary?.totalCarcassKg).toBeCloseTo(250 + 270, 6);
+    expect(summary?.carcassYieldPct).toBeCloseTo(52, 6);
+    expect(summary?.yieldVaries).toBe(true);
+    expect(summary?.rejectedHeads).toBe(1);
+    expect(summary?.heldHeads).toBe(1);
+  });
+
+  it("does not flag a venda where every animal kept the padrão", () => {
+    const session = makeSession({
+      pricePerArroba: 300,
+      carcassYieldPct: 52,
+      animals: [entry({ earTag: "A", weightKg: 500, amountBrl: saleAmount(500, 300, 52) })],
+    });
+    expect(saleSummary(session)?.yieldVaries).toBe(false);
+    expect(saleSummary(session)?.carcassYieldPct).toBeCloseTo(52, 6);
+  });
+});
+
+describe("saleRows — apartação", () => {
+  it("prices each boiada at its own rendimento and keeps the refugo's weight unpriced", () => {
+    const rows = saleRows(
+      makeSession({
+        pricePerArroba: 300,
+        carcassYieldPct: 50,
+        animals: [
+          entry({ earTag: "B", weightKg: 500, carcassYieldPct: 54, amountBrl: 1 }),
+          entry({ earTag: "C", outcome: "rejected", weightKg: 400 }),
+        ],
+      })
+    );
+    expect(rows[0].carcassArrobas).toBeCloseTo(carcassArrobas(500, 54), 6);
+    expect(rows[0].carcassYieldPct).toBe(54);
+    expect(rows[1]).toMatchObject({ outcome: "rejected", weightKg: 400, carcassArrobas: null, amountBrl: null, carcassYieldPct: null });
+  });
+});
+
+describe("passYieldPct", () => {
+  it("uses the animal's own rendimento first", () => {
+    expect(passYieldPct({ carcassYieldPct: 52 }, { carcassYieldPct: 54 })).toBe(54);
+  });
+  it("falls back to the venda's padrão, then to 50%", () => {
+    expect(passYieldPct({ carcassYieldPct: 52 }, {})).toBe(52);
+    expect(passYieldPct({}, {})).toBe(DEFAULT_CARCASS_YIELD_PCT);
   });
 });

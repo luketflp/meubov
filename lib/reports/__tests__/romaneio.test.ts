@@ -148,4 +148,36 @@ describe("saleRomaneio", () => {
     expect(romaneio?.totals.arrobas).toBe(carcassArrobas(450, 50));
     expect(romaneio?.originLot).toBeNull();
   });
+
+  it("prices an apartação at each animal's rendimento and averages it by weight", () => {
+    const apartacao = makeData({
+      animals,
+      manejoSessions: [
+        makeManejoSession({
+          id: "s",
+          kind: "sale",
+          weighing: true,
+          pricePerArroba: 300,
+          carcassYieldPct: 52,
+          animals: [
+            { earTag: "B-10", outcome: "done", weightKg: 500, carcassYieldPct: 54 },
+            { earTag: "B-11", outcome: "done", weightKg: 400 },
+            { earTag: "B-12", outcome: "rejected", weightKg: 380 },
+          ],
+        }),
+      ],
+    });
+    const romaneio = saleRomaneio(apartacao, "s");
+    expect(romaneio?.rows.map((row) => row.arrobas)).toEqual([
+      carcassArrobas(500, 54),
+      carcassArrobas(400, 52),
+    ]);
+    expect(romaneio?.totals.arrobas).toBeCloseTo(carcassArrobas(500, 54) + carcassArrobas(400, 52));
+    expect(romaneio?.yieldPct).toBeCloseTo((500 * 54 + 400 * 52) / 900);
+    expect(romaneio?.yieldVaries).toBe(true);
+  });
+
+  it("keeps one rendimento when every animal was priced at the padrão", () => {
+    expect(saleRomaneio(data, "sale-1")?.yieldVaries).toBe(false);
+  });
 });

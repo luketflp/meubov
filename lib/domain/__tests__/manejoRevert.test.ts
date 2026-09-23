@@ -95,6 +95,22 @@ describe("revertDecision", () => {
     expect(result.blocked).toEqual([{ earTag: "B-001", reason: "not_sold" }]);
   });
 
+  it("stamps a refugo's and a dúvida's weighing without reactivating or blocking them", () => {
+    const result = revertDecision(
+      session({
+        kind: "sale",
+        animals: [
+          pass({ earTag: "B-001", outcome: "rejected", weighingId: 11 }),
+          pass({ earTag: "B-002", outcome: "held", weighingId: 12 }),
+        ],
+      }),
+      [facts({ earTag: "B-001", active: true }), facts({ earTag: "B-002", active: true })]
+    );
+    expect(result.blocked).toEqual([]);
+    expect(result.plan.weighingIds).toEqual([11, 12]);
+    expect(result.plan.restore).toEqual([]);
+  });
+
   it("removes the animals an entrada registered", () => {
     const result = revertDecision(
       session({ kind: "entry", animals: [pass({ createdAnimal: true })] }),

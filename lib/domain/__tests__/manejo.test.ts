@@ -208,6 +208,28 @@ describe("buildPassEffects on an inseminação", () => {
   });
 });
 
+describe("buildPassEffects — venda com rendimento por animal", () => {
+  const sale = { date: "2026-09-23", kind: "sale" as const, weighing: true, pricePerArroba: 320, carcassYieldPct: 52 };
+
+  it("prices at the brete's rendimento and keeps it when it differs from the padrão", () => {
+    const effects = buildPassEffects(sale, { weightKg: 546, carcassYieldPct: 54 });
+    expect(effects.amountBrl).toBeCloseTo(((546 * 0.54) / 15) * 320, 6);
+    expect(effects.carcassYieldPct).toBe(54);
+  });
+
+  it("stores nothing when the brete kept the padrão", () => {
+    const effects = buildPassEffects(sale, { weightKg: 546, carcassYieldPct: 52 });
+    expect(effects.amountBrl).toBeCloseTo(((546 * 0.52) / 15) * 320, 6);
+    expect(effects.carcassYieldPct).toBeUndefined();
+  });
+
+  it("ignores a rendimento on a venda sold as one lot", () => {
+    const effects = buildPassEffects({ ...sale, pricePerArroba: undefined }, { weightKg: 546, carcassYieldPct: 54 });
+    expect(effects.amountBrl).toBeUndefined();
+    expect(effects.carcassYieldPct).toBeUndefined();
+  });
+});
+
 describe("baixaPassNote", () => {
   it("names the reason and keeps the farmer's words", () => {
     expect(baixaPassNote("death", " quebrou a perna no brete ")).toBe(

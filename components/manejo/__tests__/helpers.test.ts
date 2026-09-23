@@ -3,6 +3,8 @@ import {
   MANEJO_ACTION_LABEL,
   MANEJO_ACTION_LIST,
   actionKind,
+  boiadaPassData,
+  heldCloseNotice,
   isMovementAction,
   isSanitaryAction,
   manejoHistory,
@@ -273,12 +275,31 @@ describe("validateManejo", () => {
   });
 });
 
+describe("sessionProgress — apartação", () => {
+  it("counts refugo and dúvida as handled, not pending", () => {
+    const progress = sessionProgress(
+      makeSession({
+        kind: "sale",
+        animals: [
+          { earTag: "A", outcome: "done" },
+          { earTag: "B", outcome: "rejected" },
+          { earTag: "C", outcome: "held" },
+          { earTag: "D", outcome: "skipped" },
+          { earTag: "E", outcome: "pending" },
+        ],
+      })
+    );
+    expect(progress).toEqual({ total: 5, done: 1, skipped: 1, rejected: 1, held: 1, pending: 1, pct: 80 });
+  });
+});
+
 describe("visibleSaleRows", () => {
   const sold: SaleRow = {
     earTag: "BR-001",
     outcome: "done",
     weightKg: 480,
     carcassArrobas: 16,
+    carcassYieldPct: 50,
     amountBrl: 4800,
   };
   const skipped: SaleRow = {
@@ -286,6 +307,7 @@ describe("visibleSaleRows", () => {
     outcome: "skipped",
     weightKg: null,
     carcassArrobas: null,
+    carcassYieldPct: null,
     amountBrl: null,
     notes: "manca",
   };
@@ -294,6 +316,7 @@ describe("visibleSaleRows", () => {
     outcome: "pending",
     weightKg: null,
     carcassArrobas: null,
+    carcassYieldPct: null,
     amountBrl: null,
   };
   const rows = [sold, skipped, pending];
@@ -378,5 +401,42 @@ describe("closing a manejo", () => {
     expect(notPassedTitle(1)).toBe("1 animal não passou");
     expect(notPassedTitle(4)).toBe("4 animais não passaram");
     expect(notPassedTitle(1200)).toBe("1.200 animais não passaram");
+  });
+});
+
+describe("boiadaPassData", () => {
+  const base = { weighing: true, weightKg: 480, notes: undefined, setsYield: true, yieldPct: 52, padraoPct: 52 };
+
+  it("leaves the rendimento to the venda's padrão when the operator kept it", () => {
+    expect(boiadaPassData(base)).toEqual({ weightKg: 480, notes: undefined, carcassYieldPct: undefined });
+  });
+
+  it("does not freeze a stale padrão as the animal's own rendimento", () => {
+    // The brete still holds the old padrão (52) while the venda moved on: the
+    // pass sends no rendimento, so the server prices it at the current padrão.
+    expect(boiadaPassData({ ...base, yieldPct: 52, padraoPct: 52 }).carcassYieldPct).toBeUndefined();
+  });
+
+  it("sends the rendimento the operator adjusted", () => {
+    expect(boiadaPassData({ ...base, yieldPct: 54.5 }).carcassYieldPct).toBe(54.5);
+  });
+
+  it("never sends a rendimento who may not set it", () => {
+    expect(boiadaPassData({ ...base, setsYield: false, yieldPct: 54.5 }).carcassYieldPct).toBeUndefined();
+  });
+
+  it("sends the weight only when the venda weighs", () => {
+    expect(boiadaPassData({ ...base, weighing: false }).weightKg).toBeUndefined();
+    expect(boiadaPassData({ ...base, weightKg: null }).weightKg).toBeUndefined();
+  });
+});
+
+describe("heldCloseNotice", () => {
+  it("names one dúvida in the singular", () => {
+    expect(heldCloseNotice(1)).toBe("Decida a dúvida para encerrar a venda.");
+  });
+
+  it("counts several", () => {
+    expect(heldCloseNotice(3)).toBe("Decida as 3 dúvidas para encerrar a venda.");
   });
 });

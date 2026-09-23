@@ -56,6 +56,7 @@ exports[`herd API route table > exposes exactly the documented routes 1`] = `
   "POST /api/herd/manejo/:id/animals/:animalId/baixa",
   "POST /api/herd/manejo/:id/animals/:animalId/complete",
   "POST /api/herd/manejo/:id/animals/:animalId/reopen",
+  "POST /api/herd/manejo/:id/animals/:animalId/set-aside",
   "POST /api/herd/manejo/:id/animals/:animalId/skip",
   "POST /api/herd/manejo/:id/carcass-yield",
   "POST /api/herd/manejo/:id/close",

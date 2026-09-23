@@ -74,6 +74,8 @@ export class EditWeighingUseCase implements CurrUseCase {
           kind: manejoSessions.kind,
           pricePerArroba: manejoSessions.pricePerArroba,
           carcassYieldPct: manejoSessions.carcassYieldPct,
+          outcome: manejoSessionAnimals.outcome,
+          entryYieldPct: manejoSessionAnimals.carcassYieldPct,
         })
         .from(manejoSessionAnimals)
         .innerJoin(manejoSessions, eq(manejoSessionAnimals.sessionId, manejoSessions.id))
@@ -90,7 +92,7 @@ export class EditWeighingUseCase implements CurrUseCase {
         .returning();
       if (!entry) return { weighing: toWeighing(row), manejo: null };
 
-      const priced = entry.kind === "sale" && entry.pricePerArroba !== null;
+      const priced = entry.kind === "sale" && entry.pricePerArroba !== null && entry.outcome === "done";
       const manejo: EditedManejoWeighing = {
         sessionId: entry.sessionId,
         weightKg: input.weightKg,
@@ -99,7 +101,7 @@ export class EditWeighingUseCase implements CurrUseCase {
               amountBrl: saleAmount(
                 input.weightKg,
                 entry.pricePerArroba as number,
-                entry.carcassYieldPct ?? undefined
+                entry.entryYieldPct ?? entry.carcassYieldPct ?? undefined
               ),
             }
           : {}),

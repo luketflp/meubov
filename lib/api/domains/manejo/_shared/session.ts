@@ -36,7 +36,9 @@ export type ManejoConflict =
   | "out_of_stock"
   | "has_diagnosis"
   /** The animal had a baixa: nothing more is applied to it at the brete. */
-  | "animal_inactive";
+  | "animal_inactive"
+  /** A venda still has a dúvida to decide: it cannot close yet. */
+  | "held_pending";
 
 export const conflict = (code: ManejoConflict): { conflict: ManejoConflict } => ({
   conflict: code,

@@ -134,6 +134,13 @@
       "when": 1790096435934,
       "tag": "0018_ultrassom-observacao",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790180420782,
+      "tag": "0019_venda-apartacao",
+      "breakpoints": true
     }
   ]
 }

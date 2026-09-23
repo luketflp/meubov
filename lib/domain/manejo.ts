@@ -15,6 +15,7 @@ import type {
   Weighing,
 } from "@/lib/types";
 import { saleAmount } from "@/lib/domain/movements";
+import { DEFAULT_CARCASS_YIELD_PCT } from "@/lib/domain/weights";
 import { INACTIVE_REASON_LABEL } from "@/lib/domain/labels";
 
 /** Treatment effect before persistence (no id / animal ref yet). */
@@ -46,6 +47,8 @@ export interface PassEffects {
   sold?: boolean;
   /** What this animal was worth (R$), when the sale is priced per arroba. */
   amountBrl?: number;
+  /** Own rendimento of a boiada pass, when it differs from the padrão. */
+  carcassYieldPct?: number;
   /** The IATF cobertura an inseminação records on the cow. */
   breeding?: BreedingEffect;
 }
@@ -141,8 +144,13 @@ export function buildPassEffects(
   }
   if (session.kind === "sale") {
     effects.sold = true;
-    if (weightKg !== undefined && session.pricePerArroba !== undefined) {
-      effects.amountBrl = saleAmount(weightKg, session.pricePerArroba, session.carcassYieldPct);
+    if (session.pricePerArroba !== undefined) {
+      const padrao = session.carcassYieldPct ?? DEFAULT_CARCASS_YIELD_PCT;
+      const own = data.carcassYieldPct;
+      if (own !== undefined && own !== padrao) effects.carcassYieldPct = own;
+      if (weightKg !== undefined) {
+        effects.amountBrl = saleAmount(weightKg, session.pricePerArroba, own ?? padrao);
+      }
     }
   }
   if (session.kind === "insemination") {

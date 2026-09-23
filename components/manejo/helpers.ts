@@ -6,6 +6,7 @@
 import type {
   Animal,
   ManejoKind,
+  ManejoOutcome,
   ManejoSession,
   Treatment,
   TreatmentType,
@@ -356,27 +357,34 @@ export interface ManejoProgress {
   total: number;
   done: number;
   skipped: number;
+  /** Venda: refugo — passed the scale, stays on the farm. */
+  rejected: number;
+  /** Venda: dúvida waiting to be decided. */
+  held: number;
   pending: number;
-  /** Handled share (done + skipped) over total, 0-100. */
+  /** Handled share (everything but pending) over total, 0-100. */
   pct: number;
 }
 
 /** Counts the session outcomes into a progress summary. */
 export function sessionProgress(session: ManejoSession): ManejoProgress {
-  let done = 0;
-  let skipped = 0;
-  for (const a of session.animals) {
-    if (a.outcome === "done") done += 1;
-    else if (a.outcome === "skipped") skipped += 1;
-  }
+  const count: Record<ManejoOutcome, number> = {
+    pending: 0,
+    done: 0,
+    skipped: 0,
+    rejected: 0,
+    held: 0,
+  };
+  for (const a of session.animals) count[a.outcome] += 1;
   const total = session.animals.length;
-  const handled = done + skipped;
   return {
     total,
-    done,
-    skipped,
-    pending: total - handled,
-    pct: total === 0 ? 0 : Math.round((handled / total) * 100),
+    done: count.done,
+    skipped: count.skipped,
+    rejected: count.rejected,
+    held: count.held,
+    pending: count.pending,
+    pct: total === 0 ? 0 : Math.round(((total - count.pending) / total) * 100),
   };
 }
 
@@ -391,6 +399,47 @@ export function reviewBeforeClosing(progress: ManejoProgress): boolean {
 /** "1 animal não passou", "4 animais não passaram": the closing dialog's title. */
 export function notPassedTitle(count: number): string {
   return count === 1 ? "1 animal não passou" : `${formatNumber(count)} animais não passaram`;
+}
+
+/** Beside a disabled Encerrar: the dúvidas a venda must decide first. */
+export function heldCloseNotice(held: number): string {
+  return held === 1
+    ? "Decida a dúvida para encerrar a venda."
+    : `Decida as ${formatNumber(held)} dúvidas para encerrar a venda.`;
+}
+
+/** What the venda's brete holds when an animal goes to the Boiada. */
+export interface BoiadaPassInput {
+  /** The venda weighs its animals. */
+  weighing: boolean;
+  /** Weight read at the balança, null when none. */
+  weightKg: number | null;
+  notes: string | undefined;
+  /** The operator may set the rendimento (venda per arroba, Financeiro edit). */
+  setsYield: boolean;
+  /** Rendimento the brete prices the pass at. */
+  yieldPct: number;
+  /** The venda's padrão the brete last saw. */
+  padraoPct: number;
+}
+
+/**
+ * The pass sent for a Boiada. The rendimento goes only when the operator
+ * adjusted it: otherwise the pass follows the venda's padrão on the server, so
+ * a brete holding a padrão changed meanwhile does not freeze the old one as
+ * the animal's own rendimento.
+ */
+export function boiadaPassData(input: BoiadaPassInput): {
+  weightKg?: number;
+  notes?: string;
+  carcassYieldPct?: number;
+} {
+  const adjusted = input.setsYield && input.yieldPct !== input.padraoPct;
+  return {
+    weightKg: input.weighing ? (input.weightKg ?? undefined) : undefined,
+    notes: input.notes,
+    carcassYieldPct: adjusted ? input.yieldPct : undefined,
+  };
 }
 
 /** Action kind of a session, for pills and filters. */

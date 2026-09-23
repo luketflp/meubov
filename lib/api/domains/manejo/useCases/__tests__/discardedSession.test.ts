@@ -27,6 +27,7 @@ function selectBuilder() {
       query.table = getTableName(table);
       return builder;
     },
+    innerJoin: () => builder,
     where(where: SQL) {
       query.where = where;
       return builder;
@@ -125,8 +126,10 @@ describe("a discarded manejo", () => {
   it("cannot be closed", async () => {
     expect(await new CloseSessionUseCase().run({ farmId: 7, sessionId: "s-1" })).toBe(false);
 
+    // The session lock filters out a discarded one, so the close stops there.
     const lookup = sessionLookup();
-    expect(lookup.kind).toBe("update");
     expect(sqlOf(lookup.where)).toContain(NOT_DISCARDED);
+    expect(lookup.lock).toBe("update");
+    expect(state.queries.some((query) => query.kind === "update")).toBe(false);
   });
 });

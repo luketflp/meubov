@@ -86,12 +86,18 @@ export class ReopenAnimalUseCase implements CurrUseCase {
       if (entry.outcome === "pending") return conflict("entry_not_actionable");
       // An animal that had a baixa stays out of the queue: there is nothing left
       // to apply to it, and in a venda the undo would even put it back in the
-      // herd. Only a sold pass, whose own sale took it out, may be undone.
+      // herd. Only a sold pass, whose own sale took it out, may be undone — and
+      // a dúvida, which must be cleared for the venda to close: that undo only
+      // resets the entry (and drops its weighing), never touching the animal.
       const soldHere = session.kind === "sale" && entry.outcome === "done";
-      if (!animal.active && !soldHere) return conflict("animal_inactive");
+      if (!animal.active && !soldHere && entry.outcome !== "held") {
+        return conflict("animal_inactive");
+      }
+      const leftHerdHeld = !animal.active && entry.outcome === "held";
+      const restoreLot = entry.previousLotId !== null && !leftHerdHeld;
       const earTag = animal.earTag;
 
-      if (entry.previousLotId !== null) {
+      if (restoreLot && entry.previousLotId !== null) {
         const lotError = await new ValidateLotAssignmentUseCase(tx).run({ farmId, lotId: entry.previousLotId });
         if (lotError) return lotError;
       }
@@ -142,16 +148,15 @@ export class ReopenAnimalUseCase implements CurrUseCase {
         (id): id is string => id !== null
       );
       // Put the animal back where the pass found it: in its old lot after a
-      // transferência, and back in the active herd after a venda.
+      // transferência, and back in the active herd after a boiada. A refugo
+      // or a dúvida never left it.
       let patch: AnimalPatch | undefined;
-      if (entry.previousLotId !== null || session.kind === "sale") {
+      if (restoreLot || soldHere) {
         const [row] = await tx
           .update(animals)
           .set({
-            ...(entry.previousLotId !== null ? { lotId: entry.previousLotId } : {}),
-            ...(session.kind === "sale"
-              ? { active: true, inactiveReason: null, inactiveDate: null }
-              : {}),
+            ...(restoreLot && entry.previousLotId !== null ? { lotId: entry.previousLotId } : {}),
+            ...(soldHere ? { active: true, inactiveReason: null, inactiveDate: null } : {}),
           })
           .where(eq(animals.id, animalId))
           .returning(ANIMAL_PATCH_COLUMNS);
@@ -170,6 +175,7 @@ export class ReopenAnimalUseCase implements CurrUseCase {
           boosterId: null,
           weighingId: null,
           breedingId: null,
+          carcassYieldPct: null,
         })
         .where(
           and(

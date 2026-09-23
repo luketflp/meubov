@@ -59,6 +59,13 @@ describe("visibleLines and outcomeNote", () => {
   });
 });
 
+describe("outcomeNote — apartação", () => {
+  it("labels refugo and dúvida", () => {
+    expect(outcomeNote({ earTag: "A", outcome: "rejected", notes: "leve" } as DetailLine)).toBe("refugo · leve");
+    expect(outcomeNote({ earTag: "A", outcome: "held" } as DetailLine)).toBe("dúvida");
+  });
+});
+
 describe("previousWeighing and gainSince", () => {
   const animal = steer("BR-001", [
     { id: 1, date: "2025-05-18", weightKg: 472 },

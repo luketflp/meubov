@@ -69,6 +69,7 @@ vi.mock("@/lib/api/domains/semen/_shared/stock", async (importOriginal) => ({
   lockBullStock,
 }));
 
+import { saleAmount } from "@/lib/domain/movements";
 import { CompleteAnimalUseCase } from "../CompleteAnimal.useCase";
 
 const SESSION_ROW = {
@@ -235,5 +236,35 @@ describe("completeAnimal — inseminação", () => {
     expect(result).toBe("bull_not_found");
     expect(state.inserts).toEqual([]);
     expect(state.updates).toEqual([]);
+  });
+});
+
+describe("completeAnimal — venda", () => {
+  const SALE_SESSION = {
+    ...SESSION_ROW,
+    kind: "sale",
+    weighing: true,
+    pricePerArroba: 320,
+    carcassYieldPct: 52,
+    semenBullIds: null,
+  };
+
+  it("prices a boiada at its own rendimento, set at the brete", async () => {
+    state.selectResults = [
+      [SALE_SESSION],
+      [{ id: "a-1", earTag: "V-01", lotId: "lot-1", active: true }],
+      [ENTRY_ROW],
+    ];
+
+    const result = await new CompleteAnimalUseCase().run({
+      farmId: 7,
+      sessionId: "s-1",
+      animalId: "a-1",
+      data: { weightKg: 546, carcassYieldPct: 54 },
+    });
+
+    const amountBrl = saleAmount(546, 320, 54);
+    expect(state.updates.at(-1)).toMatchObject({ carcassYieldPct: 54, amountBrl });
+    expect(result).toMatchObject({ entry: { carcassYieldPct: 54, amountBrl } });
   });
 });

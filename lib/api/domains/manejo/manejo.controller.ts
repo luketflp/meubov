@@ -26,6 +26,7 @@ import { CompleteAnimalUseCase } from "./useCases/CompleteAnimal.useCase";
 import { DeleteSessionUseCase } from "./useCases/Delete.useCase";
 import { RegisterEntryAnimalUseCase } from "./useCases/RegisterEntryAnimal.useCase";
 import { ReopenAnimalUseCase } from "./useCases/ReopenAnimal.useCase";
+import { SetAsideAnimalUseCase } from "./useCases/SetAsideAnimal.useCase";
 import { SetCarcassYieldUseCase } from "./useCases/SetCarcassYield.useCase";
 import { SkipAnimalUseCase } from "./useCases/SkipAnimal.useCase";
 import { StartSessionUseCase } from "./useCases/Start.useCase";
@@ -35,6 +36,7 @@ import {
   ManejoSkipBody,
   NewManejoSessionBody,
   SaleYieldBody,
+  SetAsideBody,
 } from "./schemas/manejo.schema";
 
 export const manejoController = new Elysia({ prefix: "/manejo" })
@@ -93,7 +95,8 @@ export const manejoController = new Elysia({ prefix: "/manejo" })
         farmId,
         sessionId: params.id,
         animalId: params.animalId,
-        data: body,
+        // The rendimento reprices money: only Financeiro edit may set it.
+        data: can(permissions, "finance", "edit") ? body : { ...body, carcassYieldPct: undefined },
       });
       if (result === "lot_not_found") return status(404, { error: result });
       if (result === "bull_not_found") return status(404, { error: result });
@@ -102,6 +105,21 @@ export const manejoController = new Elysia({ prefix: "/manejo" })
       return can(permissions, "finance", "view") ? result : redactPass(result);
     },
     { farm: true, body: ManejoPassBody }
+  )
+  .post(
+    "/:id/animals/:animalId/set-aside",
+    async ({ farmId, params, body, status }) => {
+      const result = await new SetAsideAnimalUseCase().run({
+        farmId,
+        sessionId: params.id,
+        animalId: params.animalId,
+        input: body,
+      });
+      if (result === null) return status(404, { error: "not_found" });
+      if ("conflict" in result) return status(409, { error: result.conflict });
+      return result;
+    },
+    { farm: true, body: SetAsideBody }
   )
   .post(
     "/:id/animals/:animalId/skip",
@@ -176,6 +194,7 @@ export const manejoController = new Elysia({ prefix: "/manejo" })
         farmId,
         sessionId: params.id,
       });
+      if (typeof closed === "object") return status(409, { error: closed.conflict });
       if (!closed) return status(404, { error: "not_found" });
       return { id: params.id, status: "closed" as const };
     },

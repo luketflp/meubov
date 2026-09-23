@@ -199,6 +199,7 @@ export class CompleteAnimalUseCase implements CurrUseCase {
           boosterId: boosterId ?? null,
           weighingId: weighingId ?? null,
           breedingId: breeding?.id ?? null,
+          carcassYieldPct: effects.carcassYieldPct ?? null,
         })
         .where(
           and(

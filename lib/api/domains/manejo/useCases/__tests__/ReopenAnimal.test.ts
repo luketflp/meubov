@@ -221,3 +221,50 @@ describe("reopenAnimal — an animal that had a baixa", () => {
     expect(result).toMatchObject({ entry: { earTag: "V-01", outcome: "pending" } });
   });
 });
+
+const SALE_SESSION = { ...SESSION_ROW, kind: "sale", semenBullIds: null };
+
+describe("reopenAnimal — a venda's refugo or dúvida", () => {
+  it("undoes a refugo without touching the animal", async () => {
+    state.selectResults = [
+      [SALE_SESSION],
+      [{ id: "a-1", earTag: "V-01", lotId: "lot-1", active: true }],
+      [{ ...DONE_ENTRY, outcome: "rejected", breedingId: null, weighingId: 5 }],
+    ];
+
+    await new ReopenAnimalUseCase().run({ farmId: 7, sessionId: "s-1", animalId: "a-1" });
+
+    expect(state.writes).toEqual(["update weighings", "update manejo_session_animals"]);
+    expect(state.updates.at(-1)).toMatchObject({ outcome: "pending", carcassYieldPct: null });
+  });
+});
+
+describe("reopenAnimal — a dúvida whose animal had a baixa elsewhere", () => {
+  const inactiveAnimal = { id: "a-1", earTag: "V-01", lotId: "lot-1", active: false };
+
+  it("takes it out of the dúvida without writing to the animal", async () => {
+    state.selectResults = [
+      [SALE_SESSION],
+      [inactiveAnimal],
+      [{ ...DONE_ENTRY, outcome: "held", breedingId: null, weighingId: 5 }],
+    ];
+
+    const result = await new ReopenAnimalUseCase().run({ farmId: 7, sessionId: "s-1", animalId: "a-1" });
+
+    expect(state.writes).toEqual(["update weighings", "update manejo_session_animals"]);
+    expect(result).toMatchObject({ entry: { earTag: "V-01", outcome: "pending" } });
+    expect(result).toHaveProperty("animal", undefined);
+  });
+
+  it("leaves the animal alone even when the entry names a previous lot", async () => {
+    state.selectResults = [
+      [SALE_SESSION],
+      [inactiveAnimal],
+      [{ ...DONE_ENTRY, outcome: "held", breedingId: null, previousLotId: "lot-0" }],
+    ];
+
+    await new ReopenAnimalUseCase().run({ farmId: 7, sessionId: "s-1", animalId: "a-1" });
+
+    expect(state.writes).toEqual(["update manejo_session_animals"]);
+  });
+});

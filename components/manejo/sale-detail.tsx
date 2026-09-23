@@ -15,6 +15,7 @@ import { formatDate } from "@/lib/domain/dates";
 import { formatArroba, formatCurrency, formatKg } from "@/lib/domain/format";
 import { nextLineSort, sortLines, type LineSort, type SortValue } from "@/lib/domain/lineSort";
 import { saleRows, type SaleRow } from "@/lib/domain/movements";
+import { outcomeLabel } from "@/lib/domain/manejoDetail";
 import {
   movementSubtitle,
   visibleSaleRows,
@@ -243,9 +244,9 @@ const SORT_VALUE: Record<string, (row: SaleRow) => SortValue> = {
   Observação: (row) => rowNote(row),
 };
 
-/** Note shown for an animal: its own, prefixed by "pulado" when it did not pass. */
+/** Note shown for an animal: its own, prefixed by "pulado", "refugo" or "dúvida" when it did not sell. */
 function rowNote(row: SaleRow): string {
-  if (row.outcome === "done") return row.notes ?? "";
-  const label = row.outcome === "skipped" ? "pulado" : "não passou";
+  const label = outcomeLabel(row.outcome);
+  if (label === null) return row.notes ?? "";
   return row.notes ? `${label} · ${row.notes}` : label;
 }

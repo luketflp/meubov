@@ -35,8 +35,8 @@ type CurrUseCase = _UseCase<SetCarcassYieldUseCaseProps, SetCarcassYieldUseCaseR
 
 /**
  * Sets the rendimento de carcaça of an open venda per arroba (the modal shown
- * before the chute), repricing any pass already recorded so every animal of the
- * session is worth the same arithmetic.
+ * before the chute), repricing the passes that follow the padrão; a boiada
+ * priced at its own rendimento at the brete keeps it.
  */
 export class SetCarcassYieldUseCase implements CurrUseCase {
   private repository: RepositoryType;
@@ -73,6 +73,7 @@ export class SetCarcassYieldUseCase implements CurrUseCase {
         .select({
           animalId: manejoSessionAnimals.animalId,
           weightKg: manejoSessionAnimals.weightKg,
+          carcassYieldPct: manejoSessionAnimals.carcassYieldPct,
           earTag: animals.earTag,
         })
         .from(manejoSessionAnimals)
@@ -87,7 +88,7 @@ export class SetCarcassYieldUseCase implements CurrUseCase {
 
       const amounts: SaleYieldResult["amounts"] = [];
       for (const entry of entries) {
-        if (entry.weightKg === null) continue;
+        if (entry.weightKg === null || entry.carcassYieldPct !== null) continue;
         const amountBrl = saleAmount(entry.weightKg, session.pricePerArroba, carcassYieldPct);
         await tx
           .update(manejoSessionAnimals)

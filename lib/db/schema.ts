@@ -133,6 +133,8 @@ export const manejoOutcomeEnum = pgEnum("manejo_outcome", [
   "pending",
   "done",
   "skipped",
+  "rejected",
+  "held",
 ]);
 
 /** Category of a farm expense. */
@@ -639,6 +641,11 @@ export const manejoSessionAnimals = pgTable(
     notes: text("notes"),
     /** What this animal was worth in a priced sale (R$/@ × its chute weight). */
     amountBrl: numeric("amount_brl", { mode: "number" }),
+    /**
+     * Rendimento (%) this boiada pass was priced at, when the brete changed it
+     * from the venda's padrão. Null: the pass follows the padrão.
+     */
+    carcassYieldPct: numeric("carcass_yield_pct", { mode: "number" }),
     /** Lot the animal came from, so undoing a transfer pass can restore it. */
     previousLotId: text("previous_lot_id").references(() => lots.id),
     /** True when an entry session registered this animal — undo deletes it. */

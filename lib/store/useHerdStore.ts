@@ -86,6 +86,8 @@ export interface ManejoPassData {
   weightKg?: number;
   notes?: string;
   semenBullId?: string;
+  /** Rendimento (%) the brete priced this boiada at (venda per arroba only). */
+  carcassYieldPct?: number;
 }
 
 /** Herd change a manejo pass applied to one animal (lot, herd membership). */
@@ -272,6 +274,16 @@ export interface HerdStore extends HerdData {
   ) => Promise<boolean>;
   /** Marks one animal as skipped (did not pass the chute). */
   skipManejoAnimal: (sessionId: string, earTag: string, notes?: string) => Promise<void>;
+  /**
+   * A venda's animal set apart at the brete: refugo (stays on the farm) or
+   * dúvida (decided before closing). The weight read becomes a pesagem. False
+   * when refused (409) — the animal had a baixa meanwhile, or a stale screen.
+   */
+  setAsideManejoAnimal: (
+    sessionId: string,
+    earTag: string,
+    input: { list: "rejected" | "held"; weightKg?: number; notes?: string }
+  ) => Promise<boolean>;
   /**
    * A baixa at the brete: the animal leaves the herd and its pass is skipped,
    * with the baixa as its note, in one server transaction. False when the pass
@@ -851,6 +863,41 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     }));
   },
 
+  setAsideManejoAnimal: async (sessionId, earTag, input) => {
+    const animalId = animalIdByEarTag(get().animals, earTag);
+    const { data, error } = await api
+      .manejo({ id: sessionId })
+      .animals({ animalId })["set-aside"]
+      .post(input);
+    if (error) {
+      if (error.status === CONFLICT) {
+        const detail = error.value as { error?: string };
+        if (detail.error === "animal_inactive") {
+          toast.error(inactiveAnimalMessage(earTag));
+          await reloadHerd(set);
+        }
+        return false;
+      }
+      apiFail("apartar o animal", error);
+    }
+    const result = data as { entry: ManejoSessionAnimal; weighing?: Weighing };
+    set((s) => {
+      const weighing = result.weighing;
+      const animals = weighing
+        ? s.animals.map((a) =>
+            a.earTag === earTag
+              ? { ...a, weighings: [...a.weighings, weighing].sort(compareByDate) }
+              : a
+          )
+        : s.animals;
+      return {
+        animals,
+        manejoSessions: withSessionAnimal(s.manejoSessions, sessionId, earTag, result.entry),
+      };
+    });
+    return true;
+  },
+
   baixaManejoAnimal: async (sessionId, earTag, input) => {
     const animalId = animalIdByEarTag(get().animals, earTag);
     const notes = input.notes?.trim();
@@ -1032,7 +1079,19 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
 
   closeManejoSession: async (sessionId) => {
     const { error } = await api.manejo({ id: sessionId }).close.post();
-    if (error) apiFail("encerrar o manejo", error);
+    if (error) {
+      if (error.status === CONFLICT) {
+        const detail = error.value as { error?: string };
+        if (detail.error === "held_pending") {
+          toast.error("Decida as dúvidas antes de encerrar a venda.");
+          // A dúvida set on another device: reload so it shows and Encerrar
+          // disables until it is decided.
+          await reloadHerd(set);
+          return;
+        }
+      }
+      apiFail("encerrar o manejo", error);
+    }
     set((s) => ({
       manejoSessions: s.manejoSessions.map((m) =>
         m.id === sessionId ? { ...m, status: "closed" as const } : m

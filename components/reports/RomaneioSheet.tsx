@@ -55,7 +55,10 @@ export function RomaneioSheet({
           ["Comprador", romaneio.counterparty ?? BLANK],
           ["GTA nº", BLANK],
           ["Preço", priceLabel(romaneio)],
-          ["Rendimento de carcaça", `${formatNumber(romaneio.yieldPct, Number.isInteger(romaneio.yieldPct) ? 0 : 1)}%`],
+          [
+            romaneio.yieldVaries ? "Rendimento médio" : "Rendimento de carcaça",
+            `${formatNumber(romaneio.yieldPct, Number.isInteger(romaneio.yieldPct) ? 0 : 1)}%`,
+          ],
           ["Lote de origem", romaneio.originLot ?? "—"],
         ]}
       />

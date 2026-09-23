@@ -4,10 +4,12 @@
  * Resumo final of a venda: the romaneio arithmetic of the batch that passed the
  * chute — totals on one side, per-head averages on the other, FUNRURAL off the
  * gross. Mirrors the frigorífico spreadsheet the farmer reconciles against.
+ * Only the boiada is sold: refugo and dúvida stay out of every figure.
  */
 import { Pencil } from "lucide-react";
 import type { ManejoSession } from "@/lib/types";
 import { saleSummary, FUNRURAL_RATE } from "@/lib/domain/movements";
+import { DEFAULT_CARCASS_YIELD_PCT } from "@/lib/domain/weights";
 import {
   formatArroba,
   formatCurrency,
@@ -32,14 +34,16 @@ export function SaleSummaryCard({ session, onEditYield }: SaleSummaryCardProps) 
   const heads = `${summary.heads} ${summary.heads === 1 ? "cabeça" : "cabeças"}`;
   const partial =
     summary.weighedHeads < summary.heads ? ` (${summary.weighedHeads} pesadas)` : "";
+  const setApart = summary.rejectedHeads + summary.heldHeads > 0;
 
   return (
     <SectionCard
       title="Resumo da venda"
+      subtitle={setApart ? "Refugo e dúvida ficam fora" : undefined}
       action={
         summary.carcassYieldPct !== null ? (
           <span className="inline-flex items-center gap-1 text-xs text-ink-soft">
-            Rendimento {formatPercent(summary.carcassYieldPct)}
+            Padrão {formatPercent(session.carcassYieldPct ?? DEFAULT_CARCASS_YIELD_PCT)}
             {onEditYield ? (
               <Button
                 variant="ghost"
@@ -56,6 +60,7 @@ export function SaleSummaryCard({ session, onEditYield }: SaleSummaryCardProps) 
       }
     >
       <p className="mb-3 text-sm text-ink-soft">
+        {setApart ? "Só a boiada entra na venda: " : null}
         {heads}
         {partial}
         {summary.grossPerHeadBrl !== null ? (
@@ -102,6 +107,12 @@ export function SaleSummaryCard({ session, onEditYield }: SaleSummaryCardProps) 
           <p className="text-xs font-medium uppercase tracking-wide text-ink-soft">
             Média por cabeça
           </p>
+          {summary.carcassYieldPct !== null ? (
+            <SummaryRow
+              label={summary.yieldVaries ? "Rendimento médio" : "Rendimento"}
+              value={formatPercent(summary.carcassYieldPct)}
+            />
+          ) : null}
           {summary.avgWeightKg !== null ? (
             <SummaryRow label="Peso vivo" value={formatKg(summary.avgWeightKg)} />
           ) : null}

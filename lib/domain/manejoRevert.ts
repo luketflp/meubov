@@ -81,9 +81,9 @@ const emptyPlan = (): RevertPlan => ({
   breedingIds: [],
 });
 
-/** Only a pass that actually happened produced anything to undo. */
+/** Only a pass that actually happened produced anything to undo; refugo and dúvida weighed the animal. */
 function handled(entry: ManejoSessionAnimal): boolean {
-  return entry.outcome === "done";
+  return entry.outcome === "done" || entry.outcome === "rejected" || entry.outcome === "held";
 }
 
 /**
@@ -102,7 +102,7 @@ function blockReason(
     return facts.lotId === session.destinationLotId ? null : "moved_lot";
   }
   if (session.kind === "sale") {
-    return facts.active ? "not_sold" : null;
+    return entry.outcome === "done" && facts.active ? "not_sold" : null;
   }
   if (session.kind === "entry") {
     return facts.hasForeignHistory ? "has_history" : null;
@@ -150,7 +150,7 @@ export function revertDecision(
       plan.removeEarTags.push(entry.earTag);
       continue;
     }
-    const reactivate = session.kind === "sale";
+    const reactivate = session.kind === "sale" && entry.outcome === "done";
     if (entry.previousLotId !== undefined || reactivate) {
       plan.restore.push({
         earTag: entry.earTag,
