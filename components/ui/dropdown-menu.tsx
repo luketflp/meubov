@@ -3,6 +3,8 @@
 import * as React from "react"
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui"
 
+import { CheckIcon } from "lucide-react"
+
 import { cn } from "@/lib/utils"
 
 function DropdownMenu({
@@ -59,6 +61,39 @@ function DropdownMenuItem({
   )
 }
 
+/** A menu row with a checkbox; the menu stays open when it is ticked. */
+function DropdownMenuCheckboxItem({
+  className,
+  children,
+  onSelect,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem>) {
+  return (
+    <DropdownMenuPrimitive.CheckboxItem
+      data-slot="dropdown-menu-checkbox-item"
+      onSelect={(event) => {
+        event.preventDefault()
+        onSelect?.(event)
+      }}
+      className={cn(
+        "group flex min-h-11 cursor-default items-center gap-2.5 rounded-md px-2 text-sm text-ink outline-none select-none focus:bg-surface data-[disabled]:pointer-events-none data-[disabled]:opacity-50 md:min-h-9",
+        className
+      )}
+      {...props}
+    >
+      <span
+        aria-hidden
+        className="flex size-4 shrink-0 items-center justify-center rounded-[4px] border-[1.5px] border-ink-soft/70 bg-panel text-panel group-data-[state=checked]:border-brand group-data-[state=checked]:bg-brand"
+      >
+        <DropdownMenuPrimitive.ItemIndicator>
+          <CheckIcon className="size-3" strokeWidth={3} />
+        </DropdownMenuPrimitive.ItemIndicator>
+      </span>
+      {children}
+    </DropdownMenuPrimitive.CheckboxItem>
+  )
+}
+
 function DropdownMenuSeparator({
   className,
   ...props
@@ -74,6 +109,7 @@ function DropdownMenuSeparator({
 
 export {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,

@@ -64,10 +64,15 @@ import {
   type SalePricing,
 } from "@/components/manejo/helpers";
 import { BullsField, BullsShortNotice } from "@/components/manejo/insemination-fields";
+import { MultiFilter } from "@/components/manejo/multi-filter";
+import {
+  categoryCounts,
+  lotCounts,
+  matchesPicker,
+  pickedLabel,
+  togglePicked,
+} from "@/components/manejo/picker-filters";
 import { cn } from "@/lib/utils";
-
-/** Sentinel of the "all" option in the lot/category filters. */
-const ALL = "all";
 
 const CATEGORY_LIST = Object.keys(CATEGORY_LABEL) as Category[];
 
@@ -115,10 +120,13 @@ function AnimalRow({
   checked,
   onToggle,
   pregnant = false,
+  lotName,
 }: {
   animal: Animal;
   checked: boolean;
   onToggle: () => void;
+  /** The animal's lote, named when the list mixes several. */
+  lotName?: string;
   /** Inseminação: the cow is pregnant now, so she reads muted with "Já prenhe". */
   pregnant?: boolean;
 }) {
@@ -137,7 +145,8 @@ function AnimalRow({
             {animal.earTag}
           </span>
           <span className="truncate text-xs text-ink-soft">
-            {CATEGORY_LABEL[animal.category]} · {formatAge(animal.birthDate)}
+            {CATEGORY_LABEL[animal.category]} · {lotName ? `${lotName} · ` : ""}
+            {formatAge(animal.birthDate)}
           </span>
         </label>
         {pregnant ? (
@@ -154,40 +163,9 @@ function AnimalRow({
   );
 }
 
-/** The lote filter: inside the animal picker, or on top of an inseminação. */
-function LotFilter({
-  id,
-  value,
-  onChange,
-  lots,
-  invernadaNameByLot,
-}: {
-  id?: string;
-  value: string;
-  onChange: (lotId: string) => void;
-  lots: { id: string; name: string }[];
-  invernadaNameByLot: Map<string, string>;
-}) {
-  return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger
-        id={id}
-        className="min-h-11 w-full"
-        aria-label={id ? undefined : "Filtrar por lote"}
-      >
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={ALL}>Todos os lotes</SelectItem>
-        {lots.map((lot) => (
-          <SelectItem key={lot.id} value={lot.id}>
-            {lot.name} · {invernadaNameByLot.get(lot.id)}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
+/** "2 lotes", "1 categoria": the menus' footer. */
+const lotsPicked = (n: number) => (n === 1 ? "1 lote" : `${n} lotes`);
+const categoriesPicked = (n: number) => (n === 1 ? "1 categoria" : `${n} categorias`);
 
 interface RegisterManejoDialogProps {
   /**
@@ -215,8 +193,8 @@ export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoD
     createInitialFields(initialAction ?? "vaccine")
   );
   const [errors, setErrors] = useState<ManejoErrors>({});
-  const [lotId, setLotId] = useState<string>(ALL);
-  const [category, setCategory] = useState<Category | typeof ALL>(ALL);
+  const [lotIds, setLotIds] = useState<string[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [search, setSearch] = useState("");
 
   const sanitary = isSanitaryAction(fields.action);
@@ -257,25 +235,67 @@ export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoD
     if (next) {
       setFields(createInitialFields(initialAction ?? "vaccine"));
       setErrors({});
-      setLotId(ALL);
-      setCategory(ALL);
+      setLotIds([]);
+      setCategories([]);
       setSearch("");
     }
     setOpen(next);
   }
 
+  // The animals the menus count: an inseminação takes only the cows it can
+  // inseminate, and has no categoria filter.
+  const pool = useMemo(
+    () => activeAnimals(animals).filter((a) => !inseminates || eligibleForInsemination(a)),
+    [animals, inseminates]
+  );
+  const pickedCategories = useMemo(() => (inseminates ? [] : categories), [inseminates, categories]);
   const selectable = useMemo(() => {
     const searchTerm = search.trim().toLowerCase();
-    return activeAnimals(animals).filter(
+    return pool.filter(
       (a) =>
-        (lotId === ALL || a.lotId === lotId) &&
-        // An inseminação lists only the cows it can take; it has no category filter.
-        (inseminates
-          ? eligibleForInsemination(a)
-          : category === ALL || a.category === category) &&
+        matchesPicker(a, { lotIds, categories: pickedCategories }) &&
         (searchTerm === "" || a.earTag.toLowerCase().includes(searchTerm))
     );
-  }, [animals, lotId, category, search, inseminates]);
+  }, [pool, lotIds, pickedCategories, search]);
+  // Several lotes in the list: each row says which one it comes from.
+  const lotNameById = useMemo(() => new Map(lots.map((lot) => [lot.id, lot.name])), [lots]);
+  const mixesLots = new Set(selectable.map((a) => a.lotId)).size > 1;
+
+  const byLot = lotCounts(pool, pickedCategories);
+  const lotOptions = filterLots.map((lot) => ({
+    value: lot.id,
+    label: `${lot.name} · ${invernadaNameByLot.get(lot.id)}`,
+    shortLabel: lot.name,
+    count: byLot.get(lot.id) ?? 0,
+  }));
+  const pickedLots = lotOptions.filter((option) => lotIds.includes(option.value));
+  const lotsFilter = (id?: string) => (
+    <MultiFilter
+      id={id}
+      ariaLabel={id ? undefined : "Filtrar por lote"}
+      buttonLabel={pickedLabel(
+        pickedLots.map((option) => option.label),
+        pickedLots.map((option) => option.shortLabel),
+        "Todos os lotes",
+        "lotes"
+      )}
+      allLabel="Todos os lotes"
+      allCount={pool.filter((a) => matchesPicker(a, { lotIds: [], categories: pickedCategories })).length}
+      pickedSummary={lotsPicked}
+      options={lotOptions}
+      picked={lotIds}
+      onToggle={(lotId) => setLotIds((picked) => togglePicked(picked, lotId))}
+      onClear={() => setLotIds([])}
+    />
+  );
+  const byCategory = categoryCounts(pool, lotIds);
+  const categoryOptions = CATEGORY_LIST.map((c) => ({
+    value: c,
+    label: CATEGORY_LABEL[c],
+    shortLabel: CATEGORY_LABEL[c],
+    count: byCategory.get(c) ?? 0,
+  }));
+  const pickedCategoryLabels = categories.map((c) => CATEGORY_LABEL[c]);
 
   // A cow pregnant now stays listed but out of "Selecionar todos": a dose on her
   // is wasted unless the farmer checks her on purpose.
@@ -422,13 +442,7 @@ export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoD
               <>
                 <div className="grid gap-1.5">
                   <Label htmlFor="manejo-lot">Lote</Label>
-                  <LotFilter
-                    id="manejo-lot"
-                    value={lotId}
-                    onChange={setLotId}
-                    lots={filterLots}
-                    invernadaNameByLot={invernadaNameByLot}
-                  />
+                  {lotsFilter("manejo-lot")}
                 </div>
                 <BullsField
                   value={fields.semenBullIds}
@@ -712,28 +726,23 @@ export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoD
             </legend>
             {inseminates ? null : (
             <div className="grid gap-2 sm:grid-cols-2">
-              <LotFilter
-                value={lotId}
-                onChange={setLotId}
-                lots={filterLots}
-                invernadaNameByLot={invernadaNameByLot}
+              {lotsFilter()}
+              <MultiFilter
+                ariaLabel="Filtrar por categoria"
+                buttonLabel={pickedLabel(
+                  pickedCategoryLabels,
+                  pickedCategoryLabels,
+                  "Todas as categorias",
+                  "categorias"
+                )}
+                allLabel="Todas as categorias"
+                allCount={pool.filter((a) => matchesPicker(a, { lotIds, categories: [] })).length}
+                pickedSummary={categoriesPicked}
+                options={categoryOptions}
+                picked={categories}
+                onToggle={(c) => setCategories((picked) => togglePicked(picked, c))}
+                onClear={() => setCategories([])}
               />
-              <Select
-                value={category}
-                onValueChange={(v) => setCategory(v as Category | typeof ALL)}
-              >
-                <SelectTrigger className="min-h-11 w-full" aria-label="Filtrar por categoria">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>Todas as categorias</SelectItem>
-                  {CATEGORY_LIST.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {CATEGORY_LABEL[c]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
             )}
 
@@ -777,6 +786,7 @@ export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoD
                       checked={fields.earTags.includes(animal.earTag)}
                       onToggle={() => toggleEarTag(animal.earTag)}
                       pregnant={inseminates && isPregnantNow(animal.reproduction)}
+                      lotName={mixesLots ? lotNameById.get(animal.lotId) : undefined}
                     />
                   ))}
                 </ul>
