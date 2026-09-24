@@ -45,6 +45,52 @@ export const INVERNADAS_SECTION_ID = "invernadas";
 /** The new invernada's Código, focused by Primeiros passos and again after each add. */
 export const NEW_INVERNADA_CODE_ID = "invernada-nova-codigo";
 
+/** "Vazia", or the lotes grazing there now. */
+function currentLotsLabel(lots: { name: string }[]): string {
+  return lots.length === 0 ? "Vazia" : lots.map((lot) => lot.name).join(", ");
+}
+
+/** "Sem contorno · Desenhar no mapa", under an invernada with no outline yet. */
+function DrawOnMapHint({ invernada }: { invernada: Invernada }) {
+  return (
+    <span className="mt-0.5 flex flex-wrap items-center gap-x-1 text-xs text-ink-soft">
+      Sem contorno ·
+      <Link
+        href={stepHref({ kind: "invernada", invernadaId: invernada.id })}
+        className="inline-flex min-h-11 items-center gap-1 font-medium text-brand hover:underline lg:min-h-0"
+      >
+        <MapPinPlus aria-hidden className="size-[13px]" />
+        Desenhar no mapa
+      </Link>
+    </span>
+  );
+}
+
+/** Editar and Remover, on the table's row and on the phone's card. */
+function InvernadaActions({
+  invernada,
+  onRemove,
+}: {
+  invernada: Invernada;
+  onRemove: (invernada: Invernada) => void;
+}) {
+  return (
+    <div className="flex justify-end">
+      <EditInvernadaDialog invernada={invernada} />
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        onClick={() => onRemove(invernada)}
+        aria-label={`Remover invernada ${invernada.code}`}
+        className="min-h-11 min-w-11 text-ink-soft hover:text-overdue lg:min-h-7 lg:min-w-7"
+      >
+        <Trash2 aria-hidden />
+      </Button>
+    </div>
+  );
+}
+
 function EditInvernadaDialog({ invernada }: { invernada: Invernada }) {
   const updateInvernada = useHerdStore((s) => s.updateInvernada);
   const isProvisional = invernada.code.startsWith("LEGACY-");
@@ -292,72 +338,88 @@ export function InvernadasSettings() {
           className="py-7"
         />
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Código</TableHead>
-              <TableHead>Nome</TableHead>
-              <TableHead>Capim</TableHead>
-              <TableHead className="text-right">Hectares</TableHead>
-              <TableHead>Lotes atuais</TableHead>
-              <TableHead className="text-right">Cabeças</TableHead>
-              {canEditLots ? (
-                <TableHead className="w-20">
-                  <span className="sr-only">Ações</span>
-                </TableHead>
-              ) : null}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {summaries.map(({ invernada, lots: currentLots, headCount }) => (
-              <TableRow key={invernada.id}>
-                <TableCell className="font-mono font-medium">{invernada.code}</TableCell>
-                <TableCell className="text-ink-soft">
-                  <span className="block">{invernada.name || "—"}</span>
-                  {canEditLots && invernada.boundary === undefined ? (
-                    <span className="mt-0.5 flex items-center gap-1 text-xs">
-                      Sem contorno ·
-                      <Link
-                        href={stepHref({ kind: "invernada", invernadaId: invernada.id })}
-                        className="inline-flex items-center gap-1 font-medium text-brand hover:underline"
-                      >
-                        <MapPinPlus aria-hidden className="size-[13px]" />
-                        Desenhar no mapa
-                      </Link>
-                    </span>
+        <>
+          {/* Wide screens: the table. Its cells wrap, so it fits the card without a sideways scroll. */}
+          <div className="hidden lg:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Código</TableHead>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>Capim</TableHead>
+                  <TableHead className="text-right">Hectares</TableHead>
+                  <TableHead>Lotes atuais</TableHead>
+                  <TableHead className="text-right">Cabeças</TableHead>
+                  {canEditLots ? (
+                    <TableHead className="w-16">
+                      <span className="sr-only">Ações</span>
+                    </TableHead>
                   ) : null}
-                </TableCell>
-                <TableCell className="text-ink-soft">{invernada.grass}</TableCell>
-                <TableCell className="text-right font-mono">
-                  {formatHectares(invernada.hectares)}
-                </TableCell>
-                <TableCell className="max-w-52 text-ink-soft">
-                  {currentLots.length === 0
-                    ? "Vazia"
-                    : currentLots.map((lot) => lot.name).join(", ")}
-                </TableCell>
-                <TableCell className="text-right font-mono">{formatNumber(headCount)}</TableCell>
-                {canEditLots ? (
-                  <TableCell className="text-right">
-                    <div className="flex justify-end">
-                      <EditInvernadaDialog invernada={invernada} />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => onRemove(invernada)}
-                        aria-label={`Remover invernada ${invernada.code}`}
-                        className="min-h-11 min-w-11 text-ink-soft hover:text-overdue md:min-h-7 md:min-w-7"
-                      >
-                        <Trash2 aria-hidden />
-                      </Button>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {summaries.map(({ invernada, lots: currentLots, headCount }) => (
+                  <TableRow key={invernada.id}>
+                    <TableCell className="max-w-32 font-mono font-medium break-words whitespace-normal">
+                      {invernada.code}
+                    </TableCell>
+                    <TableCell className="text-ink-soft whitespace-normal">
+                      <span className="block">{invernada.name || "—"}</span>
+                      {canEditLots && invernada.boundary === undefined ? (
+                        <DrawOnMapHint invernada={invernada} />
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-ink-soft whitespace-normal">{invernada.grass}</TableCell>
+                    <TableCell className="text-right font-mono">
+                      {formatHectares(invernada.hectares)}
+                    </TableCell>
+                    <TableCell className="text-ink-soft whitespace-normal">
+                      {currentLotsLabel(currentLots)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">{formatNumber(headCount)}</TableCell>
+                    {canEditLots ? (
+                      <TableCell className="text-right">
+                        <InvernadaActions invernada={invernada} onRemove={onRemove} />
+                      </TableCell>
+                    ) : null}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Phone and tablet: one card per invernada; seven columns do not fit there. */}
+          <ul className="grid gap-2 lg:hidden">
+            {summaries.map(({ invernada, lots: currentLots, headCount }) => (
+              <li key={invernada.id} className="rounded-lg border border-hairline px-3 py-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm text-ink">
+                      <span className="font-mono font-medium break-words">{invernada.code}</span>
+                      {invernada.name ? <span className="text-ink-soft"> · {invernada.name}</span> : null}
+                    </p>
+                    <p className="mt-0.5 text-xs text-ink-soft">
+                      {invernada.grass} · <span className="font-mono">{formatHectares(invernada.hectares)}</span> ha
+                    </p>
+                    <p className="mt-0.5 text-xs text-ink-soft">
+                      {currentLotsLabel(currentLots)} ·{" "}
+                      <span className="font-mono">{formatNumber(headCount)}</span>{" "}
+                      {headCount === 1 ? "cabeça" : "cabeças"}
+                    </p>
+                    {canEditLots && invernada.boundary === undefined ? (
+                      <DrawOnMapHint invernada={invernada} />
+                    ) : null}
+                  </div>
+                  {canEditLots ? (
+                    <div className="-mt-1.5 -mr-2 shrink-0">
+                      <InvernadaActions invernada={invernada} onRemove={onRemove} />
                     </div>
-                  </TableCell>
-                ) : null}
-              </TableRow>
+                  ) : null}
+                </div>
+              </li>
             ))}
-          </TableBody>
-        </Table>
+          </ul>
+        </>
       )}
       {removeError ? <p className="mt-3 text-sm text-overdue">{removeError}</p> : null}
       {canEditLots ? (
