@@ -557,6 +557,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   treatments: [],
   lots: [],
   invernadas: [],
+  removedInvernadas: [],
   lotPlacements: [],
   movements: [],
   breeds: [],
@@ -1392,12 +1393,20 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   },
 
   removeInvernada: async (id) => {
-    const { error } = await api.invernadas({ id }).delete();
+    const { data, error } = await api.invernadas({ id }).delete();
     if (error) {
       if (error.status === 409) return false;
       apiFail("remover a invernada", error);
     }
-    set((s) => ({ invernadas: s.invernadas.filter((item) => item.id !== id) }));
+    const removed = data as Invernada;
+    // One kept for the lot history moves to removedInvernadas; one no lote ever
+    // grazed is simply gone.
+    set((s) => ({
+      invernadas: s.invernadas.filter((item) => item.id !== id),
+      removedInvernadas: removed.removedAt
+        ? [...(s.removedInvernadas ?? []), removed]
+        : s.removedInvernadas,
+    }));
     return true;
   },
 

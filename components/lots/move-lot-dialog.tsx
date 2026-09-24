@@ -5,6 +5,7 @@ import { ArrowRightLeft, History } from "lucide-react";
 import type { Invernada, Lot } from "@/lib/types";
 import { addDays, formatDate, todayISO } from "@/lib/domain/dates";
 import { useHerdStore } from "@/lib/store/useHerdStore";
+import { historyInvernadaById } from "@/lib/store/selectors";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -45,6 +46,7 @@ export function MoveLotDialog({
   onOpenChange?: (open: boolean) => void;
 }) {
   const invernadas = useHerdStore((state) => state.invernadas);
+  const removedInvernadas = useHerdStore((state) => state.removedInvernadas);
   const placements = useHerdStore((state) => state.lotPlacements);
   const moveLot = useHerdStore((state) => state.moveLot);
 
@@ -72,8 +74,8 @@ export function MoveLotDialog({
     [placements, lot.id]
   );
   const invernadaById = useMemo(
-    () => new Map(invernadas.map((item) => [item.id, item])),
-    [invernadas]
+    () => historyInvernadaById(invernadas, removedInvernadas),
+    [invernadas, removedInvernadas]
   );
   const currentPlacement = history.find((placement) => !placement.endedOn) ?? null;
   const archived = currentPlacement === null;

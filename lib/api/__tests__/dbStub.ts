@@ -62,7 +62,7 @@ export function createDbStub(state: DbStubState) {
     select: () => {
       const rows = state.selectResults.shift() ?? [];
       const builder: Record<string, (...args: unknown[]) => unknown> = {};
-      for (const method of ["from", "innerJoin", "leftJoin", "orderBy", "limit"]) {
+      for (const method of ["from", "innerJoin", "leftJoin", "orderBy", "limit", "for"]) {
         builder[method] = () => chain;
       }
       builder.where = (condition: unknown) => {

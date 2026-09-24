@@ -232,7 +232,9 @@ export class LoadHerdUseCase implements CurrUseCase {
       animals: herdAnimals,
       treatments: treatmentRows.map(({ row, earTag }) => toTreatment(row, earTag)),
       lots: herdLots,
-      invernadas: invernadaRows.map(toInvernada),
+      // A removed invernada only names the past placements that still point at it.
+      invernadas: invernadaRows.filter((row) => row.removedAt === null).map(toInvernada),
+      removedInvernadas: invernadaRows.filter((row) => row.removedAt !== null).map(toInvernada),
       lotPlacements: lotPlacementRows.map(toLotPlacement),
       // The ledger is the legacy rows plus what the manejo sessions moved: head
       // count and category always come from the animals that actually passed.

@@ -173,6 +173,7 @@ export function toInvernada(row: InvernadaRow): Invernada {
     grass: row.grass,
     hectares: row.hectares,
     boundary: orNothing(row.boundary),
+    removedAt: row.removedAt ? row.removedAt.toISOString() : undefined,
   };
 }
 

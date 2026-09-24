@@ -279,9 +279,16 @@ export const invernadas = pgTable(
     hectares: numeric("hectares", { mode: "number" }).notNull(),
     /** Open ring of [lng, lat] pairs; the first point is not repeated. */
     boundary: jsonb("boundary").$type<[number, number][]>(),
+    /**
+     * Set when a removed invernada still names past lot placements: it leaves
+     * the lists and the map, the history keeps it, and its code is free again.
+     */
+    removedAt: timestamp("removed_at"),
   },
   (t) => [
-    uniqueIndex("invernadas_farm_id_code_unique").on(t.farmId, t.code),
+    uniqueIndex("invernadas_farm_id_code_unique")
+      .on(t.farmId, t.code)
+      .where(sql`${t.removedAt} is null`),
     index("invernadas_farm_id_idx").on(t.farmId),
   ]
 );

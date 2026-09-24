@@ -32,7 +32,7 @@ import { invernadasWithSummary } from "@/lib/store/selectors";
 import { formatNumber } from "@/lib/domain/format";
 import { stepHref } from "@/lib/domain/mapSetup";
 import type { Invernada } from "@/lib/types";
-import { useTemporaryMessage } from "./useTemporaryMessage";
+import { RemoveInvernadaDialog } from "./remove-invernada-dialog";
 
 /** Formats hectares without an unnecessary decimal (42 -> "42"; 12.5 -> "12,5"). */
 function formatHectares(hectares: number): string {
@@ -249,9 +249,8 @@ export function InvernadasSettings() {
   const lotPlacements = useHerdStore((s) => s.lotPlacements);
   const animals = useHerdStore((s) => s.animals);
   const addInvernada = useHerdStore((s) => s.addInvernada);
-  const removeInvernada = useHerdStore((s) => s.removeInvernada);
   const canEditLots = useCan("lots", "edit");
-  const [removeError, showRemoveError] = useTemporaryMessage(3000);
+  const [removing, setRemoving] = useState<Invernada | null>(null);
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [grass, setGrass] = useState("");
@@ -267,19 +266,11 @@ export function InvernadasSettings() {
     animals
   );
 
-  async function onRemove(invernada: Invernada) {
-    const label = `invernada ${invernada.code}${invernada.name ? ` · ${invernada.name}` : ""}`;
-    if (
-      !window.confirm(
-        `Remover a ${label}? O cadastro e o contorno no mapa serão apagados permanentemente.`
-      )
-    ) {
-      return;
-    }
-    if (!(await removeInvernada(invernada.id))) {
-      showRemoveError("Invernada vinculada a lotes ou histórico — não pode ser removida");
-    }
+  function onRemove(invernada: Invernada) {
+    setRemoving(invernada);
   }
+  const removingLots =
+    summaries.find((summary) => summary.invernada.id === removing?.id)?.lots ?? [];
 
   async function onAdd(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -421,7 +412,13 @@ export function InvernadasSettings() {
           </ul>
         </>
       )}
-      {removeError ? <p className="mt-3 text-sm text-overdue">{removeError}</p> : null}
+      <RemoveInvernadaDialog
+        invernada={removing}
+        currentLots={removingLots}
+        onOpenChange={(open) => {
+          if (!open) setRemoving(null);
+        }}
+      />
       {canEditLots ? (
         <form onSubmit={onAdd} className="mt-4 border-t border-hairline pt-4">
           <p className="mb-3 text-sm font-medium text-ink">Nova invernada</p>

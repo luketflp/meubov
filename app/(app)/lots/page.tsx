@@ -23,12 +23,16 @@ export default function LotsPage() {
   const animals = useHerdStore((state) => state.animals);
   const treatments = useHerdStore((state) => state.treatments);
   const invernadas = useHerdStore((state) => state.invernadas);
+  const removedInvernadas = useHerdStore((state) => state.removedInvernadas);
   const lotPlacements = useHerdStore((state) => state.lotPlacements);
   const manejoSessions = useHerdStore((state) => state.manejoSessions);
 
   // Built on click, from the same selector the sections below draw with.
   const view = () =>
-    lotsByInvernada({ lots, animals, treatments, invernadas, lotPlacements, manejoSessions }, todayISO());
+    lotsByInvernada(
+      { lots, animals, treatments, invernadas, removedInvernadas, lotPlacements, manejoSessions },
+      todayISO()
+    );
   const lotCount = activeLots(lots).length;
 
   return (

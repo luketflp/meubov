@@ -302,6 +302,8 @@ export interface Invernada {
    * order, first point not repeated). Absent while the invernada was never drawn.
    */
   boundary?: [number, number][];
+  /** When it was removed; only the lot history still shows it, as "(removida)". */
+  removedAt?: string;
 }
 
 /** Dated assignment of a logical lot to a physical invernada. */
@@ -391,6 +393,11 @@ export interface HerdData {
   treatments: Treatment[];
   lots: Lot[];
   invernadas: Invernada[];
+  /**
+   * Invernadas removed while past lot placements still pointed at them: kept
+   * only so the lot history can name them, never listed or drawn.
+   */
+  removedInvernadas?: Invernada[];
   lotPlacements: LotPlacement[];
   movements: Movement[];
   breeds: string[];

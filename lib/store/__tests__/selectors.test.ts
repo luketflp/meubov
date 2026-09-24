@@ -20,6 +20,8 @@ import {
   currentlyPlacedLots,
   filterBreedings,
   herdStockingRateAuPerHa,
+  historyInvernadaById,
+  invernadaRemoval,
   invernadasWithSummary,
   lotSummary,
   lotsByInvernada,
@@ -970,5 +972,51 @@ describe("treatmentBatchSize", () => {
     ];
 
     expect(treatmentBatchSize(treatments, target)).toBe(1);
+  });
+});
+
+describe("historyInvernadaById", () => {
+  const active = { id: "inv-1", code: "01", grass: "Braquiária", hectares: 30 };
+  const removed = {
+    id: "inv-7",
+    code: "07",
+    name: "Sede",
+    grass: "Mombaça",
+    hectares: 12,
+    removedAt: "2026-09-23T18:00:00.000Z",
+  };
+
+  it("finds the invernadas on the list and the removed ones, marking the removed", () => {
+    const byId = historyInvernadaById([active], [removed]);
+    expect(byId.get("inv-1")).toBe(active);
+    expect(byId.get("inv-7")).toMatchObject({ code: "07 (removida)", name: "Sede" });
+  });
+
+  it("works without removed invernadas", () => {
+    expect([...historyInvernadaById([active], undefined).keys()]).toEqual(["inv-1"]);
+  });
+});
+
+describe("invernadaRemoval", () => {
+  const placement = (invernadaId: string, endedOn?: string) => ({
+    id: `p-${invernadaId}-${endedOn ?? "now"}`,
+    lotId: "lot-a",
+    invernadaId,
+    startedOn: "2026-01-01",
+    endedOn,
+  });
+
+  it("is free when no lote ever grazed it", () => {
+    expect(invernadaRemoval("inv-7", [placement("inv-1")])).toBe("free");
+  });
+
+  it("is occupied while a lote grazes it", () => {
+    expect(invernadaRemoval("inv-7", [placement("inv-7", "2026-03-01"), placement("inv-7")])).toBe(
+      "occupied"
+    );
+  });
+
+  it("keeps history when only past lotes grazed it", () => {
+    expect(invernadaRemoval("inv-7", [placement("inv-7", "2026-03-01")])).toBe("history");
   });
 });

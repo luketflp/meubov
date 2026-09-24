@@ -124,11 +124,12 @@ export function LotsPaddocks() {
   const animals = useHerdStore((state) => state.animals);
   const treatments = useHerdStore((state) => state.treatments);
   const invernadas = useHerdStore((state) => state.invernadas);
+  const removedInvernadas = useHerdStore((state) => state.removedInvernadas);
   const lotPlacements = useHerdStore((state) => state.lotPlacements);
   const manejoSessions = useHerdStore((state) => state.manejoSessions);
 
   const { sections, free, closed, totals } = lotsByInvernada(
-    { lots, animals, treatments, invernadas, lotPlacements, manejoSessions },
+    { lots, animals, treatments, invernadas, removedInvernadas, lotPlacements, manejoSessions },
     todayISO()
   );
   const freeHectares = free.reduce((sum, item) => sum + item.invernada.hectares, 0);

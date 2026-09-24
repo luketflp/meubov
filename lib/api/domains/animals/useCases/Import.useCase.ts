@@ -112,7 +112,7 @@ export class ImportAnimalsUseCase implements CurrUseCase {
         tx
           .select({ id: invernadas.id, code: invernadas.code })
           .from(invernadas)
-          .where(eq(invernadas.farmId, farmId))
+          .where(and(eq(invernadas.farmId, farmId), isNull(invernadas.removedAt)))
           .for("key share"),
         tx
           .select({ lotId: lotPlacements.lotId, invernadaId: lotPlacements.invernadaId })

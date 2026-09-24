@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import {
@@ -96,7 +96,9 @@ export class UpdateInvernadaUseCase implements CurrUseCase {
       const [current] = await tx
         .select()
         .from(invernadas)
-        .where(and(eq(invernadas.farmId, farmId), eq(invernadas.id, id)))
+        .where(
+          and(eq(invernadas.farmId, farmId), eq(invernadas.id, id), isNull(invernadas.removedAt))
+        )
         .for("update");
       if (!current) return "not_found";
 

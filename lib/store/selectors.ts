@@ -452,6 +452,35 @@ export function invernadasWithSummary(
 }
 
 /**
+ * What removing an invernada does: "free" deletes it, "occupied" waits for its
+ * lotes to be moved, "history" takes it off the lists while the lot history
+ * keeps naming it.
+ */
+export function invernadaRemoval(
+  invernadaId: string,
+  lotPlacements: readonly LotPlacement[]
+): "free" | "occupied" | "history" {
+  const here = lotPlacements.filter((placement) => placement.invernadaId === invernadaId);
+  if (here.some((placement) => placement.endedOn === undefined)) return "occupied";
+  return here.length > 0 ? "history" : "free";
+}
+
+/**
+ * Invernadas by id for a lot's history: the ones on the list plus the removed
+ * ones past placements still point at, whose código reads "07 (removida)".
+ */
+export function historyInvernadaById(
+  invernadas: readonly Invernada[],
+  removedInvernadas: readonly Invernada[] | undefined
+): Map<string, Invernada> {
+  const byId = new Map(invernadas.map((invernada) => [invernada.id, invernada]));
+  for (const invernada of removedInvernadas ?? []) {
+    byId.set(invernada.id, { ...invernada, code: `${invernada.code} (removida)` });
+  }
+  return byId;
+}
+
+/**
  * Everything the ficha of a lote shows, derived from the snapshot: only the
  * ACTIVE animals count, the stocking is the whole invernada's (every lot on
  * it), and the health calendar is read the way the ficha of an animal reads
@@ -460,7 +489,8 @@ export function invernadasWithSummary(
  */
 export function lotSummary(
   lotId: string,
-  state: Pick<HerdData, "lots" | "animals" | "treatments" | "invernadas" | "lotPlacements">,
+  state: Pick<HerdData, "lots" | "animals" | "treatments" | "invernadas" | "lotPlacements"> &
+    Partial<Pick<HerdData, "removedInvernadas">>,
   todayIso: string
 ): LotSummary | null {
   const lot = state.lots.find((item) => item.id === lotId);
@@ -492,7 +522,7 @@ export function lotSummary(
       ? null
       : adgSamples.reduce((sum, value) => sum + value, 0) / adgSamples.length;
 
-  const invernadaById = new Map(state.invernadas.map((invernada) => [invernada.id, invernada]));
+  const invernadaById = historyInvernadaById(state.invernadas, state.removedInvernadas);
   const currentPlacement = currentPlacementForLot(lotId, state.lotPlacements);
   const currentInvernada = currentPlacement
     ? (invernadaById.get(currentPlacement.invernadaId) ?? null)
@@ -632,7 +662,8 @@ export function lotsByInvernada(
   state: Pick<
     HerdData,
     "lots" | "animals" | "treatments" | "invernadas" | "lotPlacements" | "manejoSessions"
-  >,
+  > &
+    Partial<Pick<HerdData, "removedInvernadas">>,
   todayIso: string
 ): LotsByInvernada {
   const lots = activeLots(state.lots);
@@ -645,7 +676,8 @@ export function lotsByInvernada(
     else animalsByLotId.set(animal.lotId, [animal]);
   }
 
-  const invernadaById = new Map(state.invernadas.map((invernada) => [invernada.id, invernada]));
+  // A closed lote's last invernada may since have been removed.
+  const invernadaById = historyInvernadaById(state.invernadas, state.removedInvernadas);
 
   const cardRow = (lot: Lot): LotCardRow => {
     const lotAnimals = animalsByLotId.get(lot.id) ?? [];

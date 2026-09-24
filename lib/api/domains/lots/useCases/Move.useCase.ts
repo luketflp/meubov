@@ -84,7 +84,9 @@ export class MoveLotUseCase implements CurrUseCase {
         .where(
           and(
             eq(invernadas.farmId, farmId),
-            eq(invernadas.id, input.invernadaId)
+            eq(invernadas.id, input.invernadaId),
+            // A removed invernada takes no lote.
+            isNull(invernadas.removedAt)
           )
         )
         .for("key share")

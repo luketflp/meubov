@@ -45,14 +45,20 @@ export default function LotRecordPage() {
   const animals = useHerdStore((s) => s.animals);
   const treatments = useHerdStore((s) => s.treatments);
   const invernadas = useHerdStore((s) => s.invernadas);
+  const removedInvernadas = useHerdStore((s) => s.removedInvernadas);
   const lotPlacements = useHerdStore((s) => s.lotPlacements);
   const customCategories = useHerdStore((s) => s.customCategories);
   const canEditLots = useCan("lots", "edit");
 
   const today = todayISO();
   const summary = useMemo(
-    () => lotSummary(params.id, { lots, animals, treatments, invernadas, lotPlacements }, today),
-    [params.id, lots, animals, treatments, invernadas, lotPlacements, today]
+    () =>
+      lotSummary(
+        params.id,
+        { lots, animals, treatments, invernadas, removedInvernadas, lotPlacements },
+        today
+      ),
+    [params.id, lots, animals, treatments, invernadas, removedInvernadas, lotPlacements, today]
   );
   const rows = useMemo(
     () =>
