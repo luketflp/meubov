@@ -111,10 +111,10 @@ export const BatchRowCard = memo(
               value={row.weightKg}
               onChange={(event) => handlers.onWeight(row.key, event.target.value)}
               inputMode="decimal"
-              placeholder="Peso"
+              placeholder={defaults.weightKg || "Peso"}
               aria-label={`Peso em kg da linha ${line}`}
               aria-invalid={errors.weightKg ? true : undefined}
-              className="min-h-11 bg-panel pr-8 font-mono"
+              className="min-h-11 bg-panel pr-8 font-mono placeholder:text-ink-soft"
             />
             <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-xs text-ink-soft">
               kg

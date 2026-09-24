@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Desktop list of "Cadastrar vários animais": one row per animal. Brinco and
- * Peso are typed; the other cells show the padrão in soft ink and turn ink with
+ * Desktop list of "Cadastrar vários animais": one row per animal. Brinco is
+ * typed; the other cells show the padrão in soft ink and turn ink with
  * a brand dot once the line sets its own value, which the reset icon undoes.
  * Rows are memoized so typing in one line does not re-render the other 499.
  */
@@ -139,6 +139,7 @@ const BatchTableRow = memo(
     const messages = rowErrorMessages(errors);
     const failing = messages.length > 0;
     const birthOverridden = row.overrides.birthDate !== undefined;
+    const weightOverridden = defaults.weightKg.trim() !== "" && row.weightKg.trim() !== "";
 
     return (
       <>
@@ -256,15 +257,33 @@ const BatchTableRow = memo(
             />
           </td>
           <td className="p-2">
-            <Input
-              value={row.weightKg}
-              onChange={(event) => handlers.onWeight(row.key, event.target.value)}
-              inputMode="decimal"
-              placeholder="—"
-              aria-label={`Peso em kg da linha ${line}`}
-              aria-invalid={errors.weightKg ? true : undefined}
-              className="h-8 bg-panel font-mono"
-            />
+            <div className="flex items-center gap-0.5">
+              <div className="relative flex-1">
+                {weightOverridden ? (
+                  <span className="pointer-events-none absolute top-1/2 left-2.5 flex -translate-y-1/2">
+                    <OverrideDot />
+                  </span>
+                ) : null}
+                <Input
+                  value={row.weightKg}
+                  onChange={(event) => handlers.onWeight(row.key, event.target.value)}
+                  inputMode="decimal"
+                  placeholder={defaults.weightKg || "—"}
+                  aria-label={`Peso em kg da linha ${line}`}
+                  aria-invalid={errors.weightKg ? true : undefined}
+                  className={cn(
+                    "h-8 bg-panel font-mono placeholder:text-ink-soft",
+                    weightOverridden && "pl-5"
+                  )}
+                />
+              </div>
+              {weightOverridden ? (
+                <ResetButton
+                  label={`Voltar peso da linha ${line} ao padrão`}
+                  onReset={() => handlers.onWeight(row.key, "")}
+                />
+              ) : null}
+            </div>
           </td>
           <td className="p-2">
             <Button

@@ -19,8 +19,8 @@ export type BatchField = "category" | "breed" | "sex" | "birthDate" | "lotId";
 
 /**
  * The padrão as the form holds it. `category` is a select choice,
- * "base:<category>" or "custom:<id>", and `birthDate` is the text as typed.
- * An empty string means the field is unset.
+ * "base:<category>" or "custom:<id>"; `birthDate` and `weightKg` are the text
+ * as typed. An empty string means the field is unset; the weight is optional.
  */
 export interface BatchDefaults {
   category: string;
@@ -28,15 +28,16 @@ export interface BatchDefaults {
   sex: Sex | "";
   birthDate: string;
   lotId: string;
+  weightKg: string;
 }
 
 /** One line of the list; `overrides` holds only what differs from the padrão. */
 export interface BatchRow {
   key: string;
   earTag: string;
-  /** Text as typed: "182,5" and "182.5" both read. */
+  /** Text as typed: "182,5" and "182.5" both read. Blank takes the padrão's. */
   weightKg: string;
-  overrides: Partial<BatchDefaults>;
+  overrides: Partial<Pick<BatchDefaults, BatchField>>;
 }
 
 /** A line with the padrão filled in. */
@@ -47,7 +48,7 @@ export interface EffectiveRow extends BatchDefaults {
 
 export type BatchRowErrors = Partial<Record<"earTag" | "weightKg" | BatchField, string>>;
 
-export type BatchDefaultErrors = Partial<Record<BatchField, string>>;
+export type BatchDefaultErrors = Partial<Record<keyof BatchDefaults, string>>;
 
 export interface BatchContext {
   /** Every brinco on the farm, active or not: the unique index covers both. */
@@ -190,6 +191,7 @@ export function effectiveRow(
     sex: implied ?? row.overrides.sex ?? defaults.sex,
     birthDate: row.overrides.birthDate ?? defaults.birthDate,
     lotId: row.overrides.lotId ?? defaults.lotId,
+    weightKg: row.weightKg.trim() !== "" ? row.weightKg : defaults.weightKg,
     sexLocked: implied !== null,
   };
 }
@@ -217,7 +219,7 @@ export function withOverride(
     const resolved = resolveCategory(value, customCategories);
     if (resolved && impliedSex(resolved.category)) delete overrides.sex;
   }
-  return { ...row, overrides: overrides as Partial<BatchDefaults> };
+  return { ...row, overrides: overrides as BatchRow["overrides"] };
 }
 
 /** Weight in kg: undefined when blank, null when not a positive number. */
@@ -249,7 +251,7 @@ export function validateBatch(
 ): BatchValidation {
   const existing = new Set(ctx.existingEarTags);
   const firstLine = new Map<string, number>();
-  const needed = new Set<BatchField>();
+  const needed = new Set<keyof BatchDefaults>();
   let filledCount = 0;
   let weighedCount = 0;
   let problemRows = 0;
@@ -269,9 +271,10 @@ export function validateBatch(
     }
     if (earTag !== "" && !firstLine.has(earTag)) firstLine.set(earTag, index + 1);
 
-    const weight = parseWeightKg(row.weightKg);
-    if (weight === null) errors.weightKg = MESSAGES.weightInvalid;
-    else if (weight !== undefined) weighedCount += 1;
+    if (row.weightKg.trim() === "") needed.add("weightKg");
+    const weight = parseWeightKg(row.weightKg.trim() === "" ? defaults.weightKg : row.weightKg);
+    if (weight === null && row.weightKg.trim() !== "") errors.weightKg = MESSAGES.weightInvalid;
+    else if (weight != null) weighedCount += 1;
 
     if (row.overrides.birthDate !== undefined) {
       const birth = checkBirthDate(row.overrides.birthDate, ctx.todayIso);
@@ -300,6 +303,9 @@ export function validateBatch(
     if ("error" in birth) defaultErrors.birthDate = birth.error;
   }
   if (needed.has("lotId") && defaults.lotId === "") defaultErrors.lotId = MESSAGES.lotId;
+  if (needed.has("weightKg") && parseWeightKg(defaults.weightKg) === null) {
+    defaultErrors.weightKg = MESSAGES.weightInvalid;
+  }
 
   return {
     rows: rowErrors,
@@ -328,7 +334,7 @@ export function batchPayloads(
       const effective = effectiveRow(row, defaults, customCategories);
       const category = resolveCategory(effective.category, customCategories);
       const birthDate = parseImportDate(effective.birthDate);
-      const weight = parseWeightKg(row.weightKg);
+      const weight = parseWeightKg(effective.weightKg);
       if (!category || effective.sex === "" || birthDate === null || weight === null) {
         throw new Error(`Batch line ${row.earTag} is not valid; run validateBatch first`);
       }

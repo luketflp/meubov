@@ -25,7 +25,6 @@ import {
   withOverride,
   type BatchDefaultErrors,
   type BatchDefaults,
-  type BatchField,
   type BatchRow,
 } from "@/lib/domain/animalBatch";
 import { activeLots, currentlyPlacedLots } from "@/lib/store/selectors";
@@ -49,7 +48,14 @@ import { EarTagSequenceDialog } from "@/components/herd/batch/EarTagSequenceDial
 import { PasteEarTagsDialog } from "@/components/herd/batch/PasteEarTagsDialog";
 import { useBatchOptions, type BatchRowHandlers } from "@/components/herd/batch/BatchFieldSelects";
 
-const EMPTY_DEFAULTS: BatchDefaults = { category: "", breed: "", sex: "", birthDate: "", lotId: "" };
+const EMPTY_DEFAULTS: BatchDefaults = {
+  category: "",
+  breed: "",
+  sex: "",
+  birthDate: "",
+  lotId: "",
+  weightKg: "",
+};
 
 let lastRowKey = 0;
 const newRowKey = (): string => `row-${++lastRowKey}`;
@@ -123,7 +129,7 @@ export function BatchRegisterForm() {
   // A missing padrão field waits for the first save; a typed one that is wrong shows at once.
   const shownDefaultErrors: BatchDefaultErrors = Object.fromEntries(
     Object.entries(validation.defaults).filter(
-      ([field]) => attempted || defaults[field as BatchField] !== ""
+      ([field]) => attempted || defaults[field as keyof BatchDefaults] !== ""
     )
   );
 
@@ -179,7 +185,7 @@ export function BatchRegisterForm() {
     setExpandedKey((current) => (current === key ? null : key));
   }, []);
 
-  function changeDefault(field: BatchField, value: string) {
+  function changeDefault(field: keyof BatchDefaults, value: string) {
     setDefaults((current) => {
       const next = { ...current, [field]: value };
       if (field === "category") {

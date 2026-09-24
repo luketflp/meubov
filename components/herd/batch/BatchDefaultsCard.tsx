@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * "Padrão do grupo": the five fields every line of the batch inherits unless it
- * overrides them. Follows the single-animal dialog: the categoria can lock the
+ * "Padrão do grupo": the fields every line of the batch inherits unless it
+ * overrides them; the peso is optional and fills only lines left blank. Follows the single-animal dialog: the categoria can lock the
  * sexo, and a farm with no raça or no placed lote sees what is missing instead
  * of an empty list.
  */
-import type { BatchDefaultErrors, BatchDefaults, BatchField } from "@/lib/domain/animalBatch";
+import type { BatchDefaultErrors, BatchDefaults } from "@/lib/domain/animalBatch";
 import type { AnimalPrerequisiteHints } from "@/components/herd/prerequisites";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +20,7 @@ interface BatchDefaultsCardProps {
   options: BatchOptions;
   prerequisites: AnimalPrerequisiteHints;
   sexLocked: boolean;
-  onChange: (field: BatchField, value: string) => void;
+  onChange: (field: keyof BatchDefaults, value: string) => void;
 }
 
 function FieldError({ message }: { message?: string }) {
@@ -109,7 +109,7 @@ export function BatchDefaultsCard({
           )}
         </div>
 
-        <div className="grid gap-1.5 lg:col-span-2">
+        <div className="grid gap-1.5">
           <Label htmlFor="batch-lot">Lote</Label>
           <FieldSelect
             id="batch-lot"
@@ -126,6 +126,27 @@ export function BatchDefaultsCard({
           ) : (
             <FieldError message={errors.lotId} />
           )}
+        </div>
+
+        <div className="grid gap-1.5">
+          <Label htmlFor="batch-weight">
+            Peso <span className="font-normal text-ink-soft">(opcional)</span>
+          </Label>
+          <div className="relative">
+            <Input
+              id="batch-weight"
+              value={defaults.weightKg}
+              onChange={(event) => onChange("weightKg", event.target.value)}
+              inputMode="decimal"
+              placeholder="Ex.: 320"
+              aria-invalid={errors.weightKg ? true : undefined}
+              className="min-h-11 bg-panel pr-9 font-mono"
+            />
+            <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-xs text-ink-soft">
+              kg
+            </span>
+          </div>
+          <FieldError message={errors.weightKg} />
         </div>
       </div>
     </SectionCard>

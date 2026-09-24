@@ -24,9 +24,17 @@ const DEFAULTS: BatchDefaults = {
   sex: "female",
   birthDate: "2025",
   lotId: "lot-1",
+  weightKg: "",
 };
 
-const BLANK_DEFAULTS: BatchDefaults = { category: "", breed: "", sex: "", birthDate: "", lotId: "" };
+const BLANK_DEFAULTS: BatchDefaults = {
+  category: "",
+  breed: "",
+  sex: "",
+  birthDate: "",
+  lotId: "",
+  weightKg: "",
+};
 
 const CUSTOM: CustomCategory[] = [{ id: "cc-1", name: "Garrote", baseCategory: "steer" }];
 
@@ -140,6 +148,16 @@ describe("effectiveRow", () => {
 
     expect(effective.sex).toBe("male");
     expect(effective.sexLocked).toBe(true);
+  });
+});
+
+describe("effectiveRow weight", () => {
+  it("takes the padrão weight unless the line typed its own", () => {
+    const defaults = { ...DEFAULTS, weightKg: "320" };
+
+    expect(effectiveRow(row("BR-1"), defaults, CUSTOM).weightKg).toBe("320");
+    expect(effectiveRow(row("BR-1", { weightKg: "285" }), defaults, CUSTOM).weightKg).toBe("285");
+    expect(effectiveRow(row("BR-1", { weightKg: "  " }), defaults, CUSTOM).weightKg).toBe("320");
   });
 });
 
@@ -267,6 +285,26 @@ describe("validateBatch", () => {
     expect(result.defaults.birthDate).toBe("Data inválida. Use DD/MM/AAAA ou só o ano.");
   });
 
+  it("counts lines that take the padrão weight as weighed", () => {
+    const result = validateBatch(
+      [row("BR-1"), row("BR-2", { weightKg: "285" })],
+      { ...DEFAULTS, weightKg: "320" },
+      ctx()
+    );
+
+    expect(result.weighedCount).toBe(2);
+    expect(result.valid).toBe(true);
+  });
+
+  it("flags a padrão weight that is not a positive number only when a line relies on it", () => {
+    const bad = { ...DEFAULTS, weightKg: "abc" };
+
+    expect(validateBatch([row("BR-1")], bad, ctx()).defaults).toEqual({
+      weightKg: "Informe um peso válido em kg.",
+    });
+    expect(validateBatch([row("BR-1", { weightKg: "285" })], bad, ctx()).defaults).toEqual({});
+  });
+
   it("never passes an empty list", () => {
     const result = validateBatch([row("")], BLANK_DEFAULTS, ctx());
 
@@ -313,5 +351,13 @@ describe("batchPayloads", () => {
         lotId: "lot-1",
       },
     ]);
+  });
+
+  it("sends the padrão weight for lines without their own", () => {
+    const rows = [row("BR-1"), row("BR-2", { weightKg: "285" })];
+
+    expect(
+      batchPayloads(rows, { ...DEFAULTS, weightKg: "320,5" }, CUSTOM).map((a) => a.initialWeightKg)
+    ).toEqual([320.5, 285]);
   });
 });
