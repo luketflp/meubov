@@ -148,6 +148,21 @@ export const expenseCategoryEnum = pgEnum("expense_category", [
   "other",
 ]);
 
+/** Whether a lançamento is money out (despesa) or money in (receita). */
+export const entryKindEnum = pgEnum("entry_kind", ["expense", "revenue"]);
+
+/** Grupo of a conta: the seven expense categories plus receitas. */
+export const accountGroupEnum = pgEnum("account_group", [
+  "nutrition",
+  "pasture",
+  "labor",
+  "health",
+  "breeding",
+  "admin",
+  "other",
+  "revenue",
+]);
+
 /** Why an animal left the active herd. */
 export const inactiveReasonEnum = pgEnum("inactive_reason", [
   "sale",
@@ -554,7 +569,32 @@ export const movements = pgTable("movements", {
   notes: text("notes"),
 });
 
-/** Farm expense (cost outside the sanitary treatments). */
+/**
+ * A conta of the farm's plano de contas, inside one grupo. Never deleted: a
+ * conta with lançamentos is archived, which hides it from the form and keeps
+ * the history.
+ */
+export const accounts = pgTable(
+  "accounts",
+  {
+    id: text("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farm.id, { onDelete: "cascade" }),
+    group: accountGroupEnum("group").notNull(),
+    name: text("name").notNull(),
+    archivedAt: timestamp("archived_at"),
+  },
+  // Names are unique per grupo ignoring case: "sal mineral" and "Sal mineral" are one conta.
+  (t) => [
+    uniqueIndex("accounts_farm_id_group_name_idx").on(t.farmId, t.group, sql`lower(${t.name})`),
+  ]
+);
+
+/**
+ * A lançamento: one line of money the farm typed, a despesa or a receita
+ * (costs outside the sanitary treatments, revenue outside the vendas).
+ */
 export const expenses = pgTable(
   "expenses",
   {
@@ -562,10 +602,24 @@ export const expenses = pgTable(
     farmId: integer("farm_id")
       .notNull()
       .references(() => farm.id, { onDelete: "cascade" }),
+    kind: entryKindEnum("kind").notNull().default("expense"),
+    /** Competência. */
     date: date("date").notNull(),
+    /** Grupo; a receita writes "other" and nothing reads it. */
     category: expenseCategoryEnum("category").notNull(),
     amountBrl: numeric("amount_brl", { mode: "number" }).notNull(),
     notes: text("notes"),
+    /** Vencimento; null means `date`. */
+    dueDate: date("due_date"),
+    /** Day it was paid or received; null means pendente. */
+    paidAt: date("paid_at"),
+    /** Pago para / recebido de, free text. */
+    counterparty: text("counterparty"),
+    /** "NF 4.812", free text. */
+    document: text("document"),
+    accountId: text("account_id").references(() => accounts.id, { onDelete: "set null" }),
+    /** Centro de custo; null means the whole farm. */
+    lotId: text("lot_id").references(() => lots.id, { onDelete: "set null" }),
   },
   (t) => [index("expenses_farm_id_date_idx").on(t.farmId, t.date)]
 );
@@ -694,6 +748,7 @@ export type PregnancyDiagnosisRow = typeof pregnancyDiagnoses.$inferSelect;
 export type CalvingRow = typeof calvings.$inferSelect;
 export type MovementRow = typeof movements.$inferSelect;
 export type ExpenseRow = typeof expenses.$inferSelect;
+export type FarmAccountRow = typeof accounts.$inferSelect;
 export type CustomCategoryRow = typeof customCategories.$inferSelect;
 export type HealthProtocolRow = typeof healthProtocols.$inferSelect;
 export type ManejoSessionRow = typeof manejoSessions.$inferSelect;

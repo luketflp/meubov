@@ -63,6 +63,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     children: [
       { label: "Equipe", href: "/settings/equipe", area: "team" },
       { label: "Fazendas", href: "/settings/fazendas" },
+      { label: "Plano de contas", href: "/settings/plano-de-contas", area: "finance" },
     ],
   },
 ];

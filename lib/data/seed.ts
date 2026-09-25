@@ -7,6 +7,7 @@
  * campaigns and calving forecasts are consistent with this date.
  */
 import type {
+  Account,
   Animal,
   Breeding,
   Expense,
@@ -200,41 +201,109 @@ const NUTRITION_BY_MONTH: readonly number[] = [
 const LABOR_MONTHLY = 2600;
 const ADMIN_MONTHLY = 480;
 
+/**
+ * The farm's plano de contas: the standard list, with fixed ids so the seed
+ * expenses can point at them. Mirrors DEFAULT_ACCOUNTS in lib/domain/accounts.ts.
+ */
+const SEED_ACCOUNTS: readonly Account[] = [
+  { id: "acc-revenue-aluguel-de-pasto", group: "revenue", name: "Aluguel de pasto" },
+  { id: "acc-revenue-venda-de-esterco", group: "revenue", name: "Venda de esterco" },
+  { id: "acc-revenue-outras-receitas", group: "revenue", name: "Outras receitas" },
+  { id: "acc-nutrition-sal-mineral", group: "nutrition", name: "Sal mineral" },
+  { id: "acc-nutrition-racao-e-suplemento", group: "nutrition", name: "Ração e suplemento" },
+  { id: "acc-nutrition-silagem", group: "nutrition", name: "Silagem" },
+  { id: "acc-pasture-adubo", group: "pasture", name: "Adubo" },
+  { id: "acc-pasture-sementes", group: "pasture", name: "Sementes" },
+  { id: "acc-pasture-herbicida", group: "pasture", name: "Herbicida" },
+  { id: "acc-pasture-rocada", group: "pasture", name: "Roçada" },
+  { id: "acc-labor-salarios", group: "labor", name: "Salários" },
+  { id: "acc-labor-encargos", group: "labor", name: "Encargos" },
+  { id: "acc-labor-diarias", group: "labor", name: "Diárias" },
+  { id: "acc-health-vacinas", group: "health", name: "Vacinas" },
+  { id: "acc-health-vermifugos", group: "health", name: "Vermífugos" },
+  { id: "acc-health-medicamentos", group: "health", name: "Medicamentos" },
+  { id: "acc-health-veterinario", group: "health", name: "Veterinário" },
+  { id: "acc-breeding-semen", group: "breeding", name: "Sêmen" },
+  { id: "acc-breeding-iatf-e-hormonios", group: "breeding", name: "IATF e hormônios" },
+  { id: "acc-breeding-touros", group: "breeding", name: "Touros" },
+  { id: "acc-admin-energia", group: "admin", name: "Energia" },
+  { id: "acc-admin-combustivel", group: "admin", name: "Combustível" },
+  { id: "acc-admin-manutencao", group: "admin", name: "Manutenção" },
+  { id: "acc-admin-impostos-e-taxas", group: "admin", name: "Impostos e taxas" },
+  { id: "acc-admin-contabilidade", group: "admin", name: "Contabilidade" },
+];
+
+/** A despesa paid on its own date: kind and paidAt are filled by buildExpenses. */
+type PaidExpense = Omit<Expense, "id" | "kind" | "paidAt">;
+
 /** One-off expenses: pasture upkeep, breeding, extra health and misc. */
-const ONE_OFF_EXPENSES: readonly Omit<Expense, "id">[] = [
-  { date: "2025-09-15", category: "pasture", amountBrl: 2900, notes: "Adubação das pastagens" },
-  { date: "2026-01-20", category: "pasture", amountBrl: 1400, notes: "Sementes de braquiária" },
-  { date: "2026-03-18", category: "pasture", amountBrl: 1650, notes: "Roçada e reparo de cercas" },
+const ONE_OFF_EXPENSES: readonly PaidExpense[] = [
+  { date: "2025-09-15", category: "pasture", amountBrl: 2900, notes: "Adubação das pastagens", accountId: "acc-pasture-adubo" },
+  { date: "2026-01-20", category: "pasture", amountBrl: 1400, notes: "Sementes de braquiária", accountId: "acc-pasture-sementes" },
+  { date: "2026-03-18", category: "pasture", amountBrl: 1650, notes: "Roçada e reparo de cercas", accountId: "acc-pasture-rocada" },
   { date: "2026-06-10", category: "pasture", amountBrl: 900 },
-  { date: "2025-11-05", category: "breeding", amountBrl: 2100, notes: "Protocolo IATF" },
-  { date: "2026-01-15", category: "breeding", amountBrl: 1300, notes: "Doses de sêmen" },
-  { date: "2025-10-12", category: "health", amountBrl: 850, notes: "Consulta veterinária" },
+  { date: "2025-11-05", category: "breeding", amountBrl: 2100, notes: "Protocolo IATF", accountId: "acc-breeding-iatf-e-hormonios", lotId: "lot-1" },
+  { date: "2026-01-15", category: "breeding", amountBrl: 1300, notes: "Doses de sêmen", accountId: "acc-breeding-semen", lotId: "lot-1" },
+  { date: "2025-10-12", category: "health", amountBrl: 850, notes: "Consulta veterinária", accountId: "acc-health-veterinario", lotId: "lot-3" },
   { date: "2026-02-08", category: "health", amountBrl: 620 },
-  { date: "2026-05-11", category: "health", amountBrl: 1200, notes: "Campanha de aftosa" },
+  { date: "2026-05-11", category: "health", amountBrl: 1200, notes: "Campanha de aftosa", accountId: "acc-health-vacinas" },
   { date: "2025-12-18", category: "other", amountBrl: 700, notes: "Combustível" },
   { date: "2026-04-22", category: "other", amountBrl: 540 },
 ];
 
+/**
+ * Receitas typed by hand and contas still open at the real "today" of the
+ * demo (September 2026): Sal mineral is vencida, Salários and Energia a pagar.
+ */
+const OPEN_AND_REVENUE_ENTRIES: readonly Omit<Expense, "id">[] = [
+  {
+    kind: "revenue", date: "2026-08-12", category: "other", amountBrl: 1800,
+    paidAt: "2026-08-12", accountId: "acc-revenue-venda-de-esterco",
+  },
+  {
+    kind: "revenue", date: "2026-09-05", category: "other", amountBrl: 6400,
+    paidAt: "2026-09-05", accountId: "acc-revenue-aluguel-de-pasto",
+  },
+  {
+    kind: "expense", date: "2026-09-10", dueDate: "2026-09-30", category: "labor",
+    amountBrl: 8400, accountId: "acc-labor-salarios",
+  },
+  {
+    kind: "expense", date: "2026-09-18", dueDate: "2026-09-18", category: "nutrition",
+    amountBrl: 4850, accountId: "acc-nutrition-sal-mineral",
+  },
+  {
+    kind: "expense", date: "2026-09-20", dueDate: "2026-09-28", category: "admin",
+    amountBrl: 1320, accountId: "acc-admin-energia",
+  },
+];
+
 /** Deterministic expense book: monthly recurring rows + one-offs, date asc. */
 function buildExpenses(): Expense[] {
-  const rows: Omit<Expense, "id">[] = [];
+  const rows: PaidExpense[] = [];
   EXPENSE_MONTHS.forEach((month, i) => {
     rows.push({
       date: `${month}-05`,
       category: "nutrition",
       amountBrl: NUTRITION_BY_MONTH[i],
       notes: "Ração e sal mineral",
+      accountId: "acc-nutrition-racao-e-suplemento",
     });
     rows.push({
       date: `${month}-01`,
       category: "labor",
       amountBrl: LABOR_MONTHLY,
       notes: "Diárias e encargos",
+      accountId: "acc-labor-diarias",
     });
     rows.push({ date: `${month}-10`, category: "admin", amountBrl: ADMIN_MONTHLY });
   });
   rows.push(...ONE_OFF_EXPENSES);
-  return rows
+  const entries: Omit<Expense, "id">[] = [
+    ...rows.map((row) => ({ ...row, kind: "expense" as const, paidAt: row.date })),
+    ...OPEN_AND_REVENUE_ENTRIES,
+  ];
+  return entries
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
     .map((row, i) => ({ ...row, id: `expense-${i + 1}` }));
 }
@@ -649,6 +718,7 @@ export function generateInitialData(): HerdData {
     protocols: PROTOCOLS.map((p) => ({ ...p })),
     manejoSessions: movementSessions,
     expenses: buildExpenses(),
+    accounts: SEED_ACCOUNTS.map((account) => ({ ...account })),
     customCategories: [],
     semenBulls: [],
     farm: { ...FARM },

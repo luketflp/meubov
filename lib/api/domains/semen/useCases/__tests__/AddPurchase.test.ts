@@ -70,7 +70,12 @@ describe("addSemenPurchase", () => {
   });
 
   it("writes the expense, then the purchase pointing at it", async () => {
-    state.selectResults = [[{ id: "bull-1", name: "Tufão da Serra" }]];
+    state.selectResults = [
+      // 1. the bull of the farm
+      [{ id: "bull-1", name: "Tufão da Serra", central: "CRV Lagoa" }],
+      // 2. the farm's active "Sêmen" conta in Reprodução
+      [{ id: "acc-semen" }],
+    ];
 
     const result = await new AddPurchaseUseCase().run({
       farmId: 7,
@@ -82,9 +87,14 @@ describe("addSemenPurchase", () => {
     const [expense, purchase] = state.inserts.map((insert) => insert.row);
     expect(expense).toMatchObject({
       farmId: 7,
+      kind: "expense",
       date: "2026-08-20",
+      paidAt: "2026-08-20",
+      dueDate: null,
       category: "breeding",
       amountBrl: 42.5,
+      counterparty: "CRV Lagoa",
+      accountId: "acc-semen",
       notes: "Sêmen — Tufão da Serra, 1 dose",
     });
     expect(purchase).toMatchObject({
@@ -105,11 +115,27 @@ describe("addSemenPurchase", () => {
       },
       expense: {
         id: expense.id,
+        kind: "expense",
         date: "2026-08-20",
+        paidAt: "2026-08-20",
         category: "breeding",
         amountBrl: 42.5,
+        counterparty: "CRV Lagoa",
+        accountId: "acc-semen",
         notes: "Sêmen — Tufão da Serra, 1 dose",
       },
     });
+  });
+
+  it("leaves the conta and the counterparty empty when the farm has neither", async () => {
+    state.selectResults = [[{ id: "bull-1", name: "Tufão da Serra", central: null }], []];
+
+    await new AddPurchaseUseCase().run({
+      farmId: 7,
+      bullId: "bull-1",
+      input: { date: "2026-08-20", doses: 10, totalBrl: 400 },
+    });
+
+    expect(state.inserts[0].row).toMatchObject({ counterparty: null, accountId: null });
   });
 });

@@ -19,6 +19,7 @@ export function useReportData(): HerdData {
   const protocols = useHerdStore((s) => s.protocols);
   const manejoSessions = useHerdStore((s) => s.manejoSessions);
   const expenses = useHerdStore((s) => s.expenses);
+  const accounts = useHerdStore((s) => s.accounts);
   const customCategories = useHerdStore((s) => s.customCategories);
   const semenBulls = useHerdStore((s) => s.semenBulls);
   const farm = useHerdStore((s) => s.farm);
@@ -34,6 +35,7 @@ export function useReportData(): HerdData {
       protocols,
       manejoSessions,
       expenses,
+      accounts,
       customCategories,
       semenBulls,
       farm,
@@ -49,6 +51,7 @@ export function useReportData(): HerdData {
       protocols,
       manejoSessions,
       expenses,
+      accounts,
       customCategories,
       semenBulls,
       farm,

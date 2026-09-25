@@ -12,7 +12,7 @@ const data = makeData({
     makeAnimal({ earTag: "C", active: false, inactiveDate: "2026-05-01", inactiveReason: "death" }),
   ],
   treatments: [makeTreatment({ animalEarTag: "A", costBrl: 12 })],
-  expenses: [{ id: "e1", date: "2026-02-01", category: "nutrition", amountBrl: 500 }],
+  expenses: [{ id: "e1", kind: "expense", date: "2026-02-01", category: "nutrition", amountBrl: 500 }],
 });
 
 describe("reportDatasets", () => {

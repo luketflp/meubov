@@ -2,7 +2,7 @@
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Period } from "@/lib/domain/finance";
-import { shiftPeriodByMonths } from "@/components/dashboard/period";
+import { shiftPeriodByMonths } from "@/lib/domain/period";
 
 interface PeriodPickerProps {
   value: Period;

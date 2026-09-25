@@ -21,6 +21,7 @@ import { animalsController } from "@/lib/api/domains/animals/animals.controller"
 import { weighingsController } from "@/lib/api/domains/animals/weighings.controller";
 import { breedsController } from "@/lib/api/domains/breeds/breeds.controller";
 import { categoriesController } from "@/lib/api/domains/categories/categories.controller";
+import { accountsController } from "@/lib/api/domains/accounts/accounts.controller";
 import { expensesController } from "@/lib/api/domains/expenses/expenses.controller";
 import { farmController } from "@/lib/api/domains/farm/farm.controller";
 import { herdController } from "@/lib/api/domains/herd/herd.controller";
@@ -71,9 +72,10 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
   .use(birthsController)
   .use(semenController)
 
-  /* ---- Custom herd categories, expenses ---------------------------------- */
+  /* ---- Custom herd categories, lançamentos, plano de contas -------------- */
   .use(categoriesController)
   .use(expensesController)
+  .use(accountsController)
 
   /* ---- Manejo sessions --------------------------------------------------- */
   .use(manejoController);

@@ -1,174 +1,165 @@
 "use client";
 
-import { useMemo } from "react";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
-import { RequireAccess } from "@/components/layout/RequireAccess";
-import { MarketNotice } from "@/components/finance/MarketNotice";
-import { FinanceKpis } from "@/components/finance/FinanceKpis";
-import { RevenueCostChart } from "@/components/finance/RevenueCostChart";
-import { QuoteChart } from "@/components/finance/QuoteChart";
-import { CostBreakdownChart } from "@/components/finance/CostBreakdownChart";
-import { LivestockIndicators } from "@/components/finance/LivestockIndicators";
-import {
-  CategorySalesTable,
-  categorySalesRows,
-  categorySalesTotal,
-} from "@/components/finance/CategorySalesTable";
-import { ExportMenu } from "@/components/export/ExportMenu";
-import { categorySalesExportTable, expensesExportTable } from "@/lib/export/datasets/finance";
-import { formatCurrency } from "@/lib/domain/format";
-import { ExpensesList } from "@/components/finance/ExpensesList";
+/**
+ * Financeiro: the owner's cockpit for the window in the URL (?de&ate) — caixa,
+ * the eight indicators against their references and the year before, receita
+ * × custo, mercado, composição, contas, custo por lote and the newest
+ * lançamentos. Every figure follows the window.
+ */
+import { Suspense, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
-import { activeAnimals } from "@/lib/store/selectors";
 import { useArrobaQuote } from "@/lib/data/useArrobaQuote";
-import { todayISO } from "@/lib/domain/dates";
-import { kgToArroba, totalWeightKg } from "@/lib/domain/weights";
-import { herdValue, periodResult } from "@/lib/domain/finance";
+import { parseISODate, todayISO } from "@/lib/domain/dates";
+import { inPeriod, periodFromSearch, periodSearch, priorPeriod, type Period } from "@/lib/domain/period";
 import {
-  annualRevenue,
-  arrobasProducedPerYear,
-  averageArrobasPerSteer,
-  averageCalfPrice,
-  capitalTurnoverRatio,
-  costBreakdown,
-  dailyCostPerHead,
-  headSoldLast12m,
+  costBreakdownBetween,
+  indicatorDeltas,
+  indicators,
   monthlyRevenueCost,
-  offtakeRate,
-  productionCostPerArroba,
-  productivityPerHa,
-  steerToCalfExchange,
-  totalCostLast12m,
+  type EconomicsInputs,
 } from "@/lib/domain/economics";
+import { cashSummary, ledgerRows, pendingBills } from "@/lib/domain/ledger";
+import { lotEconomics } from "@/lib/domain/lotEconomics";
+import { RequireAccess } from "@/components/layout/RequireAccess";
+import { FinanceHeader } from "@/components/finance/FinanceHeader";
+import { CashStrip } from "@/components/finance/CashStrip";
+import { Placar } from "@/components/finance/Placar";
+import { RevenueCostChart } from "@/components/finance/RevenueCostChart";
+import { MarketPanel } from "@/components/finance/MarketPanel";
+import { CostBreakdownCard } from "@/components/finance/CostBreakdownCard";
+import { BillsCard } from "@/components/finance/BillsCard";
+import { LotsEconomicsCard } from "@/components/finance/LotsEconomicsCard";
+import { RecentEntriesCard } from "@/components/finance/RecentEntriesCard";
 
-/** Opened by URL without Financeiro, the page is the "Porteira fechada" of NoAccess, not a screen of zeros. */
+/**
+ * Opened by URL without Financeiro, the page is the "Porteira fechada" of
+ * NoAccess. The window lives in the URL query, which useSearchParams reads
+ * inside a Suspense boundary.
+ */
 export default function FinancePage() {
   return (
     <RequireAccess area="finance" level="view">
-      <FinanceContent />
+      <Suspense fallback={null}>
+        <FinanceContent />
+      </Suspense>
     </RequireAccess>
   );
 }
 
+/** Calendar months from the window's first month through its last, inclusive. */
+function monthsSpanned(period: Period): number {
+  const start = parseISODate(period.start);
+  const end = parseISODate(period.end);
+  return Math.max(1, (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth() + 1);
+}
+
 function FinanceContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const canEdit = useCan("finance", "edit");
-  const animals = useHerdStore((state) => state.animals);
-  const invernadas = useHerdStore((state) => state.invernadas);
-  const movements = useHerdStore((state) => state.movements);
-  const treatments = useHerdStore((state) => state.treatments);
-  const expenses = useHerdStore((state) => state.expenses);
-
-  // Live arroba quote (Scot + IPEADATA); null price = every @-figure shows "—".
+  const animals = useHerdStore((s) => s.animals);
+  const manejoSessions = useHerdStore((s) => s.manejoSessions);
+  const movements = useHerdStore((s) => s.movements);
+  const treatments = useHerdStore((s) => s.treatments);
+  const expenses = useHerdStore((s) => s.expenses);
+  const invernadas = useHerdStore((s) => s.invernadas);
+  const lots = useHerdStore((s) => s.lots);
+  const accounts = useHerdStore((s) => s.accounts);
+  // Live arroba quote; null price = every @-figure shows "—".
   const quote = useArrobaQuote();
-  const active = activeAnimals(animals);
-  const totalArrobas = kgToArroba(totalWeightKg(active));
-  const totalHerdValue =
-    quote.price === null ? null : herdValue(totalArrobas, quote.price);
+  const today = todayISO();
 
-  // Real revenue × cost of the last 12 months, from the farm's records.
-  const series = useMemo(
-    () => monthlyRevenueCost(movements, treatments, expenses, 12, todayISO()),
-    [movements, treatments, expenses]
+  const period = useMemo(() => periodFromSearch(searchParams, today), [searchParams, today]);
+  const setPeriod = (next: Period) =>
+    router.replace(`/finance?${periodSearch(next)}`, { scroll: false });
+
+  const inputs = useMemo<EconomicsInputs>(
+    () => ({ animals, manejoSessions, movements, treatments, expenses, invernadas, lots }),
+    [animals, manejoSessions, movements, treatments, expenses, invernadas, lots]
   );
-  const result = periodResult(
-    series.map((month) => month.revenue),
-    series.map((month) => month.cost)
+  const ind = useMemo(
+    () => indicators(inputs, period, quote.price, today),
+    [inputs, period, quote.price, today]
+  );
+  const prior = useMemo(
+    () => indicators(inputs, priorPeriod(period), quote.price, today),
+    [inputs, period, quote.price, today]
+  );
+  const deltas = useMemo(() => indicatorDeltas(ind, prior), [ind, prior]);
+  const cash = useMemo(
+    () => cashSummary({ expenses, movements, treatments }, period, today),
+    [expenses, movements, treatments, period, today]
+  );
+  const rows = useMemo(
+    () => ledgerRows({ ...inputs, accounts }, period, today),
+    [inputs, accounts, period, today]
+  );
+  const lotEcon = useMemo(
+    () => lotEconomics(inputs, period, quote.price, today),
+    [inputs, period, quote.price, today]
+  );
+  // Records filtered to the window first, so the legend totals equal ind.revenue and ind.coe.
+  const series = useMemo(
+    () =>
+      monthlyRevenueCost(
+        movements.filter((m) => inPeriod(m.date, period)),
+        treatments.filter((t) => inPeriod(t.date, period)),
+        expenses.filter((e) => inPeriod(e.date, period)),
+        monthsSpanned(period),
+        period.end
+      ),
+    [movements, treatments, expenses, period]
   );
   const breakdown = useMemo(
-    () => costBreakdown(expenses, treatments, 12, todayISO()),
-    [expenses, treatments]
+    () => costBreakdownBetween(expenses, treatments, period.start, period.end),
+    [expenses, treatments, period]
   );
-
-  // Indicators — each null when the records can't support it yet.
-  const totalCost12m = totalCostLast12m(expenses, treatments, todayISO());
-  const revenue12m = annualRevenue(movements, todayISO());
-  const headSold = headSoldLast12m(movements, todayISO());
-  const steerArrobas = averageArrobasPerSteer(animals);
-  const arrobasYear = arrobasProducedPerYear(movements, animals, todayISO());
-  const costPerArroba = productionCostPerArroba(totalCost12m, arrobasYear);
-  const grossMarginArroba =
-    quote.price === null || costPerArroba === null
-      ? null
-      : quote.price - costPerArroba;
-  const totalHectares = invernadas.reduce(
-    (sum, invernada) => sum + invernada.hectares,
-    0
-  );
-  const exchangeRatio = steerToCalfExchange(
-    quote.price,
-    steerArrobas,
-    averageCalfPrice(movements, todayISO())
-  );
-
-  // The export: every despesa, and the vendas by categoria while the quote is live.
-  const salesRows = quote.price === null ? [] : categorySalesRows(active, quote.price);
-  const expensesCount = expenses.length === 1 ? "1 despesa" : `${expenses.length} despesas`;
-  const exportMenu = (
-    <ExportMenu
-      title="Financeiro"
-      formats={["xlsx", "print"]}
-      current={{
-        label: "Financeiro",
-        detail:
-          salesRows.length > 0 ? `${expensesCount} · vendas por categoria` : expensesCount,
-        filters:
-          quote.price === null ? [] : [`Cotação da arroba: ${formatCurrency(quote.price)}`],
-        build: () => [
-          expensesExportTable(expenses),
-          ...(salesRows.length > 0
-            ? [categorySalesExportTable(salesRows, categorySalesTotal(salesRows))]
-            : []),
-        ],
-      }}
-      hint="Duas tabelas: todas as despesas e o faturamento estimado por categoria na cotação do dia. O CSV das despesas fica no card Despesas."
-    />
-  );
+  const bills = useMemo(() => pendingBills(expenses, today), [expenses, today]);
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 md:px-8">
-      <PageHeader
-        title="Financeiro"
-        subtitle="Indicadores da pecuária de corte"
-        badges={canEdit ? undefined : <ReadOnlyPill />}
-        actions={exportMenu}
+      <FinanceHeader
+        period={period}
+        onPeriodChange={setPeriod}
+        canEdit={canEdit}
+        ind={ind}
+        prior={prior}
+        lots={lotEcon.lots}
+        farm={lotEcon.farm}
       />
 
-      <MarketNotice
-        quoteLive={quote.live}
-        quoteSourceLabel={quote.sourceLabel}
-        seriesSourceLabel={quote.seriesSourceLabel}
-      />
+      <CashStrip cash={cash} />
 
-      <FinanceKpis
-        arrobaPrice={quote.price}
-        monthlyChangePct={quote.changePct}
-        totalHerdValue={totalHerdValue}
-        totalArrobas={totalArrobas}
-        result={result}
-        costPerArroba={costPerArroba}
-        grossMarginArroba={grossMarginArroba}
-      />
+      <Placar ind={ind} deltas={deltas} quote={quote.price} />
 
-      <RevenueCostChart months={series} />
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <QuoteChart series={quote.series} sourceLabel={quote.seriesSourceLabel} />
-        <CostBreakdownChart breakdown={breakdown} totalCost={result.totalCost} />
-      </div>
-
-      <ExpensesList />
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <LivestockIndicators
-          exchangeRatio={exchangeRatio}
-          offtakeRate={offtakeRate(headSold, active.length)}
-          productivity={productivityPerHa(arrobasYear, totalHectares)}
-          dailyCost={dailyCostPerHead(totalCost12m, active.length)}
-          turnover={capitalTurnoverRatio(revenue12m, totalHerdValue)}
-        />
-        <CategorySalesTable animals={active} arrobaPrice={quote.price} />
+      {/* Desktop reads in rows; the phone reorders to chart, composição, contas, lançamentos, lotes, mercado. */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12">
+        <div className="order-1 lg:col-span-7">
+          <RevenueCostChart months={series} />
+        </div>
+        <div className="order-6 lg:order-2 lg:col-span-5">
+          <MarketPanel quote={quote} ind={ind} />
+        </div>
+        <div className="order-2 lg:order-3 lg:col-span-6">
+          <CostBreakdownCard
+            breakdown={breakdown}
+            expenses={expenses}
+            treatments={treatments}
+            accounts={accounts}
+            period={period}
+          />
+        </div>
+        <div className="order-3 lg:order-4 lg:col-span-6">
+          <BillsCard payables={bills.payables} receivables={bills.receivables} canEdit={canEdit} />
+        </div>
+        <div className="order-5 lg:col-span-12">
+          <LotsEconomicsCard lots={lotEcon.lots} farm={lotEcon.farm} quote={quote.price} />
+        </div>
+        <div className="order-4 lg:order-6 lg:col-span-12">
+          <RecentEntriesCard rows={rows} period={period} />
+        </div>
       </div>
     </div>
   );

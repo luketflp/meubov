@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateAdg, herdAdgSamples, herdAverageAdg, monthlyAdg } from "@/lib/domain/adg";
+import { calculateAdg, herdAdgSamples, herdAverageAdg, monthlyAdg, periodAdg } from "@/lib/domain/adg";
 import { makeAnimal } from "./fixtures";
 
 describe("calculateAdg", () => {
@@ -122,5 +122,52 @@ describe("herdAdgSamples / herdAverageAdg", () => {
     expect(herdAverageAdg(animals, today)).toBeCloseTo((60 / 105 + 1) / 2, 6);
     expect(herdAverageAdg([animals[2]], today)).toBeNull();
     expect(herdAdgSamples([animals[2]], today)).toEqual([]);
+  });
+});
+
+describe("periodAdg", () => {
+  const period = { start: "2026-01-01", end: "2026-06-30" };
+
+  it("averages the animals weighed twice inside the window, 30+ days apart", () => {
+    const animals = [
+      // 300 → 360 kg from 2026-01-01 to 2026-03-02 (60 days): 1 kg/day; the 2025 weighing is outside.
+      makeAnimal({
+        weighings: [
+          { date: "2025-11-01", weightKg: 250 },
+          { date: "2026-01-01", weightKg: 300 },
+          { date: "2026-03-02", weightKg: 360 },
+        ],
+      }),
+      // 200 → 230 kg in 60 days: 0.5 kg/day; a sold animal still counts.
+      makeAnimal({
+        earTag: "BR-002",
+        active: false,
+        weighings: [
+          { date: "2026-04-01", weightKg: 200 },
+          { date: "2026-05-31", weightKg: 230 },
+        ],
+      }),
+      // 29 days apart: left out.
+      makeAnimal({
+        earTag: "BR-003",
+        weighings: [
+          { date: "2026-06-01", weightKg: 200 },
+          { date: "2026-06-30", weightKg: 230 },
+        ],
+      }),
+      // The second weighing is after the window: left out.
+      makeAnimal({
+        earTag: "BR-004",
+        weighings: [
+          { date: "2026-05-01", weightKg: 200 },
+          { date: "2026-07-15", weightKg: 250 },
+        ],
+      }),
+    ];
+    expect(periodAdg(animals, period)).toEqual({ kgPerDay: 0.75, animals: 2 });
+  });
+
+  it("is null when no animal qualifies", () => {
+    expect(periodAdg([], period)).toEqual({ kgPerDay: null, animals: 0 });
   });
 });

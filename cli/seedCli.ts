@@ -278,15 +278,34 @@ async function seed(email: string, force: boolean): Promise<void> {
         );
       }
 
+      const accountIdMap = new Map(data.accounts.map((a) => [a.id, randomUUID()]));
+      if (data.accounts.length > 0) {
+        await tx.insert(schema.accounts).values(
+          data.accounts.map((a) => ({
+            id: accountIdMap.get(a.id)!,
+            farmId,
+            group: a.group,
+            name: a.name,
+          }))
+        );
+      }
+
       if (data.expenses.length > 0) {
         await tx.insert(schema.expenses).values(
           data.expenses.map((e) => ({
             id: randomUUID(),
             farmId,
+            kind: e.kind,
             date: e.date,
             category: e.category,
             amountBrl: e.amountBrl,
             notes: e.notes,
+            dueDate: e.dueDate,
+            paidAt: e.paidAt,
+            counterparty: e.counterparty,
+            document: e.document,
+            accountId: e.accountId === undefined ? undefined : accountIdMap.get(e.accountId)!,
+            lotId: e.lotId === undefined ? undefined : lotIdMap.get(e.lotId)!,
           }))
         );
       }
@@ -312,6 +331,7 @@ async function seed(email: string, force: boolean): Promise<void> {
           `${data.invernadas.length} invernadas, ${data.lotPlacements.length} placements, ` +
           `${data.manejoSessions.length} manejo sessions, ` +
           `${data.movements.length} legacy movements, ${data.protocols.length} protocols, ` +
+          `${data.accounts.length} accounts, ` +
           `${data.expenses.length} expenses.`
       );
     });

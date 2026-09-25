@@ -148,6 +148,13 @@
       "when": 1790216932986,
       "tag": "0020_invernada-removida",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790286488476,
+      "tag": "0021_financeiro-lancamentos-e-plano-de-contas",
+      "breakpoints": true
     }
   ]
 }

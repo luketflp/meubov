@@ -2,6 +2,7 @@
  * ADG (average daily gain) calculation for the herd.
  */
 import type { Animal, Weighing } from "@/lib/types";
+import type { Period } from "@/lib/domain/finance";
 import {
   addDays,
   daysBetween,
@@ -116,4 +117,35 @@ export function herdAverageAdg(
   const adgs = herdAdgSamples(animals, todayIso, days);
   if (adgs.length === 0) return null;
   return adgs.reduce((sum, g) => sum + g, 0) / adgs.length;
+}
+
+/** Shortest span between two weighings that says something about gain. */
+const PERIOD_ADG_MIN_DAYS = 30;
+
+/**
+ * Herd ADG of a window (the Placar's GMD): per animal, active or not, the
+ * first and last weighing dated inside the window, when they are at least
+ * 30 days apart, give (last − first) kg / days; the herd figure is the mean
+ * of those animals. `animals` is how many qualified.
+ */
+export function periodAdg(
+  animals: Animal[],
+  period: Period
+): { kgPerDay: number | null; animals: number } {
+  const adgs: number[] = [];
+  for (const animal of animals) {
+    const inside = animal.weighings.filter(
+      (w) => w.date >= period.start && w.date <= period.end
+    );
+    if (inside.length < 2) continue;
+    const first = inside[0];
+    const last = inside[inside.length - 1];
+    const days = daysBetween(first.date, last.date);
+    if (days < PERIOD_ADG_MIN_DAYS) continue;
+    adgs.push((last.weightKg - first.weightKg) / days);
+  }
+  return {
+    kgPerDay: adgs.length === 0 ? null : adgs.reduce((sum, g) => sum + g, 0) / adgs.length,
+    animals: adgs.length,
+  };
 }

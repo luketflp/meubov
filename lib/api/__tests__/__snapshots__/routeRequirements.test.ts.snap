@@ -90,6 +90,11 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
   "GET /api/herd/health": {
     "read": true,
   },
+  "PATCH /api/herd/accounts/:id": {
+    "edit": [
+      "finance",
+    ],
+  },
   "PATCH /api/herd/animals/:id": {
     "edit": [
       "herd",
@@ -98,6 +103,11 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
   "PATCH /api/herd/animals/:id/weighings/:weighingId": {
     "edit": [
       "herd",
+    ],
+  },
+  "PATCH /api/herd/expenses/:id": {
+    "edit": [
+      "finance",
     ],
   },
   "PATCH /api/herd/farm/members/:userId": {
@@ -118,6 +128,16 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
   "PATCH /api/herd/semen-bulls/:id": {
     "edit": [
       "reproduction",
+    ],
+  },
+  "POST /api/herd/accounts": {
+    "edit": [
+      "finance",
+    ],
+  },
+  "POST /api/herd/accounts/defaults": {
+    "edit": [
+      "finance",
     ],
   },
   "POST /api/herd/animals": {

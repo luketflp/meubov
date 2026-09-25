@@ -8,6 +8,7 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
+  accounts,
   animals,
   breedings,
   breeds,
@@ -31,6 +32,7 @@ import {
 import type { HerdData, ReproductionRecord, SemenPurchase, Weighing } from "@/lib/types";
 import { herdMovements } from "@/lib/domain/movements";
 import {
+  toAccount,
   toAnimal,
   toBreeding,
   toCalving,
@@ -92,6 +94,7 @@ export class LoadHerdUseCase implements CurrUseCase {
       sessionAnimalRows,
       semenBullRows,
       semenPurchaseRows,
+      accountRows,
     ] = await Promise.all([
       this.repository.select().from(farm).where(eq(farm.id, farmId)),
       this.repository.select().from(animals).where(eq(animals.farmId, farmId)).orderBy(asc(animals.earTag)),
@@ -181,6 +184,11 @@ export class LoadHerdUseCase implements CurrUseCase {
         .innerJoin(semenBulls, eq(semenPurchases.bullId, semenBulls.id))
         .where(eq(semenBulls.farmId, farmId))
         .orderBy(asc(semenPurchases.date), asc(semenPurchases.id)),
+      this.repository
+        .select()
+        .from(accounts)
+        .where(eq(accounts.farmId, farmId))
+        .orderBy(asc(accounts.group), asc(accounts.name)),
     ]);
 
     const weighingsByAnimal = new Map<string, Weighing[]>();
@@ -248,6 +256,7 @@ export class LoadHerdUseCase implements CurrUseCase {
       protocols: protocolRows.map(toProtocol),
       manejoSessions: sessions,
       expenses: expenseRows.map(toExpense),
+      accounts: accountRows.map(toAccount),
       customCategories: customCategoryRows.map(toCustomCategory),
       semenBulls: semenBullRows.map((row) => toSemenBull(row, purchasesByBull.get(row.id) ?? [])),
       farm: farmRows.length

@@ -67,6 +67,17 @@ describe("ROUTE_REQUIREMENTS", () => {
       ROUTE_REQUIREMENTS["DELETE /api/herd/semen-bulls/:id/purchases/:purchaseId"]
     ).toEqual({ edit: ["reproduction", "finance"] });
   });
+
+  it("keeps lançamentos and the plano de contas behind Financeiro edit", () => {
+    for (const key of [
+      "PATCH /api/herd/expenses/:id",
+      "POST /api/herd/accounts",
+      "PATCH /api/herd/accounts/:id",
+      "POST /api/herd/accounts/defaults",
+    ]) {
+      expect(ROUTE_REQUIREMENTS[key]).toEqual({ edit: ["finance"] });
+    }
+  });
 });
 
 describe("ROUTE_REQUIREMENTS against the mounted app", () => {

@@ -7,6 +7,7 @@
  * (`numeric({ mode: "number" })` in the schema).
  */
 import type {
+  Account,
   Animal,
   Breeding,
   Calving,
@@ -34,6 +35,7 @@ import type {
   CalvingRow,
   CustomCategoryRow,
   ExpenseRow,
+  FarmAccountRow,
   FarmRow,
   HealthProtocolRow,
   InvernadaRow,
@@ -206,10 +208,26 @@ export function toMovement(row: MovementRow): Movement {
 export function toExpense(row: ExpenseRow): Expense {
   return {
     id: row.id,
+    kind: row.kind,
     date: row.date,
     category: row.category,
     amountBrl: row.amountBrl,
     notes: orNothing(row.notes),
+    dueDate: orNothing(row.dueDate),
+    paidAt: orNothing(row.paidAt),
+    counterparty: orNothing(row.counterparty),
+    document: orNothing(row.document),
+    accountId: orNothing(row.accountId),
+    lotId: orNothing(row.lotId),
+  };
+}
+
+export function toAccount(row: FarmAccountRow): Account {
+  return {
+    id: row.id,
+    group: row.group,
+    name: row.name,
+    archivedAt: row.archivedAt?.toISOString(),
   };
 }
 

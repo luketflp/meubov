@@ -87,7 +87,8 @@ describe("generateInitialData", () => {
   });
 
   it("has a deterministic 12-month expense book covering every category", () => {
-    const months = new Set(data.expenses.map((e) => e.date.slice(0, 7)));
+    const booked = data.expenses.filter((e) => e.date <= TODAY_ISO);
+    const months = new Set(booked.map((e) => e.date.slice(0, 7)));
     expect(months.size).toBe(12);
     const categories = new Set(data.expenses.map((e) => e.category));
     for (const category of [
@@ -98,6 +99,19 @@ describe("generateInitialData", () => {
     for (const e of data.expenses) expect(e.amountBrl).toBeGreaterThan(0);
     const ids = data.expenses.map((e) => e.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("points every lançamento at a conta of its own grupo and at a seeded lote", () => {
+    const groupOf = new Map(data.accounts.map((a) => [a.id, a.group]));
+    const lotIds = new Set(data.lots.map((l) => l.id));
+    for (const e of data.expenses) {
+      if (e.accountId) {
+        expect(groupOf.get(e.accountId)).toBe(e.kind === "revenue" ? "revenue" : e.category);
+      }
+      if (e.lotId) expect(lotIds).toContain(e.lotId);
+    }
+    expect(data.expenses.filter((e) => e.kind === "revenue")).toHaveLength(2);
+    expect(data.expenses.filter((e) => e.paidAt === undefined)).toHaveLength(3);
   });
 
   it("has 39 active animals and 2 inactive consistent with sales", () => {

@@ -5,6 +5,8 @@
  */
 import { create, type StoreApi } from "zustand";
 import type {
+  Account,
+  AccountGroup,
   Animal,
   Breeding,
   Calving,
@@ -133,6 +135,13 @@ export interface NewSemenBull {
 
 /** Editable fields of a semen bull (only sent ones change; a blank text clears it). */
 export type SemenBullPatch = Partial<Pick<SemenBull, "name" | "code" | "breed" | "central">>;
+
+/** Editable fields of a lançamento: only sent ones change; null clears an optional one. */
+export type ExpensePatch = Partial<Pick<Expense, "date" | "category" | "amountBrl">> & {
+  [K in "notes" | "dueDate" | "paidAt" | "counterparty" | "document" | "accountId" | "lotId"]?:
+    | string
+    | null;
+};
 
 /**
  * Calving to record. The calf joins the herd in the same transaction, taking
@@ -355,7 +364,17 @@ export interface HerdStore extends HerdData {
   addProtocol: (p: Omit<HealthProtocol, "id">, generateSchedule: boolean) => Promise<void>;
   removeProtocol: (id: string) => Promise<void>;
   addExpense: (e: Omit<Expense, "id">) => Promise<void>;
+  /** Saves the sent fields of a lançamento and keeps the server's row. */
+  updateExpense: (id: string, patch: ExpensePatch) => Promise<void>;
+  /** Marks a lançamento paid/received on `paidAt`, or pendente again with null. */
+  markExpensePaid: (id: string, paidAt: string | null) => Promise<void>;
   removeExpense: (id: string) => Promise<void>;
+  /** Creates a conta; null when its grupo already has that name (409). */
+  addAccount: (input: { group: AccountGroup; name: string }) => Promise<Account | null>;
+  /** Renames, archives or restores a conta; false when the name is taken (409). */
+  updateAccount: (id: string, patch: { name?: string; archived?: boolean }) => Promise<boolean>;
+  /** Creates the standard contas the farm lacks; resolves how many were created. */
+  seedDefaultAccounts: () => Promise<number>;
   /** Creates a custom category; false when the name is already in use. */
   addCustomCategory: (c: Omit<CustomCategory, "id">) => Promise<boolean>;
   /** Removes a custom category; false when an active animal still uses it. */
@@ -564,6 +583,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   protocols: [],
   manejoSessions: [],
   expenses: [],
+  accounts: [],
   customCategories: [],
   semenBulls: [],
   farm: { name: "", municipality: "", stateRegistration: "", manager: "" },
@@ -1449,10 +1469,49 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     set((s) => ({ expenses: [...s.expenses, expense] }));
   },
 
+  updateExpense: async (id, patch) => {
+    const { data, error } = await api.expenses({ id }).patch(patch);
+    if (error) apiFail("salvar o lançamento", error);
+    const expense = data as Expense;
+    set((s) => ({ expenses: s.expenses.map((e) => (e.id === id ? expense : e)) }));
+  },
+
+  markExpensePaid: (id, paidAt) => get().updateExpense(id, { paidAt }),
+
   removeExpense: async (id) => {
     const { error } = await api.expenses({ id }).delete();
     if (error) apiFail("remover a despesa", error);
     set((s) => ({ expenses: s.expenses.filter((e) => e.id !== id) }));
+  },
+
+  addAccount: async (input) => {
+    const { data, error } = await api.accounts.post(input);
+    if (error) {
+      if (error.status === CONFLICT) return null;
+      apiFail("criar a conta", error);
+    }
+    const account = data as Account;
+    set((s) => ({ accounts: [...s.accounts, account] }));
+    return account;
+  },
+
+  updateAccount: async (id, patch) => {
+    const { data, error } = await api.accounts({ id }).patch(patch);
+    if (error) {
+      if (error.status === CONFLICT) return false;
+      apiFail("salvar a conta", error);
+    }
+    const account = data as Account;
+    set((s) => ({ accounts: s.accounts.map((a) => (a.id === id ? account : a)) }));
+    return true;
+  },
+
+  seedDefaultAccounts: async () => {
+    const { data, error } = await api.accounts.defaults.post();
+    if (error) apiFail("criar as contas padrão", error);
+    const { created } = data as { created: Account[] };
+    set((s) => ({ accounts: [...s.accounts, ...created] }));
+    return created.length;
   },
 
   addCustomCategory: async (c) => {

@@ -16,6 +16,7 @@ export function makeData(overrides: Partial<HerdData> = {}): HerdData {
     protocols: [],
     manejoSessions: [],
     expenses: [],
+    accounts: [],
     customCategories: [],
     semenBulls: [],
     farm: { name: "Fazenda Teste", municipality: "", stateRegistration: "", manager: "" },

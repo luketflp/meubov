@@ -71,7 +71,8 @@ const herd: HerdData = {
   breeds: [],
   protocols: [],
   manejoSessions: [sale, vaccination],
-  expenses: [{ id: "e-1", date: "2026-09-01", category: "labor", amountBrl: 1200 }],
+  expenses: [{ id: "e-1", kind: "expense", date: "2026-09-01", category: "labor", amountBrl: 1200 }],
+  accounts: [{ id: "acc-1", group: "labor", name: "Salários" }],
   customCategories: [],
   semenBulls: [bull],
   farm: { name: "Fazenda", municipality: "Uberaba", stateRegistration: "", manager: "" },
@@ -186,6 +187,12 @@ describe("redactHerdMoney", () => {
     expect(redacted.semenBulls[0].purchases[0]).not.toHaveProperty("totalBrl");
     expect(redacted.semenBulls[0].purchases[0].doses).toBe(40);
     expect(redacted.farm).toEqual(herd.farm);
+  });
+
+  it("keeps the plano de contas: names carry no money", () => {
+    const redacted = redactHerdMoney(herd);
+    expect(redacted.accounts).toEqual(herd.accounts);
+    expect(redacted.expenses).toEqual([]);
   });
 
   it("does not mutate its input", () => {

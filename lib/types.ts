@@ -355,13 +355,47 @@ export type ExpenseCategory =
   | "admin"
   | "other";
 
-/** Farm expense (cost outside the sanitary treatments). */
+/** Whether a lançamento is money out (despesa) or money in (receita). */
+export type EntryKind = "expense" | "revenue";
+
+/**
+ * One line of money the farm typed: a despesa or a receita ("lançamento").
+ * The table stays `expenses`; vendas, compras and treatment costs are not
+ * lançamentos, they derive from the manejos.
+ */
 export interface Expense {
   id: string;
+  kind: EntryKind;
+  /** Competência. */
   date: string;
+  /** Grupo; a receita writes "other" and nothing reads it. */
   category: ExpenseCategory;
   amountBrl: number;
   notes?: string;
+  /** Vencimento; absent means `date`. */
+  dueDate?: string;
+  /** Day it was paid or received; absent means pendente. */
+  paidAt?: string;
+  /** Pago para / recebido de, free text. */
+  counterparty?: string;
+  /** "NF 4.812", free text. */
+  document?: string;
+  /** The conta (plano de contas). */
+  accountId?: string;
+  /** Centro de custo; absent means the whole farm. */
+  lotId?: string;
+}
+
+/** Grupo of a conta: the seven expense categories plus receitas. */
+export type AccountGroup = ExpenseCategory | "revenue";
+
+/** A farm-defined conta inside a grupo ("Sal mineral" in Nutrição). */
+export interface Account {
+  id: string;
+  group: AccountGroup;
+  name: string;
+  /** ISO timestamp; an archived conta leaves the form and keeps its history. */
+  archivedAt?: string;
 }
 
 /** Recurring health protocol of the farm. */
@@ -404,6 +438,8 @@ export interface HerdData {
   protocols: HealthProtocol[];
   manejoSessions: ManejoSession[];
   expenses: Expense[];
+  /** Plano de contas: the farm's contas, archived ones included. */
+  accounts: Account[];
   customCategories: CustomCategory[];
   semenBulls: SemenBull[];
   farm: FarmData;

@@ -65,12 +65,13 @@ describe("NAV_ITEMS", () => {
 });
 
 describe("visibleNav", () => {
-  it("shows every item and Equipe to the Dono", () => {
+  it("shows every item, Equipe and Plano de contas to the Dono", () => {
     const items = visibleNav(NAV_ITEMS, FULL_PERMISSIONS);
     expect(items.map((item) => item.href)).toEqual(NAV_ITEMS.map((item) => item.href));
     expect(items.find((item) => item.href === "/settings")?.children).toEqual([
       { label: "Equipe", href: "/settings/equipe", area: "team" },
       { label: "Fazendas", href: "/settings/fazendas" },
+      { label: "Plano de contas", href: "/settings/plano-de-contas", area: "finance" },
     ]);
   });
 
@@ -83,8 +84,12 @@ describe("visibleNav", () => {
     ]);
   });
 
-  it("keeps Financeiro for a consultor, who sees values", () => {
-    expect(visibleNav(NAV_ITEMS, PRESETS.consultor).map((item) => item.href)).toContain("/finance");
+  it("keeps Financeiro and Plano de contas for a consultor, who sees values", () => {
+    const items = visibleNav(NAV_ITEMS, PRESETS.consultor);
+    expect(items.map((item) => item.href)).toContain("/finance");
+    expect(items.find((item) => item.href === "/settings")?.children?.map((c) => c.href)).toContain(
+      "/settings/plano-de-contas"
+    );
   });
 
   it("leaves an item without an area alone", () => {

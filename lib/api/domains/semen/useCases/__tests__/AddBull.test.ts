@@ -35,10 +35,21 @@ function insertBuilder(table: Table) {
   };
 }
 
+/** The "Sêmen" conta lookup of a first purchase: this farm has none. */
+function selectBuilder() {
+  const builder = {
+    from: () => builder,
+    where: () => builder,
+    limit: () => builder,
+    then: (resolve: (value: Record<string, unknown>[]) => unknown) => resolve([]),
+  };
+  return builder;
+}
+
 vi.mock("@/lib/db", () => ({
   db: {
     transaction: (run: (tx: unknown) => unknown) =>
-      Promise.resolve(run({ insert: insertBuilder })),
+      Promise.resolve(run({ insert: insertBuilder, select: selectBuilder })),
   },
 }));
 
@@ -148,9 +159,13 @@ describe("addSemenBull", () => {
     const [bull, expense, purchase] = state.inserts.map((insert) => insert.row);
     expect(expense).toMatchObject({
       farmId: 7,
+      kind: "expense",
       date: "2026-08-01",
+      paidAt: "2026-08-01",
       category: "breeding",
       amountBrl: 1140,
+      counterparty: null,
+      accountId: null,
       notes: "Sêmen — Tufão da Serra, 30 doses",
     });
     expect(purchase).toMatchObject({
@@ -178,7 +193,9 @@ describe("addSemenBull", () => {
       },
       expense: {
         id: expense.id,
+        kind: "expense",
         date: "2026-08-01",
+        paidAt: "2026-08-01",
         category: "breeding",
         amountBrl: 1140,
         notes: "Sêmen — Tufão da Serra, 30 doses",

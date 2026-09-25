@@ -48,7 +48,7 @@ import { AdgChart } from "@/components/dashboard/AdgChart";
 import { MarketCard } from "@/components/dashboard/MarketCard";
 import { FinanceCard } from "@/components/dashboard/FinanceCard";
 import { PeriodPicker } from "@/components/dashboard/PeriodPicker";
-import { defaultPeriod } from "@/components/dashboard/period";
+import { defaultPeriod } from "@/lib/domain/period";
 import { longDateLabel } from "@/components/dashboard/helpers";
 import { cn } from "@/lib/utils";
 
