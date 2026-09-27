@@ -8,6 +8,7 @@
  * record the columns set. The stock lock is stubbed at its seam so the test
  * holds the dose counts in hand.
  */
+import { getTableName, type Table } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { state, lockBullStock } = vi.hoisted(() => ({
@@ -18,6 +19,10 @@ const { state, lockBullStock } = vi.hoisted(() => ({
     inserts: [] as Record<string, unknown>[],
     /** Columns of every `update().set()` call. */
     updates: [] as Record<string, unknown>[],
+    /** Table of every `delete()`, in call order. */
+    deletes: [] as string[],
+    /** Whether the transaction ended by a throw (Postgres would roll it back). */
+    rolledBack: false,
   },
   lockBullStock: vi.fn(),
 }));
@@ -59,8 +64,17 @@ vi.mock("@/lib/db", () => ({
             };
             return builder;
           },
+          delete: (table: Table) => ({
+            where: () => {
+              state.deletes.push(getTableName(table));
+              return Promise.resolve(undefined);
+            },
+          }),
         })
-      ),
+      ).catch((error: unknown) => {
+        state.rolledBack = true;
+        throw error;
+      }),
   },
 }));
 
@@ -123,6 +137,8 @@ beforeEach(() => {
   state.selectResults = [];
   state.inserts = [];
   state.updates = [];
+  state.deletes = [];
+  state.rolledBack = false;
   lockBullStock.mockReset();
 });
 
@@ -266,5 +282,78 @@ describe("completeAnimal — venda", () => {
     const amountBrl = saleAmount(546, 320, 54);
     expect(state.updates.at(-1)).toMatchObject({ carcassYieldPct: 54, amountBrl });
     expect(result).toMatchObject({ entry: { carcassYieldPct: 54, amountBrl } });
+  });
+});
+
+describe("completeAnimal — force over another device's pass", () => {
+  const ANIMAL = { id: "a-1", earTag: "V-01", lotId: "lot-1", active: true };
+  /** Another phone inseminated this cow first, with its own cobertura. */
+  const DONE = { ...ENTRY_ROW, outcome: "done", notes: "outro celular", breedingId: "br-0" };
+  const run = (force?: boolean) =>
+    new CompleteAnimalUseCase().run({
+      farmId: 7,
+      sessionId: "s-1",
+      animalId: "a-1",
+      data: { semenBullId: "bull-1" },
+      force,
+    });
+
+  it("without force a done entry → entry_not_actionable", async () => {
+    state.selectResults = [[SESSION_ROW], [ANIMAL], [DONE]];
+
+    expect(await run()).toEqual({
+      conflict: "entry_not_actionable",
+      entry: expect.objectContaining({ earTag: "V-01", outcome: "done", notes: "outro celular" }),
+    });
+    expect(state.updates).toEqual([]);
+    expect(state.deletes).toEqual([]);
+  });
+
+  it("force on a closed session → session_closed", async () => {
+    state.selectResults = [[{ ...SESSION_ROW, status: "closed" }], [ANIMAL], [DONE]];
+
+    expect(await run(true)).toEqual({
+      conflict: "session_closed",
+      entry: expect.objectContaining({ earTag: "V-01", outcome: "done" }),
+    });
+    expect(lockBullStock).not.toHaveBeenCalled();
+    expect(state.updates).toEqual([]);
+  });
+
+  it("force on a done entry reverts then applies", async () => {
+    // lockEntry's three reads, then the undo's cobertura lock and its diagnoses.
+    state.selectResults = [[SESSION_ROW], [ANIMAL], [DONE], [{ id: "br-0" }], []];
+    lockBullStock.mockResolvedValue({ bull: BULL_ROW, bought: 10, used: 9, left: 1 });
+
+    const result = await run(true);
+
+    expect(state.updates[0]).toMatchObject({ outcome: "pending", breedingId: null, notes: null });
+    expect(state.deletes).toEqual(["breedings"]);
+    expect(state.inserts[0]).toMatchObject({ animalId: "a-1", semenBullId: "bull-1" });
+    expect(state.updates.at(-1)).toMatchObject({ outcome: "done", breedingId: state.inserts[0].id });
+    expect(result).toMatchObject({ entry: { earTag: "V-01", outcome: "done" } });
+    expect(state.rolledBack).toBe(false);
+  });
+
+  it("force answers has_diagnosis and writes nothing when the other cobertura was diagnosed", async () => {
+    state.selectResults = [
+      [SESSION_ROW],
+      [ANIMAL],
+      [DONE],
+      [{ id: "br-0" }],
+      [{ breedingId: "br-0", result: "pregnant" }],
+    ];
+
+    expect(await run(true)).toEqual({ conflict: "has_diagnosis", breedingId: "br-0" });
+    expect(state.updates).toEqual([]);
+    expect(state.deletes).toEqual([]);
+  });
+
+  it("rolls the undo back when the forced pass is then refused", async () => {
+    state.selectResults = [[SESSION_ROW], [ANIMAL], [DONE], [{ id: "br-0" }], []];
+    lockBullStock.mockResolvedValue({ bull: BULL_ROW, bought: 10, used: 10, left: 0 });
+
+    expect(await run(true)).toEqual({ conflict: "out_of_stock" });
+    expect(state.rolledBack).toBe(true);
   });
 });

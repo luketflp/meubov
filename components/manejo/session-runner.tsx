@@ -50,6 +50,9 @@ import { DeleteManejoDialog } from "@/components/manejo/delete-manejo-dialog";
 import { CloseSessionDialog } from "@/components/manejo/close-session-dialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
+import { OfflineBanner } from "@/components/offline/OfflineBanner";
+import { OfflinePill } from "@/components/offline/OfflinePill";
+import { QueuedPassesList } from "@/components/offline/QueuedPassesList";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -299,7 +302,12 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
     <div className="space-y-6">
       <PageHeader
         title={isInsemination ? inseminationTitle(session, animals, lots) : session.name}
-        badges={canRun ? undefined : <ReadOnlyPill />}
+        badges={
+          <>
+            {canRun ? null : <ReadOnlyPill />}
+            <OfflinePill />
+          </>
+        }
         subtitle={
           session.kind === "health" || session.kind === "weighing"
             ? `Manejo de ${formatDate(session.date)}${
@@ -339,6 +347,8 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
           </div>
         }
       />
+
+      <OfflineBanner sessionId={session.id} />
 
       <DeleteManejoDialog
         target={{ kind: "session", session }}
@@ -534,6 +544,10 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
         </SectionCard>
       ) : null}
 
+      {/* The fila on the phone: right under the brete. A venda has no right
+          column, so its list stays here at every width. */}
+      <QueuedPassesList sessionId={session.id} className={isSale ? undefined : "lg:hidden"} />
+
       {isSale ? (
         <>
           {saleBrete ? null : pendingCard}
@@ -558,6 +572,7 @@ export function ManejoSessionRunner({ sessionId }: ManejoSessionRunnerProps) {
           {isEntry ? null : pendingCard}
 
           <div className="space-y-4">
+            <QueuedPassesList sessionId={session.id} className="hidden lg:block" />
             <SectionCard
               title={`${isEntry ? "Registrados" : isInsemination ? "Inseminadas" : "Manejados"} (${done.length})`}
             >

@@ -14,15 +14,19 @@ import { getSessionCookie } from "better-auth/cookies";
  *
  * Rules:
  * - /login or /signup (removed pages)  -> /dashboard with session, "/" without.
- * - No session cookie + not on "/"     -> "/" (landing opens the auth modal).
+ * - No session cookie + not public     -> "/" (landing opens the auth modal).
  * - Session cookie + on "/"            -> /dashboard.
  * - Otherwise                          -> continue.
  *
- * "/" is the public landing page and the only public route: login/signup live
- * in its AuthDialog modal. The legacy /login and /signup URLs are kept as
- * redirects so old bookmarks don't 404.
+ * "/" is the public landing page: login/signup live in its AuthDialog modal.
+ * "/offline" is public too: the service worker keeps a copy of it when it
+ * installs, and a redirect would have it keep the landing page instead. The
+ * legacy /login and /signup URLs are kept as redirects so old bookmarks don't
+ * 404. Paths with a dot (/sw.js, /manifest.webmanifest, /icons/*.png) never
+ * reach the proxy: the matcher below skips them.
  */
 const LEGACY_AUTH_PATHS = new Set(["/login", "/signup"]);
+const PUBLIC_PATHS = new Set(["/", "/offline"]);
 
 export function proxy(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
@@ -32,7 +36,7 @@ export function proxy(request: NextRequest): NextResponse {
     return NextResponse.redirect(new URL(hasSession ? "/dashboard" : "/", request.url));
   }
 
-  if (!hasSession && pathname !== "/") {
+  if (!hasSession && !PUBLIC_PATHS.has(pathname)) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 

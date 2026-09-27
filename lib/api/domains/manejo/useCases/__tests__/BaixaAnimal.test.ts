@@ -93,6 +93,9 @@ const BAIXA = { reason: "death" as const, date: "2026-09-01", notes: " quebrou a
 const run = () =>
   new BaixaAnimalUseCase().run({ farmId: 7, sessionId: "s-1", animalId: "a-1", input: BAIXA });
 
+const runForced = () =>
+  new BaixaAnimalUseCase().run({ farmId: 7, sessionId: "s-1", animalId: "a-1", input: BAIXA, force: true });
+
 beforeEach(() => {
   state.selectResults = [];
   state.writes = [];
@@ -135,14 +138,20 @@ describe("baixaAnimal", () => {
   it("refuses a pass that already left the queue", async () => {
     state.selectResults = [[SESSION_ROW], [ANIMAL], [{ ...PENDING_ENTRY, outcome: "done" }]];
 
-    expect(await run()).toEqual({ conflict: "entry_not_actionable" });
+    expect(await run()).toEqual({
+      conflict: "entry_not_actionable",
+      entry: expect.objectContaining({ earTag: "1244", outcome: "done" }),
+    });
     expect(state.writes).toEqual([]);
   });
 
   it("refuses a closed session", async () => {
     state.selectResults = [[{ ...SESSION_ROW, status: "closed" }], [ANIMAL], [PENDING_ENTRY]];
 
-    expect(await run()).toEqual({ conflict: "session_not_open" });
+    expect(await run()).toEqual({
+      conflict: "session_not_open",
+      entry: expect.objectContaining({ earTag: "1244", outcome: "pending" }),
+    });
     expect(state.writes).toEqual([]);
   });
 
@@ -157,6 +166,51 @@ describe("baixaAnimal", () => {
     state.selectResults = [[SESSION_ROW], [ANIMAL], []];
 
     expect(await run()).toBeNull();
+    expect(state.writes).toEqual([]);
+  });
+});
+
+describe("baixaAnimal — force over another device's pass", () => {
+  /** Another phone weighed this animal first. */
+  const DONE_ENTRY = { ...PENDING_ENTRY, outcome: "done", weightKg: 300, weighingId: 5 };
+
+  it("force on a done entry reverts then applies", async () => {
+    state.selectResults = [[SESSION_ROW], [ANIMAL], [DONE_ENTRY]];
+
+    const result = await runForced();
+
+    expect(state.writes).toEqual([
+      "update weighings",
+      "update manejo_session_animals",
+      "update animals",
+      "update manejo_session_animals",
+    ]);
+    expect(state.updates[1]).toMatchObject({ outcome: "pending", weighingId: null });
+    expect(state.updates.at(-1)).toEqual({
+      outcome: "skipped",
+      notes: "Baixa · Morte · quebrou a perna no brete",
+    });
+    expect(result).toMatchObject({ animal: { earTag: "1244", active: false, inactiveReason: "death" } });
+  });
+
+  it("force on a closed session → session_closed", async () => {
+    state.selectResults = [[{ ...SESSION_ROW, status: "closed" }], [ANIMAL], [DONE_ENTRY]];
+
+    expect(await runForced()).toEqual({
+      conflict: "session_closed",
+      entry: expect.objectContaining({ earTag: "1244", outcome: "done", weightKg: 300 }),
+    });
+    expect(state.writes).toEqual([]);
+  });
+
+  it("keeps animal_inactive over another device's baixa, even with force", async () => {
+    state.selectResults = [
+      [SESSION_ROW],
+      [{ ...ANIMAL, active: false }],
+      [{ ...PENDING_ENTRY, outcome: "skipped", notes: "Baixa · Perda" }],
+    ];
+
+    expect(await runForced()).toEqual({ conflict: "animal_inactive" });
     expect(state.writes).toEqual([]);
   });
 });

@@ -12,12 +12,14 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { reopen, remove, complete, setAside, close } = vi.hoisted(() => ({
+const { reopen, remove, complete, setAside, close, start, skip } = vi.hoisted(() => ({
   reopen: vi.fn(),
   remove: vi.fn(),
   complete: vi.fn(),
   setAside: vi.fn(),
   close: vi.fn(),
+  start: vi.fn(),
+  skip: vi.fn(),
 }));
 
 const { permState } = vi.hoisted(() => ({
@@ -59,6 +61,16 @@ vi.mock("../useCases/Close.useCase", () => ({
     run = close;
   },
 }));
+vi.mock("../useCases/Start.useCase", () => ({
+  StartSessionUseCase: class {
+    run = start;
+  },
+}));
+vi.mock("../useCases/SkipAnimal.useCase", () => ({
+  SkipAnimalUseCase: class {
+    run = skip;
+  },
+}));
 
 import { manejoController } from "../manejo.controller";
 
@@ -80,6 +92,8 @@ beforeEach(() => {
   complete.mockReset();
   setAside.mockReset();
   close.mockReset();
+  start.mockReset();
+  skip.mockReset();
   permState.current = undefined;
 });
 
@@ -179,5 +193,82 @@ describe("POST /manejo/:id/close", () => {
       status: 200,
       body: { id: "s-1", status: "closed" },
     });
+  });
+});
+
+describe("POST /manejo with the id a phone made up offline", () => {
+  const BODY = {
+    id: "0b7f2c1e-8a4d-4c3b-9f1e-2d5a6b7c8d9e",
+    date: "2026-09-25",
+    kind: "weighing",
+    earTags: ["V-01"],
+    weighing: true,
+  };
+
+  it("answers 409 id_taken when another farm holds the id", async () => {
+    start.mockResolvedValue("id_taken");
+
+    expect(await call("POST", "/manejo", BODY)).toEqual({ status: 409, body: { error: "id_taken" } });
+    expect(start).toHaveBeenCalledWith({ farmId: 7, input: BODY });
+  });
+
+  it("refuses an id that is not a uuid before the use case runs", async () => {
+    const response = await manejoController.handle(
+      new Request("http://localhost/manejo", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...BODY, id: "s-1" }),
+      })
+    );
+
+    expect(response.status).toBe(422);
+    expect(start).not.toHaveBeenCalled();
+  });
+});
+
+describe("a forced pass", () => {
+  it("forwards force on complete and answers 409 session_closed", async () => {
+    complete.mockResolvedValue({ conflict: "session_closed" });
+
+    expect(
+      await call("POST", "/manejo/s-1/animals/a-1/complete", { weightKg: 500, force: true })
+    ).toEqual({ status: 409, body: { error: "session_closed" } });
+    expect(complete).toHaveBeenCalledWith(expect.objectContaining({ force: true }));
+  });
+
+  it("forwards force on skip and answers 409 session_closed", async () => {
+    skip.mockResolvedValue({ conflict: "session_closed" });
+
+    expect(await call("POST", "/manejo/s-1/animals/a-1/skip", { force: true })).toEqual({
+      status: 409,
+      body: { error: "session_closed" },
+    });
+    expect(skip).toHaveBeenCalledWith({
+      farmId: 7,
+      sessionId: "s-1",
+      animalId: "a-1",
+      notes: undefined,
+      force: true,
+    });
+  });
+
+  it("answers 409 with the server's entry, its valor hidden without Financeiro", async () => {
+    const { PRESETS } = await import("@/lib/domain/permissions");
+    permState.current = PRESETS.vaqueiro;
+    const entry = { earTag: "V-01", outcome: "done", weightKg: 299, amountBrl: 4200 };
+    setAside.mockResolvedValue({ conflict: "entry_not_actionable", entry });
+
+    expect(await call("POST", "/manejo/s-1/animals/a-1/set-aside", { list: "held" })).toEqual({
+      status: 409,
+      body: { error: "entry_not_actionable", entry: { earTag: "V-01", outcome: "done", weightKg: 299 } },
+    });
+  });
+
+  it("answers 404 on set-aside when the undo finds the old lot gone", async () => {
+    setAside.mockResolvedValue("lot_not_found");
+
+    expect(
+      await call("POST", "/manejo/s-1/animals/a-1/set-aside", { list: "held", force: true })
+    ).toEqual({ status: 404, body: { error: "lot_not_found" } });
   });
 });

@@ -2,6 +2,7 @@
 
 import { t } from "elysia";
 
+import { DeactivateAnimalBody } from "@/lib/api/domains/animals/schemas/animal.schema";
 import {
   DateString,
   CategoryModel,
@@ -42,6 +43,11 @@ export const ManejoPlanBody = t.Object({
  * kinds without animals (422).
  */
 export const NewManejoSessionBody = t.Object({
+  /**
+   * Id a phone made up for a manejo started offline: replaying that start
+   * returns the same session instead of opening a second one.
+   */
+  id: t.Optional(t.String({ format: "uuid" })),
   date: DateString,
   kind: ManejoKindModel,
   earTags: t.Array(t.String()),
@@ -93,6 +99,11 @@ export const ManejoPassBody = t.Object({
   notes: t.Optional(t.String()),
   /** Rendimento (%) of this boiada, set at the brete of a venda per arroba. */
   carcassYieldPct: t.Optional(t.Number({ exclusiveMinimum: 0, maximum: 100 })),
+  /**
+   * A pass the phone kept offline, sent over one another device already wrote:
+   * that one is undone and this one applied, in one transaction.
+   */
+  force: t.Optional(t.Boolean()),
 });
 
 /**
@@ -103,9 +114,22 @@ export const SetAsideBody = t.Object({
   list: t.Union([t.Literal("rejected"), t.Literal("held")]),
   weightKg: t.Optional(t.Number({ exclusiveMinimum: 0 })),
   notes: t.Optional(t.String()),
+  /** Same as ManejoPassBody.force. */
+  force: t.Optional(t.Boolean()),
 });
 
 /** Body of POST /manejo/:id/animals/:animalId/skip. */
 export const ManejoSkipBody = t.Object({
   notes: t.Optional(t.String()),
+  /** Same as ManejoPassBody.force. */
+  force: t.Optional(t.Boolean()),
+});
+
+/**
+ * Body of POST /manejo/:id/animals/:animalId/baixa: the animal page's baixa
+ * (DeactivateAnimalBody, which stays as it is), plus `force` as in ManejoPassBody.
+ */
+export const ManejoBaixaBody = t.Object({
+  ...DeactivateAnimalBody.properties,
+  force: t.Optional(t.Boolean()),
 });

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { OfflineDataLine } from "@/components/offline/OfflineDataLine";
 
 interface PageHeaderProps {
   title: string;
@@ -21,6 +22,7 @@ export function PageHeader({ title, subtitle, badges, actions }: PageHeaderProps
           <h1 className="font-heading text-2xl font-semibold text-ink">{title}</h1>
         )}
         {subtitle ? <p className="mt-0.5 text-sm text-ink-soft">{subtitle}</p> : null}
+        <OfflineDataLine />
       </div>
       {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
     </header>

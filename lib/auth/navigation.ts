@@ -36,6 +36,11 @@ export function useSignOut(): () => Promise<void> {
   const router = useRouter();
 
   return useCallback(async () => {
+    // The snapshot holds this user's farm and leaves with them. The fila stays:
+    // it is sent once the same user signs in again. Imported on demand so the
+    // sign-in pages that use this module do not load the herd store.
+    const { clearOfflineSnapshots } = await import("@/lib/store/useHerdStore");
+    await clearOfflineSnapshots();
     await authClient.signOut();
     navigateAfterAuth(router, SIGN_OUT_REDIRECT);
   }, [router]);

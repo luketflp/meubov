@@ -11,7 +11,6 @@
 import { Elysia } from "elysia";
 
 import { farmPlugin } from "@/lib/api/plugins/farm";
-import { DeactivateAnimalBody } from "@/lib/api/domains/animals/schemas/animal.schema";
 import { todayISO } from "@/lib/domain/dates";
 import { can } from "@/lib/domain/permissions";
 import {
@@ -30,14 +29,29 @@ import { SetAsideAnimalUseCase } from "./useCases/SetAsideAnimal.useCase";
 import { SetCarcassYieldUseCase } from "./useCases/SetCarcassYield.useCase";
 import { SkipAnimalUseCase } from "./useCases/SkipAnimal.useCase";
 import { StartSessionUseCase } from "./useCases/Start.useCase";
+import type { PassConflict } from "./_shared/session";
 import {
   EntryAnimalBody,
+  ManejoBaixaBody,
   ManejoPassBody,
   ManejoSkipBody,
   NewManejoSessionBody,
   SaleYieldBody,
   SetAsideBody,
 } from "./schemas/manejo.schema";
+
+/**
+ * A pass route's 409: `{ error }`, plus the server's entry when the refusal
+ * names one, without money for a caller without Financeiro view.
+ */
+function passConflict(result: PassConflict, showMoney: boolean) {
+  const { entry } = result;
+  if (!entry) return { error: result.conflict };
+  return {
+    error: result.conflict,
+    entry: showMoney ? entry : redactPass({ entry, treatments: [] }).entry,
+  };
+}
 
 export const manejoController = new Elysia({ prefix: "/manejo" })
   .use(farmPlugin)
@@ -64,6 +78,8 @@ export const manejoController = new Elysia({ prefix: "/manejo" })
         return status(403, { error: "forbidden", area: "finance" });
       }
       const session = await new StartSessionUseCase().run({ farmId, input: body });
+      // A phone's offline id that another farm (or a discarded manejo) holds.
+      if (session === "id_taken") return status(409, { error: session });
       if (session === "lot_not_found") return status(404, { error: session });
       if (session === "bull_not_found") return status(404, { error: session });
       if (session === "not_female") return status(422, { error: session });
@@ -97,48 +113,59 @@ export const manejoController = new Elysia({ prefix: "/manejo" })
         animalId: params.animalId,
         // The rendimento reprices money: only Financeiro edit may set it.
         data: can(permissions, "finance", "edit") ? body : { ...body, carcassYieldPct: undefined },
+        force: body.force,
       });
       if (result === "lot_not_found") return status(404, { error: result });
       if (result === "bull_not_found") return status(404, { error: result });
       if (result === null) return status(404, { error: "not_found" });
-      if ("conflict" in result) return status(409, { error: result.conflict });
+      if ("conflict" in result) {
+        return status(409, passConflict(result, can(permissions, "finance", "view")));
+      }
       return can(permissions, "finance", "view") ? result : redactPass(result);
     },
     { farm: true, body: ManejoPassBody }
   )
   .post(
     "/:id/animals/:animalId/set-aside",
-    async ({ farmId, params, body, status }) => {
+    async ({ farmId, permissions, params, body, status }) => {
       const result = await new SetAsideAnimalUseCase().run({
         farmId,
         sessionId: params.id,
         animalId: params.animalId,
         input: body,
+        force: body.force,
       });
+      if (result === "lot_not_found") return status(404, { error: result });
       if (result === null) return status(404, { error: "not_found" });
-      if ("conflict" in result) return status(409, { error: result.conflict });
+      if ("conflict" in result) {
+        return status(409, passConflict(result, can(permissions, "finance", "view")));
+      }
       return result;
     },
     { farm: true, body: SetAsideBody }
   )
   .post(
     "/:id/animals/:animalId/skip",
-    async ({ farmId, params, body, status }) => {
+    async ({ farmId, permissions, params, body, status }) => {
       const result = await new SkipAnimalUseCase().run({
         farmId,
         sessionId: params.id,
         animalId: params.animalId,
         notes: body.notes,
+        force: body.force,
       });
+      if (result === "lot_not_found") return status(404, { error: result });
       if (result === null) return status(404, { error: "not_found" });
-      if ("conflict" in result) return status(409, { error: result.conflict });
+      if ("conflict" in result) {
+        return status(409, passConflict(result, can(permissions, "finance", "view")));
+      }
       return result;
     },
     { farm: true, body: ManejoSkipBody }
   )
   .post(
     "/:id/animals/:animalId/baixa",
-    async ({ farmId, params, body, status }) => {
+    async ({ farmId, permissions, params, body, status }) => {
       // A baixa is history: it can be backdated, never postdated.
       if (body.date > todayISO()) return status(422, { error: "future_date" });
       const result = await new BaixaAnimalUseCase().run({
@@ -146,12 +173,16 @@ export const manejoController = new Elysia({ prefix: "/manejo" })
         sessionId: params.id,
         animalId: params.animalId,
         input: body,
+        force: body.force,
       });
+      if (result === "lot_not_found") return status(404, { error: result });
       if (result === null) return status(404, { error: "not_found" });
-      if ("conflict" in result) return status(409, { error: result.conflict });
+      if ("conflict" in result) {
+        return status(409, passConflict(result, can(permissions, "finance", "view")));
+      }
       return result;
     },
-    { farm: true, body: DeactivateAnimalBody }
+    { farm: true, body: ManejoBaixaBody }
   )
   .post(
     "/:id/animals/:animalId/reopen",

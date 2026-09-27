@@ -23,12 +23,13 @@ import {
 } from "@/lib/api/domains/animals/useCases/ValidateLotAssignment.useCase";
 import { bullEarTagOf, lockBullStock } from "@/lib/api/domains/semen/_shared/stock";
 
+import { answerRefusal, forceReopen, Refused } from "../_shared/revert";
 import {
   ANIMAL_PATCH_COLUMNS,
   conflict,
   lockEntry,
   type AnimalPatch,
-  type ManejoConflict,
+  type PassConflict,
 } from "../_shared/session";
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
@@ -56,11 +57,13 @@ interface CompleteAnimalUseCaseProps {
   sessionId: string;
   animalId: string;
   data: ManejoPassData;
+  /** The phone's pass wins over one another device already wrote. */
+  force?: boolean;
 }
 
 type CompleteAnimalUseCaseResponse =
   | CompleteResult
-  | { conflict: ManejoConflict }
+  | PassConflict
   | LotAssignmentError
   | "bull_not_found"
   | null;
@@ -73,6 +76,11 @@ type CurrUseCase = _UseCase<CompleteAnimalUseCaseProps, CompleteAnimalUseCaseRes
  * An inseminação pass takes one dose: the bull row stays locked until the
  * transaction ends, so two cows passing at once cannot both take the last one.
  * The stock is checked before anything is written.
+ *
+ * With `force`, a pass another device already wrote is undone first (with the
+ * undo's own refusals) and this one applied in the same transaction; a closed
+ * session answers `session_closed`. Every refusal after that point is thrown
+ * as `Refused`, so it takes the undo back with it.
  */
 export class CompleteAnimalUseCase implements CurrUseCase {
   private repository: RepositoryType;
@@ -82,140 +90,153 @@ export class CompleteAnimalUseCase implements CurrUseCase {
     this.repository = repo;
   }
 
-  public run: CurrUseCase["run"] = async ({ farmId, sessionId, animalId, data }) => {
-    return this.repository.transaction(async (tx) => {
-      const { session, entry, animal } = await lockEntry(tx, farmId, sessionId, animalId);
-      if (!session || !entry || !animal) return null;
-      if (session.status !== "open") return conflict("session_not_open");
-      if (entry.outcome !== "pending") return conflict("entry_not_actionable");
-      // A baixa given while the session was open: the animal left the herd, so
-      // it takes no treatment, weight, sale or cobertura — it can only be skipped.
-      if (!animal.active) return conflict("animal_inactive");
-      const earTag = animal.earTag;
+  public run: CurrUseCase["run"] = ({ farmId, sessionId, animalId, data, force }) =>
+    answerRefusal<CompleteAnimalUseCaseResponse>(() =>
+      this.repository.transaction(async (tx) => {
+        const locked = await lockEntry(tx, farmId, sessionId, animalId);
+        const { session, entry } = locked;
+        let { animal } = locked;
+        if (!session || !entry || !animal) return null;
+        if (session.status !== "open") {
+          return conflict(
+            force ? "session_closed" : "session_not_open",
+            toManejoSessionAnimal(entry, animal.earTag)
+          );
+        }
+        if (entry.outcome !== "pending") {
+          if (!force) return conflict("entry_not_actionable", toManejoSessionAnimal(entry, animal.earTag));
+          const undone = await forceReopen(tx, { farmId, session, entry, animal });
+          if (typeof undone === "string" || "conflict" in undone) return undone;
+          if (undone.animal) animal = { ...animal, ...undone.animal };
+        }
+        // A baixa given while the session was open: the animal left the herd, so
+        // it takes no treatment, weight, sale or cobertura — it can only be skipped.
+        if (!animal.active) throw new Refused(conflict("animal_inactive"));
+        const earTag = animal.earTag;
 
-      const effects = buildPassEffects(
-        {
-          date: session.date,
-          kind: session.kind,
-          weighing: session.weighing,
-          treatment: toManejoPlan(session),
-          destinationLotId: session.destinationLotId ?? undefined,
-          pricePerArroba: session.pricePerArroba ?? undefined,
-          carcassYieldPct: session.carcassYieldPct ?? undefined,
-          semenBullIds: session.semenBullIds ?? undefined,
-        },
-        data
-      );
+        const effects = buildPassEffects(
+          {
+            date: session.date,
+            kind: session.kind,
+            weighing: session.weighing,
+            treatment: toManejoPlan(session),
+            destinationLotId: session.destinationLotId ?? undefined,
+            pricePerArroba: session.pricePerArroba ?? undefined,
+            carcassYieldPct: session.carcassYieldPct ?? undefined,
+            semenBullIds: session.semenBullIds ?? undefined,
+          },
+          data
+        );
 
-      if (effects.lotId !== undefined) {
-        const lotError = await new ValidateLotAssignmentUseCase(tx).run({ farmId, lotId: effects.lotId });
-        if (lotError) return lotError;
-      }
+        if (effects.lotId !== undefined) {
+          const lotError = await new ValidateLotAssignmentUseCase(tx).run({ farmId, lotId: effects.lotId });
+          if (lotError) throw new Refused(lotError);
+        }
 
-      const stock = effects.breeding
-        ? await lockBullStock(tx, farmId, effects.breeding.semenBullId)
-        : undefined;
-      if (stock === null) return "bull_not_found";
-      if (stock && stock.left <= 0) return conflict("out_of_stock");
+        const stock = effects.breeding
+          ? await lockBullStock(tx, farmId, effects.breeding.semenBullId)
+          : undefined;
+        if (stock === null) throw new Refused("bull_not_found");
+        if (stock && stock.left <= 0) throw new Refused(conflict("out_of_stock"));
 
-      const createdTreatments: Treatment[] = [];
-      let treatmentId: string | undefined;
-      let boosterId: string | undefined;
-      if (effects.treatment) {
-        const [row] = await tx
-          .insert(treatments)
-          .values({ id: randomUUID(), animalId, ...effects.treatment })
-          .returning();
-        treatmentId = row.id;
-        createdTreatments.push(toTreatment(row, earTag));
-      }
-      if (effects.booster) {
-        const [row] = await tx
-          .insert(treatments)
-          .values({ id: randomUUID(), animalId, ...effects.booster })
-          .returning();
-        boosterId = row.id;
-        createdTreatments.push(toTreatment(row, earTag));
-      }
+        const createdTreatments: Treatment[] = [];
+        let treatmentId: string | undefined;
+        let boosterId: string | undefined;
+        if (effects.treatment) {
+          const [row] = await tx
+            .insert(treatments)
+            .values({ id: randomUUID(), animalId, ...effects.treatment })
+            .returning();
+          treatmentId = row.id;
+          createdTreatments.push(toTreatment(row, earTag));
+        }
+        if (effects.booster) {
+          const [row] = await tx
+            .insert(treatments)
+            .values({ id: randomUUID(), animalId, ...effects.booster })
+            .returning();
+          boosterId = row.id;
+          createdTreatments.push(toTreatment(row, earTag));
+        }
 
-      // The cobertura names its bull the way a single IATF does: by the code,
-      // or by the name when the bull has none.
-      let breeding: Breeding | undefined;
-      if (effects.breeding && stock) {
-        const [row] = await tx
-          .insert(breedings)
-          .values({
-            id: randomUUID(),
-            animalId,
-            ...effects.breeding,
-            bullEarTag: bullEarTagOf(stock.bull),
-          })
-          .returning();
-        breeding = toBreeding(row);
-      }
+        // The cobertura names its bull the way a single IATF does: by the code,
+        // or by the name when the bull has none.
+        let breeding: Breeding | undefined;
+        if (effects.breeding && stock) {
+          const [row] = await tx
+            .insert(breedings)
+            .values({
+              id: randomUUID(),
+              animalId,
+              ...effects.breeding,
+              bullEarTag: bullEarTagOf(stock.bull),
+            })
+            .returning();
+          breeding = toBreeding(row);
+        }
 
-      let weighingId: number | undefined;
-      if (effects.weighing) {
-        const [row] = await tx
-          .insert(weighings)
-          .values({ animalId, ...effects.weighing })
-          .returning();
-        weighingId = row.id;
-      }
+        let weighingId: number | undefined;
+        if (effects.weighing) {
+          const [row] = await tx
+            .insert(weighings)
+            .values({ animalId, ...effects.weighing })
+            .returning();
+          weighingId = row.id;
+        }
 
-      // A transferência lands the animal in the destination lot and a venda takes
-      // it out of the herd; the lot it came from is kept on the entry so undoing
-      // the pass can put it back exactly where it was.
-      let patch: AnimalPatch | undefined;
-      const moves = effects.lotId !== undefined || effects.sold === true;
-      if (moves) {
-        const [row] = await tx
-          .update(animals)
+        // A transferência lands the animal in the destination lot and a venda takes
+        // it out of the herd; the lot it came from is kept on the entry so undoing
+        // the pass can put it back exactly where it was.
+        let patch: AnimalPatch | undefined;
+        const moves = effects.lotId !== undefined || effects.sold === true;
+        if (moves) {
+          const [row] = await tx
+            .update(animals)
+            .set({
+              ...(effects.lotId !== undefined ? { lotId: effects.lotId } : {}),
+              ...(effects.sold === true
+                ? {
+                    active: false,
+                    inactiveReason: "sale" as const,
+                    inactiveDate: session.date,
+                  }
+                : {}),
+            })
+            .where(eq(animals.id, animalId))
+            .returning(ANIMAL_PATCH_COLUMNS);
+          patch = row;
+        }
+
+        const notes = data.notes?.trim();
+        const [updated] = await tx
+          .update(manejoSessionAnimals)
           .set({
-            ...(effects.lotId !== undefined ? { lotId: effects.lotId } : {}),
-            ...(effects.sold === true
-              ? {
-                  active: false,
-                  inactiveReason: "sale" as const,
-                  inactiveDate: session.date,
-                }
-              : {}),
+            outcome: "done",
+            weightKg: effects.weighing?.weightKg ?? null,
+            notes: notes ? notes : null,
+            amountBrl: effects.amountBrl ?? null,
+            previousLotId: moves ? animal.lotId : null,
+            treatmentId: treatmentId ?? null,
+            boosterId: boosterId ?? null,
+            weighingId: weighingId ?? null,
+            breedingId: breeding?.id ?? null,
+            carcassYieldPct: effects.carcassYieldPct ?? null,
           })
-          .where(eq(animals.id, animalId))
-          .returning(ANIMAL_PATCH_COLUMNS);
-        patch = row;
-      }
-
-      const notes = data.notes?.trim();
-      const [updated] = await tx
-        .update(manejoSessionAnimals)
-        .set({
-          outcome: "done",
-          weightKg: effects.weighing?.weightKg ?? null,
-          notes: notes ? notes : null,
-          amountBrl: effects.amountBrl ?? null,
-          previousLotId: moves ? animal.lotId : null,
-          treatmentId: treatmentId ?? null,
-          boosterId: boosterId ?? null,
-          weighingId: weighingId ?? null,
-          breedingId: breeding?.id ?? null,
-          carcassYieldPct: effects.carcassYieldPct ?? null,
-        })
-        .where(
-          and(
-            eq(manejoSessionAnimals.sessionId, session.id),
-            eq(manejoSessionAnimals.animalId, animalId)
+          .where(
+            and(
+              eq(manejoSessionAnimals.sessionId, session.id),
+              eq(manejoSessionAnimals.animalId, animalId)
+            )
           )
-        )
-        .returning();
+          .returning();
 
-      return {
-        entry: toManejoSessionAnimal(updated, earTag),
-        treatments: createdTreatments,
-        weighing: effects.weighing,
-        animal: patch,
-        breeding,
-      };
-    });
-  };
+        return {
+          entry: toManejoSessionAnimal(updated, earTag),
+          treatments: createdTreatments,
+          weighing: effects.weighing,
+          animal: patch,
+          breeding,
+        };
+      })
+    );
 }

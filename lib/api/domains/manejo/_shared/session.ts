@@ -15,6 +15,7 @@ import {
 import { isDiagnosed } from "@/lib/domain/reproduction";
 
 import type { Tx } from "@/lib/api/@types/repoTypes";
+import type { ManejoSessionAnimal } from "@/lib/types";
 
 /** Herd change a pass applied to one animal (for the client-side merge). */
 export interface AnimalPatch {
@@ -38,11 +39,22 @@ export type ManejoConflict =
   /** The animal had a baixa: nothing more is applied to it at the brete. */
   | "animal_inactive"
   /** A venda still has a dúvida to decide: it cannot close yet. */
-  | "held_pending";
+  | "held_pending"
+  /** A forced pass reached a session that was closed meanwhile. */
+  | "session_closed";
 
-export const conflict = (code: ManejoConflict): { conflict: ManejoConflict } => ({
-  conflict: code,
-});
+/**
+ * A refusal. On a pass route, `entry` is the server's locked entry when the
+ * refusal is about it (another device passed the animal, the session closed),
+ * so a phone replaying its fila can show "No servidor: …" before the choice.
+ */
+export interface PassConflict {
+  conflict: ManejoConflict;
+  entry?: ManejoSessionAnimal;
+}
+
+export const conflict = (code: ManejoConflict, entry?: ManejoSessionAnimal): PassConflict =>
+  entry ? { conflict: code, entry } : { conflict: code };
 
 /**
  * Locks the session and the animal's chute entry (`FOR UPDATE`) for one pass.

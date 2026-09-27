@@ -26,6 +26,8 @@ function selectBuilder() {
   const builder = {
     from: () => builder,
     where: () => builder,
+    innerJoin: () => builder,
+    orderBy: () => builder,
     for: () => builder,
     limit: () => builder,
     then: (resolve: (value: Record<string, unknown>[]) => unknown) => resolve(rows),
@@ -155,5 +157,94 @@ describe("startSession — inseminação", () => {
     expect(state.inserts[0][0].semenBullIds).toBeUndefined();
     expect(result).toMatchObject({ kind: "weighing" });
     expect(result).not.toHaveProperty("semenBullIds", ["bull-1", "bull-2"]);
+  });
+});
+
+describe("startSession — an id the phone made up offline", () => {
+  const ID = "0b7f2c1e-8a4d-4c3b-9f1e-2d5a6b7c8d9e";
+  const WEIGHING = { date: "2026-09-25", kind: "weighing" as const, earTags: ["V-01"], weighing: true };
+  const EXISTING = {
+    id: ID,
+    farmId: 7,
+    name: "Pesagem",
+    date: "2026-09-25",
+    status: "open",
+    kind: "weighing",
+    weighing: true,
+    destinationLotId: null,
+    counterparty: null,
+    pricePerArroba: null,
+    carcassYieldPct: null,
+    totalAmountBrl: null,
+    semenBullIds: null,
+    notes: null,
+    planType: null,
+    planName: null,
+    planWithdrawalDays: null,
+    planDose: null,
+    planResponsible: null,
+    planCostBrl: null,
+    planNextDate: null,
+    planNotes: null,
+    deletedAt: null,
+  };
+  const DONE_ROW = {
+    sessionId: ID,
+    animalId: "a-1",
+    position: 0,
+    outcome: "done",
+    weightKg: 310,
+    notes: null,
+    amountBrl: null,
+    carcassYieldPct: null,
+    previousLotId: null,
+    createdAnimal: false,
+    treatmentId: null,
+    boosterId: null,
+    weighingId: 5,
+    breedingId: null,
+  };
+
+  it("returns the existing session when the id is already the farm's (no insert)", async () => {
+    state.selectResults = [[EXISTING], [{ row: DONE_ROW, earTag: "V-01" }]];
+
+    const result = await new StartSessionUseCase().run({ farmId: 7, input: { ...WEIGHING, id: ID } });
+
+    expect(state.inserts).toEqual([]);
+    expect(result).toMatchObject({
+      id: ID,
+      kind: "weighing",
+      animals: [{ earTag: "V-01", outcome: "done", weightKg: 310 }],
+    });
+  });
+
+  it("answers id_taken for another farm's id", async () => {
+    state.selectResults = [[{ ...EXISTING, farmId: 9 }]];
+
+    const result = await new StartSessionUseCase().run({ farmId: 7, input: { ...WEIGHING, id: ID } });
+
+    expect(result).toBe("id_taken");
+    expect(state.selects).toBe(1);
+    expect(state.inserts).toEqual([]);
+  });
+
+  it("answers id_taken for a discarded session's id", async () => {
+    state.selectResults = [[{ ...EXISTING, deletedAt: new Date() }]];
+
+    expect(
+      await new StartSessionUseCase().run({ farmId: 7, input: { ...WEIGHING, id: ID } })
+    ).toBe("id_taken");
+    expect(state.inserts).toEqual([]);
+  });
+
+  it("inserts with the given id", async () => {
+    // The id lookup finds nothing; then the herd.
+    state.selectResults = [[], [{ id: "a-1", earTag: "V-01", sex: "male" }]];
+
+    const result = await new StartSessionUseCase().run({ farmId: 7, input: { ...WEIGHING, id: ID } });
+
+    expect(state.inserts[0][0]).toMatchObject({ id: ID, kind: "weighing" });
+    expect(state.inserts[1][0]).toMatchObject({ sessionId: ID, animalId: "a-1" });
+    expect(result).toMatchObject({ id: ID, animals: [{ earTag: "V-01", outcome: "pending" }] });
   });
 });

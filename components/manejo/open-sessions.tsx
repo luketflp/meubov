@@ -6,7 +6,7 @@
  * when there is no open session, so it can sit on the dashboard too.
  */
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, CloudOff } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { formatDate } from "@/lib/domain/dates";
 import { SectionCard } from "@/components/ui/section-card";
@@ -30,7 +30,16 @@ export function OpenManejoSessions() {
               className="block rounded-lg border border-hairline bg-surface p-4 transition-colors hover:border-brand"
             >
               <div className="flex items-center justify-between gap-2">
-                <ManejoTypePill action={sessionKind(session)} />
+                <div className="flex items-center gap-1.5">
+                  <ManejoTypePill action={sessionKind(session)} />
+                  {/* Started offline: the server does not have it yet. */}
+                  {session.pending ? (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-scheduled-soft px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-scheduled">
+                      <CloudOff className="size-3" aria-hidden />
+                      no celular
+                    </span>
+                  ) : null}
+                </div>
                 <span className="font-mono text-xs text-ink-soft">
                   {formatDate(session.date)}
                 </span>

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import {
@@ -29,7 +29,8 @@ import type { NewManejoSession } from "@/lib/store/useHerdStore";
 
 interface StartSessionUseCaseProps {
   farmId: number;
-  input: NewManejoSession;
+  /** `id`: made up by a phone that started the manejo offline. */
+  input: NewManejoSession & { id?: string };
 }
 
 type StartSessionUseCaseResponse =
@@ -37,6 +38,7 @@ type StartSessionUseCaseResponse =
   | LotAssignmentError
   | "bull_not_found"
   | "not_female"
+  | "id_taken"
   | null;
 
 type CurrUseCase = _UseCase<StartSessionUseCaseProps, StartSessionUseCaseResponse>;
@@ -53,6 +55,11 @@ type CurrUseCase = _UseCase<StartSessionUseCaseProps, StartSessionUseCaseRespons
  * farm, each once and in the order picked; any other kind ignores bulls sent
  * along. Their stock is not checked here: each pass takes its own dose at the
  * chute.
+ *
+ * A manejo started offline comes with the id the phone gave it. Replaying
+ * that start (the first answer was lost on the way back) returns the session
+ * as it is now and writes nothing. An id already used by another farm, or by a
+ * discarded session, is `id_taken`.
  */
 export class StartSessionUseCase implements CurrUseCase {
   private repository: RepositoryType;
@@ -64,6 +71,27 @@ export class StartSessionUseCase implements CurrUseCase {
 
   public run: CurrUseCase["run"] = async ({ farmId, input }) => {
     return this.repository.transaction(async (tx) => {
+      if (input.id !== undefined) {
+        const [existing] = await tx
+          .select()
+          .from(manejoSessions)
+          .where(eq(manejoSessions.id, input.id))
+          .limit(1);
+        if (existing) {
+          if (existing.farmId !== farmId || existing.deletedAt !== null) return "id_taken";
+          const entries = await tx
+            .select({ row: manejoSessionAnimals, earTag: animals.earTag })
+            .from(manejoSessionAnimals)
+            .innerJoin(animals, eq(manejoSessionAnimals.animalId, animals.id))
+            .where(eq(manejoSessionAnimals.sessionId, existing.id))
+            .orderBy(asc(manejoSessionAnimals.position));
+          return toManejoSession(
+            existing,
+            entries.map(({ row, earTag }) => toManejoSessionAnimal(row, earTag))
+          );
+        }
+      }
+
       const herd =
         input.earTags.length === 0
           ? []
@@ -96,7 +124,7 @@ export class StartSessionUseCase implements CurrUseCase {
       const [sessionRow] = await tx
         .insert(manejoSessions)
         .values({
-          id: randomUUID(),
+          id: input.id ?? randomUUID(),
           farmId,
           name: sessionName(plan, input.kind),
           date: input.date,

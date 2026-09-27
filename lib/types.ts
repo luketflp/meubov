@@ -39,6 +39,11 @@ export interface Weighing {
   id?: number;
   date: string;
   weightKg: number;
+  /**
+   * Operation of the fila that created this weighing on the phone (its id is
+   * then negative). Client-only: never leaves the phone.
+   */
+  localOpId?: string;
 }
 
 /** Breeding (timed AI or natural mating) of a female. */
@@ -49,6 +54,11 @@ export interface Breeding {
   bullEarTag: string;
   /** Registered semen bull whose dose this cobertura used; absent for any other bull. */
   semenBullId?: string;
+  /**
+   * Operation of the fila that created this cobertura on the phone (its id is
+   * then `local:<uuid>`). Client-only: never leaves the phone.
+   */
+  localOpId?: string;
 }
 
 /** One purchase of semen doses of a bull; it also became a farm expense. */
@@ -156,6 +166,11 @@ export interface Treatment {
   notes?: string;
   /** Groups the treatments one scheduling action created for several animals. */
   batchId?: string;
+  /**
+   * Operation of the fila that created this treatment on the phone (its id is
+   * then `local:<uuid>`). Client-only: never leaves the phone.
+   */
+  localOpId?: string;
 }
 
 /** Template or one-off details used to create scheduled calendar treatments. */
@@ -209,6 +224,13 @@ export interface ManejoSessionAnimal {
   createdAnimal?: boolean;
   /** Id of the cobertura an inseminação pass recorded (for undo and delete). */
   breedingId?: string;
+  /**
+   * True while this outcome was applied on the phone and the server has not
+   * confirmed it yet. Client-only: never leaves the phone.
+   */
+  pending?: boolean;
+  /** Operation of the fila that produced this outcome. Client-only: never leaves the phone. */
+  localOpId?: string;
 }
 
 /** Sanitary action a manejo session applies to each animal that passes. */
@@ -273,6 +295,11 @@ export interface ManejoSession {
    * without Financeiro, so "no price" and "a price you may not see" differ.
    */
   valuesHidden?: boolean;
+  /**
+   * True for a manejo started on the phone without signal that the server has
+   * not created yet. Client-only: never leaves the phone.
+   */
+  pending?: boolean;
 }
 
 /** Logical group of cattle, independent of the pasture it currently occupies. */

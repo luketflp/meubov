@@ -38,6 +38,7 @@ import { Button } from "@/components/ui/button";
 import { PendingInviteBanner } from "@/components/invites/PendingInviteBanner";
 import { RegisterManejoDialog } from "@/components/manejo/register-manejo-dialog";
 import { FirstStepsBanner } from "@/components/dashboard/FirstStepsBanner";
+import { InstallCard } from "@/components/offline/InstallCard";
 import { FarmAgenda } from "@/components/dashboard/FarmAgenda";
 import { OpenSessionsStack } from "@/components/dashboard/OpenSessionsStack";
 import { HerdCard } from "@/components/dashboard/HerdCard";
@@ -177,6 +178,8 @@ export default function DashboardPage() {
       <PendingInviteBanner />
 
       <FirstStepsBanner />
+
+      <InstallCard />
 
       <OpenSessionsStack />
 

@@ -20,6 +20,7 @@ import {
 import { useSignOut } from "@/lib/auth/navigation";
 import { NAV_ITEMS, type NavItem, activeChild, isActiveRoute, visibleNav } from "@/lib/nav";
 import { cn } from "@/lib/utils";
+import { SyncBadge } from "@/components/offline/SyncBadge";
 
 /**
  * Number of leading {@link NAV_ITEMS} shown as bottom tabs; the rest live behind
@@ -78,7 +79,13 @@ export function MobileTabBar() {
               aria-current={active ? "page" : undefined}
               className={cn(tabClass, active ? "text-brand" : "text-ink-soft")}
             >
-              <tab.icon className="size-5" aria-hidden />
+              <span className="relative">
+                <tab.icon className="size-5" aria-hidden />
+                {/* Visual only: the tab still navigates; the sheet opens from the runner. */}
+                {tab.href === "/manejo" ? (
+                  <SyncBadge className="absolute -top-1.5 -right-2.5 ring-2 ring-panel" />
+                ) : null}
+              </span>
               <span className="text-[10px] font-medium">{tabLabel(tab)}</span>
             </Link>
           );

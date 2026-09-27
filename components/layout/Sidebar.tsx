@@ -11,6 +11,7 @@ import { NAV_ITEMS, activeChild, isActiveRoute, visibleNav } from "@/lib/nav";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useActivePermissions } from "@/lib/store/usePermissions";
 import { cn } from "@/lib/utils";
+import { SyncBadge } from "@/components/offline/SyncBadge";
 import { NELORE_HEAD_VIEWBOX, NeloreMark } from "@/components/ui/nelore-mark";
 import { FarmSwitcher } from "@/components/farms/FarmSwitcher";
 
@@ -100,6 +101,12 @@ export function Sidebar() {
                   aria-hidden
                 />
                 {item.label}
+                {/* Brand on the cream active pill; cream on the green rail. */}
+                {item.href === "/manejo" ? (
+                  <SyncBadge
+                    className={cn("ml-auto", !active && "bg-sidebar-active text-sidebar-active-ink")}
+                  />
+                ) : null}
               </Link>
               {item.children && (
                 <div className="ml-[18px] space-y-0.5 pl-2.5">

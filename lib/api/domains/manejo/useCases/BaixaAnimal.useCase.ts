@@ -6,8 +6,10 @@ import { baixaPassNote } from "@/lib/domain/manejo";
 import { toManejoSessionAnimal } from "@/lib/api/mappers";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
 import { DeactivateAnimalUseCase } from "@/lib/api/domains/animals/useCases/Deactivate.useCase";
+import type { LotAssignmentError } from "@/lib/api/domains/animals/useCases/ValidateLotAssignment.useCase";
 
-import { conflict, lockEntry, type ManejoConflict } from "../_shared/session";
+import { answerRefusal, forceReopen, Refused } from "../_shared/revert";
+import { conflict, lockEntry, type PassConflict } from "../_shared/session";
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
 import type { Animal, ManejoSessionAnimal } from "@/lib/types";
@@ -27,9 +29,15 @@ interface BaixaAnimalUseCaseProps {
   sessionId: string;
   animalId: string;
   input: NewBaixa;
+  /** The phone's baixa wins over a pass another device already wrote. */
+  force?: boolean;
 }
 
-type BaixaAnimalUseCaseResponse = BaixaResult | { conflict: ManejoConflict } | null;
+type BaixaAnimalUseCaseResponse =
+  | BaixaResult
+  | PassConflict
+  | LotAssignmentError
+  | null;
 
 type CurrUseCase = _UseCase<BaixaAnimalUseCaseProps, BaixaAnimalUseCaseResponse>;
 
@@ -38,6 +46,9 @@ type CurrUseCase = _UseCase<BaixaAnimalUseCaseProps, BaixaAnimalUseCaseResponse>
  * and its pass is skipped, with a note naming the baixa, in one transaction —
  * the queue never holds an animal that is gone, and a failed write leaves both
  * as they were.
+ *
+ * With `force`, a pass another device already wrote is undone first, as in
+ * CompleteAnimalUseCase; a refusal after the undo takes it back.
  */
 export class BaixaAnimalUseCase implements CurrUseCase {
   private repository: RepositoryType;
@@ -47,37 +58,50 @@ export class BaixaAnimalUseCase implements CurrUseCase {
     this.repository = repo;
   }
 
-  public run: CurrUseCase["run"] = async ({ farmId, sessionId, animalId, input }) => {
-    return this.repository.transaction(async (tx) => {
-      const { session, entry, animal } = await lockEntry(tx, farmId, sessionId, animalId);
-      if (!session || !entry || !animal) return null;
-      if (session.status !== "open") return conflict("session_not_open");
-      if (entry.outcome !== "pending") return conflict("entry_not_actionable");
-      if (!animal.active) return conflict("animal_inactive");
+  public run: CurrUseCase["run"] = ({ farmId, sessionId, animalId, input, force }) =>
+    answerRefusal<BaixaAnimalUseCaseResponse>(() =>
+      this.repository.transaction(async (tx) => {
+        const locked = await lockEntry(tx, farmId, sessionId, animalId);
+        const { session, entry } = locked;
+        let { animal } = locked;
+        if (!session || !entry || !animal) return null;
+        if (session.status !== "open") {
+          return conflict(
+            force ? "session_closed" : "session_not_open",
+            toManejoSessionAnimal(entry, animal.earTag)
+          );
+        }
+        if (entry.outcome !== "pending") {
+          if (!force) return conflict("entry_not_actionable", toManejoSessionAnimal(entry, animal.earTag));
+          const undone = await forceReopen(tx, { farmId, session, entry, animal });
+          if (typeof undone === "string" || "conflict" in undone) return undone;
+          if (undone.animal) animal = { ...animal, ...undone.animal };
+        }
+        if (!animal.active) throw new Refused(conflict("animal_inactive"));
 
-      await new DeactivateAnimalUseCase(tx).run({ farmId, animalId, input });
-      const [updated] = await tx
-        .update(manejoSessionAnimals)
-        .set({ outcome: "skipped", notes: baixaPassNote(input.reason, input.notes) })
-        .where(
-          and(
-            eq(manejoSessionAnimals.sessionId, session.id),
-            eq(manejoSessionAnimals.animalId, animal.id)
+        await new DeactivateAnimalUseCase(tx).run({ farmId, animalId, input });
+        const [updated] = await tx
+          .update(manejoSessionAnimals)
+          .set({ outcome: "skipped", notes: baixaPassNote(input.reason, input.notes) })
+          .where(
+            and(
+              eq(manejoSessionAnimals.sessionId, session.id),
+              eq(manejoSessionAnimals.animalId, animal.id)
+            )
           )
-        )
-        .returning();
+          .returning();
 
-      const notes = input.notes?.trim();
-      return {
-        entry: toManejoSessionAnimal(updated, animal.earTag),
-        animal: {
-          earTag: animal.earTag,
-          active: false,
-          inactiveReason: input.reason,
-          inactiveDate: input.date,
-          inactiveNotes: notes ? notes : undefined,
-        },
-      };
-    });
-  };
+        const notes = input.notes?.trim();
+        return {
+          entry: toManejoSessionAnimal(updated, animal.earTag),
+          animal: {
+            earTag: animal.earTag,
+            active: false,
+            inactiveReason: input.reason,
+            inactiveDate: input.date,
+            inactiveNotes: notes ? notes : undefined,
+          },
+        };
+      })
+    );
 }

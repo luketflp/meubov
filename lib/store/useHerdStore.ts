@@ -23,7 +23,6 @@ import type {
   ManejoSessionAnimal,
   ManejoTreatmentPlan,
   PregnancyDiagnosis,
-  ReproductionRecord,
   ScheduleTreatmentsInput,
   SemenBull,
   SemenPurchase,
@@ -37,6 +36,17 @@ import { type HerdRepository } from "@/lib/repository/HerdRepository";
 import { ApiHerdRepository } from "@/lib/repository/ApiHerdRepository";
 import { api } from "@/lib/api/client";
 import { clearActiveFarmId, getActiveFarmId, setActiveFarmId } from "@/lib/api/activeFarm";
+import { authClient } from "@/lib/auth/client";
+import { openStore } from "@/lib/offline/db";
+import {
+  clearUserSnapshots,
+  isNetworkFailure,
+  LAST_USER_KEY,
+  loadSnapshot,
+  saveSnapshot,
+  snapshotKey,
+  type Snapshot,
+} from "@/lib/offline/snapshot";
 import { can, type FarmRole, type MemberPreset, type Permissions } from "@/lib/domain/permissions";
 import type { BullRemovalBlock } from "@/lib/domain/semen";
 import { selectActivePermissions } from "@/lib/store/selectors";
@@ -45,6 +55,36 @@ import type { ImportAnimalPayload } from "@/lib/domain/herdImport";
 import type { ImportBirthPayload } from "@/lib/domain/birthImport";
 import type { BlockedAnimal } from "@/lib/domain/manejoRevert";
 import type { DeletedManejo } from "@/lib/api/domains/manejo/useCases/Delete.useCase";
+import {
+  compareByDate,
+  mergeBaixaResult,
+  mergeCarcassYield,
+  mergeClose,
+  mergeCompleteResult,
+  mergeReopenResult,
+  mergeSetAsideResult,
+  mergeSkipResult,
+  mergeStart,
+  stripLocal,
+  withReproduction,
+  type BaixaAnimalPatch,
+  type CarcassYieldResult,
+  type CompleteResult,
+  type HerdSlices,
+  type ReopenResult,
+  type SetAsideResult,
+} from "@/lib/store/manejoMerge";
+import { todayISO } from "@/lib/domain/dates";
+import { localApply, localStartSession } from "@/lib/offline/localApply";
+import type { SyncStatus } from "@/lib/offline/sync";
+import type { OutboxKind, OutboxOp } from "@/lib/offline/types";
+import {
+  getEngine,
+  getOutbox,
+  getSyncUser,
+  setSyncUser,
+  wireOffline,
+} from "@/lib/store/offlineWiring";
 
 /** Animal to register; the optional initial weight becomes the first weighing. */
 export type NewAnimal = Omit<Animal, "id" | "active" | "weighings" | "reproduction"> & {
@@ -90,13 +130,6 @@ export interface ManejoPassData {
   semenBullId?: string;
   /** Rendimento (%) the brete priced this boiada at (venda per arroba only). */
   carcassYieldPct?: number;
-}
-
-/** Herd change a manejo pass applied to one animal (lot, herd membership). */
-interface PassAnimalPatch {
-  earTag: string;
-  active: boolean;
-  lotId: string;
 }
 
 /**
@@ -232,11 +265,21 @@ export interface NewFarmInput {
 
 export interface HerdStore extends HerdData {
   loaded: boolean;
+  /** True when the API was unreachable at boot and the store came from the phone's snapshot. */
+  offline: boolean;
+  /** When that snapshot's data was saved (ISO); null when the store booted online. */
+  snapshotAt: string | null;
   /** Farms the user can access; the switcher lists them all, even just one. */
   farms: FarmOption[];
   activeFarmId: number | null;
   /** Convites waiting for the signed-in e-mail (the Painel banner, the avatar dot). */
   pendingInvites: MyInvite[];
+  /** Where the fila's sync stands (lib/offline/sync.ts). */
+  sync: SyncStatus;
+  /** Operations in the fila: a enviar, conflitos and falhas. */
+  outboxCount: number;
+  /** The fila itself, in the order it goes, for the runner's list and the Sincronização sheet. */
+  ops: OutboxOp[];
   load: () => Promise<void>;
   /** Persists the choice and rehydrates the whole store from the new farm. */
   switchFarm: (farmId: number) => Promise<void>;
@@ -487,19 +530,138 @@ const repository: HerdRepository = new ApiHerdRepository();
  * Re-fetches the whole herd after a write the server already settled — an
  * import, or a refusal that proves the store's copy stale (a bull's doses).
  * Best-effort: a failed refresh never masks the write's own outcome, and the
- * store refreshes on the next successful load.
+ * store refreshes on the next successful load. A success means the API is
+ * back: the store leaves offline mode and the phone keeps the fresh snapshot.
  */
-async function reloadHerd(set: StoreApi<HerdStore>["setState"]): Promise<void> {
+async function reloadHerd(set: StoreApi<HerdStore>["setState"]): Promise<boolean> {
   try {
     const fresh = await repository.load();
-    set({ ...fresh, loaded: true });
+    set({ ...fresh, loaded: true, offline: false, snapshotAt: null });
   } catch {
     // best-effort: keep what the store has
+    return false;
+  }
+  await persistSnapshot(useHerdStore.getState);
+  return true;
+}
+
+const snapshotStore = () => openStore<Snapshot>("snapshot");
+const metaStore = () => openStore<string>("meta");
+
+/** The herd part of the store, shaped as GET /api/herd returns it. */
+function herdDataOf(s: HerdStore): HerdData {
+  return {
+    animals: s.animals,
+    treatments: s.treatments,
+    lots: s.lots,
+    invernadas: s.invernadas,
+    removedInvernadas: s.removedInvernadas,
+    lotPlacements: s.lotPlacements,
+    movements: s.movements,
+    breeds: s.breeds,
+    protocols: s.protocols,
+    manejoSessions: s.manejoSessions,
+    expenses: s.expenses,
+    accounts: s.accounts,
+    customCategories: s.customCategories,
+    semenBulls: s.semenBulls,
+    farm: s.farm,
+  };
+}
+
+/**
+ * Who this page's session belongs to, read from the server by rememberUser.
+ * persistSnapshot keys by it, never by the meta lastUser, so a stale lastUser
+ * never receives another user's herd; null until the session answers.
+ */
+let sessionUserId: string | null = null;
+
+/** Signed out in this page: queued ops never fall back to the last user. */
+let signedOut = false;
+
+/**
+ * Asks who is signed in; null when no one is. Throws when the session read
+ * itself failed (no network).
+ */
+async function readSessionUser(): Promise<string | null> {
+  const { data, error } = await authClient.getSession();
+  if (error) throw error;
+  return data?.user.id ?? null;
+}
+
+/** Makes userId this page's user and remembers it for an offline boot. */
+async function rememberUser(userId: string | null): Promise<void> {
+  sessionUserId = userId;
+  if (!userId) return;
+  signedOut = false;
+  await metaStore()
+    .put(LAST_USER_KEY, userId)
+    .catch(() => {}); // no IndexedDB: no offline boot, the page still works
+}
+
+/** How long a failed session read waits before the next try. */
+const CONFIRM_RETRY_MS = 30_000;
+
+let userRetry: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * After an online load, or back in a loaded tab after a sign-in: asks who is
+ * signed in and hands the fila to them. When it is not `previous`, nothing of
+ * the previous user's stays: a clean reload. A failed read tries again in 30 s.
+ */
+async function adoptSessionUser(previous: string | undefined): Promise<void> {
+  let userId: string | null;
+  try {
+    userId = await readSessionUser();
+  } catch {
+    userRetry ??= setTimeout(() => {
+      userRetry = undefined;
+      void adoptSessionUser(previous);
+    }, CONFIRM_RETRY_MS);
+    return;
+  }
+  if (previous !== undefined && userId !== null && userId !== previous) {
+    clearActiveFarmId();
+    window.location.reload();
+    return;
+  }
+  await rememberUser(userId);
+  setSyncUser(userId ?? undefined);
+  if (userId) await persistSnapshot(useHerdStore.getState);
+}
+
+/** The last signed-in user's snapshot of the stored active farm, if the phone has one. */
+async function bootSnapshot(): Promise<{ userId: string; snap: Snapshot } | undefined> {
+  try {
+    const userId = await metaStore().get(LAST_USER_KEY);
+    const farmId = getActiveFarmId();
+    if (!userId || farmId === null) return undefined;
+    const snap = await loadSnapshot(snapshotStore(), snapshotKey(userId, farmId));
+    return snap && { userId, snap };
+  } catch {
+    return undefined; // no IndexedDB (private mode, blocked storage): no snapshot
   }
 }
 
-const compareByDate = (a: { date: string }, b: { date: string }): number =>
-  a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
+/**
+ * Saves what the store holds now — provisional records included — as the
+ * phone's snapshot of the active farm. Offline, the data keeps its original
+ * time. Never throws: a storage failure only means no snapshot.
+ */
+export async function persistSnapshot(get: () => HerdStore): Promise<void> {
+  try {
+    const s = get();
+    if (!sessionUserId || s.activeFarmId === null) return;
+    await saveSnapshot(snapshotStore(), snapshotKey(sessionUserId, s.activeFarmId), {
+      data: herdDataOf(s),
+      farms: s.farms,
+      activeFarmId: s.activeFarmId,
+      savedAt: s.offline && s.snapshotAt ? s.snapshotAt : new Date().toISOString(),
+    });
+  } catch {
+    // best-effort: the app runs without a snapshot
+  }
+}
 
 /** Semen bulls keep the snapshot's order (by name) after a create or a rename. */
 const compareByName = (a: { name: string }, b: { name: string }): number =>
@@ -537,38 +699,345 @@ function withPurchases(
   return bulls.map((b) => (b.id === bullId ? { ...b, purchases: update(b.purchases) } : b));
 }
 
-/** A female with no reproduction history yet — she can still receive records. */
-const EMPTY_REPRODUCTION: ReproductionRecord = {
-  breedings: [],
-  diagnoses: [],
-  calvings: [],
-};
+/** When a manejo request last failed for network reasons (ms since epoch). */
+let lastNetworkFailureAt = 0;
 
-/** Immutably updates one female's reproduction record, creating it if absent. */
-function withReproduction(
-  animals: Animal[],
-  earTag: string,
-  update: (record: ReproductionRecord) => ReproductionRecord
-): Animal[] {
-  return animals.map((a) =>
-    a.earTag === earTag
-      ? { ...a, reproduction: update(a.reproduction ?? EMPTY_REPRODUCTION) }
-      : a
-  );
+/** For this long after a network failure, the brete queues instead of trying the API. */
+const NETWORK_FAILURE_WINDOW_MS = 10_000;
+
+/** Eden answers 503 without a response when fetch itself failed; remembers when. */
+function networkFailed(error: { status: number }): boolean {
+  if (error.status !== 503 && error.status !== 0) return false;
+  lastNetworkFailureAt = Date.now();
+  return true;
 }
 
-/** Immutably replaces one animal entry inside one session. */
-function withSessionAnimal(
+/**
+ * A manejo action goes to the fila without signal, right after a network
+ * failure, or while its session has anything waiting there — so a later pass
+ * never reaches the server before an earlier one.
+ */
+async function mustQueue(sessionId?: string): Promise<boolean> {
+  if ((await queueUser()) === undefined) return false;
+  if (!navigator.onLine || Date.now() - lastNetworkFailureAt < NETWORK_FAILURE_WINDOW_MS) {
+    return true;
+  }
+  // No IndexedDB (private mode): no fila either, so the online path stays as it was.
+  return sessionId !== undefined && getOutbox().hasPending(sessionId).catch(() => false);
+}
+
+/** Immutably patches one session's own fields. */
+function patchSession(
   sessions: ManejoSession[],
   sessionId: string,
-  earTag: string,
-  entry: ManejoSessionAnimal
+  patch: Partial<ManejoSession>
 ): ManejoSession[] {
-  return sessions.map((m) =>
-    m.id === sessionId
-      ? { ...m, animals: m.animals.map((a) => (a.earTag === earTag ? entry : a)) }
-      : m
+  return sessions.map((m) => (m.id === sessionId ? { ...m, ...patch } : m));
+}
+
+/**
+ * Only a start's own reconcile or drop takes the phone's session out (an
+ * offline close also marks its session pending, and must not lose it).
+ */
+const startedBy = (op: OutboxOp) =>
+  op.kind === "start" ? { startedSessionId: op.sessionId } : undefined;
+
+/** An operation's effects on the store, before the server has seen it (provisional). */
+function applyLocally(s: HerdStore, op: OutboxOp): Partial<HerdStore> {
+  const earTag = op.earTag ?? "";
+  switch (op.kind) {
+    case "start":
+      return s.manejoSessions.some((m) => m.id === op.sessionId)
+        ? {}
+        : mergeStart(s, localStartSession(op));
+    case "close":
+      return {
+        manejoSessions: patchSession(s.manejoSessions, op.sessionId, {
+          status: "closed",
+          pending: true,
+        }),
+      };
+    case "carcass-yield":
+      return {
+        manejoSessions: patchSession(s.manejoSessions, op.sessionId, {
+          carcassYieldPct: op.body.carcassYieldPct as number,
+        }),
+      };
+    case "reopen":
+      // The entry goes back to pending at once; mergeSkipResult just swaps an entry in.
+      return mergeSkipResult(s, op.sessionId, earTag, {
+        earTag,
+        outcome: "pending",
+        pending: true,
+        localOpId: op.id,
+      });
+    default: {
+      const session = s.manejoSessions.find((m) => m.id === op.sessionId);
+      const animal = s.animals.find((a) => a.earTag === earTag);
+      const effects =
+        session && animal
+          ? localApply(op, { session, animal, semenBulls: s.semenBulls, today: todayISO() })
+          : null;
+      return effects ? mergeCompleteResult(s, op.sessionId, earTag, effects) : {};
+    }
+  }
+}
+
+/** The server accepted an op: its provisional records go and its answer merges as online. */
+function reconcile(s: HerdStore, op: OutboxOp, result: unknown): HerdSlices {
+  const earTag = op.earTag ?? "";
+  const base = stripLocal(s, op.id, startedBy(op));
+  switch (op.kind) {
+    case "start": {
+      // The server's session replaces the phone's, keeping the passes still in the fila.
+      const session = result as ManejoSession;
+      const local = s.manejoSessions.find((m) => m.id === op.sessionId);
+      const waiting = new Map(
+        (local?.animals ?? []).filter((a) => a.pending).map((a) => [a.earTag, a])
+      );
+      return mergeStart(base, {
+        ...session,
+        animals: session.animals.map((a) => waiting.get(a.earTag) ?? a),
+      });
+    }
+    case "complete":
+      return mergeCompleteResult(base, op.sessionId, earTag, result as CompleteResult);
+    case "skip":
+      return mergeSkipResult(base, op.sessionId, earTag, result as ManejoSessionAnimal);
+    case "set-aside":
+      return mergeSetAsideResult(base, op.sessionId, earTag, result as SetAsideResult);
+    case "baixa":
+      return mergeBaixaResult(
+        base,
+        op.sessionId,
+        earTag,
+        result as { entry: ManejoSessionAnimal; animal: BaixaAnimalPatch }
+      );
+    case "reopen":
+      return mergeReopenResult(base, op.sessionId, earTag, result as ReopenResult);
+    case "carcass-yield":
+      return mergeCarcassYield(base, op.sessionId, result as CarcassYieldResult);
+    case "close": {
+      const closed = mergeClose(base, op.sessionId);
+      return {
+        ...closed,
+        manejoSessions: patchSession(closed.manejoSessions, op.sessionId, { pending: undefined }),
+      };
+    }
+  }
+}
+
+/** An op left the fila unsent (Manter do servidor, Descartar): its local effects go. */
+function dropLocally(s: HerdStore, op: OutboxOp): HerdSlices {
+  const base = stripLocal(s, op.id, startedBy(op));
+  if (op.kind === "close") {
+    return {
+      ...base,
+      manejoSessions: patchSession(base.manejoSessions, op.sessionId, {
+        status: "open",
+        pending: undefined,
+      }),
+    };
+  }
+  return base;
+}
+
+/** Sign-out: this user's snapshots go (the farm, money included); the fila stays for their return. */
+export async function clearOfflineSnapshots(): Promise<void> {
+  setSyncUser(undefined);
+  const signedIn = sessionUserId;
+  // Nothing more is saved or queued for them in this page.
+  sessionUserId = null;
+  signedOut = true;
+  bootedAs = undefined;
+  bootSignedOut = false;
+  try {
+    const userId = signedIn ?? (await metaStore().get(LAST_USER_KEY));
+    // The next user's offline passes never fall back to this one.
+    await metaStore().delete(LAST_USER_KEY);
+    if (userId) await clearUserSnapshots(snapshotStore(), userId);
+  } catch {
+    // no IndexedDB: nothing was saved
+  }
+  // The next load runs in full and asks the server who signed in.
+  useHerdStore.setState(useHerdStore.getInitialState(), true);
+}
+
+/**
+ * Whose fila a queued op joins: the sync user, or on a page booted from the
+ * snapshot before any session read, the last user. None after a sign-out here:
+ * the action then goes online and fails as it always did.
+ */
+async function queueUser(): Promise<string | undefined> {
+  const user = getSyncUser();
+  if (user !== undefined || signedOut) return user;
+  return metaStore()
+    .get(LAST_USER_KEY)
+    .catch(() => undefined);
+}
+
+/** A network failure the fila can take over (it needs a known user). */
+async function queueAfter(error: { status: number }): Promise<boolean> {
+  return networkFailed(error) && (await queueUser()) !== undefined;
+}
+
+/**
+ * Puts a manejo action in the fila and applies it to the store at once, so
+ * the brete moves on without signal; the engine sends it when it can.
+ */
+async function queueOp(
+  kind: OutboxKind,
+  sessionId: string,
+  body: object,
+  earTag?: string
+): Promise<OutboxOp> {
+  const userId = await queueUser();
+  // mustQueue and queueAfter only let an action here with a known user.
+  if (userId === undefined) throw new Error("no user to queue for");
+  // An op of no farm would never be sent nor shown.
+  const farmId = useHerdStore.getState().activeFarmId;
+  if (farmId === null) throw new Error("no farm to queue for");
+  const op = await getOutbox().enqueue({
+    id: crypto.randomUUID(),
+    userId,
+    farmId,
+    sessionId,
+    kind,
+    earTag,
+    body: { ...body } as Record<string, unknown>,
+  });
+  useHerdStore.setState((s) => applyLocally(s, op));
+  await persistSnapshot(useHerdStore.getState);
+  void getEngine()?.kick("enqueue");
+  return op;
+}
+
+/** A pass queued: the brete goes on as if the server had said yes. */
+async function queuePass(
+  kind: OutboxKind,
+  sessionId: string,
+  earTag: string,
+  body: object
+): Promise<true> {
+  await queueOp(kind, sessionId, body, earTag);
+  return true;
+}
+
+/**
+ * Desfazer while the session has a fila: a pass still waiting is simply taken
+ * out, with its provisional records, and nothing is sent; otherwise (already
+ * on its way, or a conflito) the undo itself waits in the fila behind the pass.
+ */
+async function queueReopen(sessionId: string, earTag: string): Promise<void> {
+  const opId = useHerdStore
+    .getState()
+    .manejoSessions.find((m) => m.id === sessionId)
+    ?.animals.find((a) => a.earTag === earTag)?.localOpId;
+  if (opId === undefined || !(await getOutbox().removeIfQueued(opId))) {
+    await queueOp("reopen", sessionId, {}, earTag);
+    return;
+  }
+  useHerdStore.setState((s) => stripLocal(s, opId));
+  await persistSnapshot(useHerdStore.getState);
+  void getEngine()?.kick("enqueue");
+}
+
+/** The toast and refusal of an entrada without signal: it creates animals on the server. */
+function entradaNeedsSignal(): never {
+  toast.error("Entrada precisa de sinal");
+  throw new Error("entrada without signal");
+}
+
+/** The snapshot's user after an offline boot, until the server confirms the session's. */
+let bootedAs: string | undefined;
+/** The check found no session: nothing is asked again until load runs (a sign-in). */
+let bootSignedOut = false;
+let confirming: Promise<void> | undefined;
+let confirmRetry: ReturnType<typeof setTimeout> | undefined;
+
+
+/**
+ * With signal again after an offline boot, asks who is really signed in; the
+ * fila stays held (see holdSync) until it is the booted user.
+ */
+function confirmBootUser(): Promise<void> {
+  if (bootedAs === undefined || bootSignedOut || !navigator.onLine) return Promise.resolve();
+  return (confirming ??= checkBootUser().finally(() => {
+    confirming = undefined;
+  }));
+}
+
+async function checkBootUser(): Promise<void> {
+  let userId: string | null;
+  try {
+    userId = await readSessionUser();
+  } catch {
+    confirmRetry ??= setTimeout(() => {
+      confirmRetry = undefined;
+      void confirmBootUser();
+    }, CONFIRM_RETRY_MS);
+    return;
+  }
+  if (userId === null) {
+    // Signed out meanwhile: the fila stays held and nothing more is queued.
+    bootSignedOut = true;
+    signedOut = true;
+    sessionUserId = null;
+    setSyncUser(undefined);
+    toast.error("Entre de novo para enviar");
+    return;
+  }
+  if (userId !== bootedAs) {
+    // Another user: none of the previous user's farms or names stay on screen.
+    clearActiveFarmId();
+    window.location.reload();
+    return;
+  }
+  await rememberUser(userId);
+  // Leaves the snapshot for the server's herd before the fila moves, so nothing races the reload.
+  await reloadUnderFila();
+  bootedAs = undefined;
+  setSyncUser(userId);
+}
+
+/** The server's herd with what is still in the fila on top: the phone's passes stay on screen. */
+async function reloadUnderFila(): Promise<void> {
+  // A failed reload kept the store as it was, fila effects included: nothing to put back.
+  if (!(await reloadHerd(useHerdStore.setState))) return;
+  const ops = await getOutbox().list(getSyncUser() ?? "", activeFarm() ?? -1);
+  useHerdStore.setState((s) =>
+    ops.reduce<HerdStore>((acc, op) => ({ ...acc, ...applyLocally(acc, op) }), s)
   );
+  await persistSnapshot(useHerdStore.getState);
+}
+
+/** The active farm, for the fila: another farm's ops wait until it is active. */
+const activeFarm = () => useHerdStore.getState().activeFarmId ?? undefined;
+
+/** Hooks the fila's engine to this store (the first call builds it; see wireOffline). */
+function startOffline(): void {
+  wireOffline({
+    holdSync: () => bootedAs !== undefined,
+    farmId: activeFarm,
+    animalIdByEarTag: (earTag) =>
+      useHerdStore.getState().animals.find((a) => a.earTag === earTag)?.id,
+    onApplied: (op, result) => {
+      useHerdStore.setState((s) => reconcile(s, op, result));
+      void persistSnapshot(useHerdStore.getState);
+    },
+    onDropped: (op) => {
+      useHerdStore.setState((s) => dropLocally(s, op));
+      void persistSnapshot(useHerdStore.getState);
+    },
+    onBatchResolved: reloadUnderFila,
+    onAuthRequired: () => {
+      toast.error("Entre de novo para enviar");
+    },
+    onChange: (sync, ops) => {
+      useHerdStore.setState({ sync, ops, outboxCount: ops.length });
+      void confirmBootUser();
+    },
+  });
 }
 
 export const useHerdStore = create<HerdStore>()((set, get) => ({
@@ -588,18 +1057,62 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   semenBulls: [],
   farm: { name: "", municipality: "", stateRegistration: "", manager: "" },
   loaded: false,
+  offline: false,
+  snapshotAt: null,
   farms: [],
   activeFarmId: null,
   pendingInvites: [],
+  // Until the engine reports (first load), nothing is waiting and nothing says "Sem conexão".
+  sync: { online: true, phase: "idle", counts: { queued: 0, conflict: 0, failed: 0 } },
+  outboxCount: 0,
+  ops: [],
 
   load: async () => {
-    if (get().loaded) return;
-    const [data, farmsRes, invitesRes] = await Promise.all([
-      // AppShell shows its own screen when this first load fails.
+    if (get().loaded) {
+      // Back after a sign-in in this tab: confirm who it is before anything is sent.
+      bootSignedOut = false;
+      if (bootedAs !== undefined) {
+        await confirmBootUser();
+      } else {
+        // Maybe someone else signed in after the session expired: hold the fila until the server says.
+        const previous = getSyncUser() ?? sessionUserId ?? undefined;
+        setSyncUser(undefined);
+        await adoptSessionUser(previous);
+      }
+      startOffline();
+      return;
+    }
+    startOffline();
+    const results = await Promise.all([
+      // AppShell shows its own screen when this first load fails and the
+      // phone has no snapshot to boot from.
       repository.load({ quiet: true }),
       api.farms.get(),
       api.invites.get(),
-    ]);
+    ]).catch(async (error: unknown) => {
+      // Only without network: a server answer (401, 403, 409, 500) keeps its
+      // redirect or failure screen and never flashes a stored farm.
+      if (!isNetworkFailure(error)) throw error;
+      const boot = await bootSnapshot();
+      if (!boot) throw error;
+      const { snap } = boot;
+      set({
+        ...snap.data,
+        farms: snap.farms,
+        activeFarmId: snap.activeFarmId,
+        loaded: true,
+        offline: true,
+        snapshotAt: snap.savedAt,
+      });
+      // No session to ask offline: the page, its snapshot and the fila work for
+      // the snapshot's user until the server confirms who is signed in.
+      sessionUserId = boot.userId;
+      bootedAs = boot.userId;
+      setSyncUser(boot.userId);
+      return null;
+    });
+    if (!results) return;
+    const [data, farmsRes, invitesRes] = results;
     const activeFarmId = farmsRes.data?.activeFarmId;
     // A member who never switched farms has no stored choice, so nothing sends
     // x-farm-id and every request keeps resolving to whatever farm the server
@@ -614,6 +1127,8 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       pendingInvites: invitesRes.data?.invites ?? [],
       loaded: true,
     });
+    // In the background: the boot never waits on the session read or IndexedDB.
+    void adoptSessionUser(undefined);
   },
 
   refreshAccess: async () => {
@@ -627,7 +1142,10 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       ...data,
       farms: farmsRes.data?.farms ?? get().farms,
       activeFarmId: activeFarmId ?? get().activeFarmId,
+      offline: false,
+      snapshotAt: null,
     });
+    void persistSnapshot(get);
   },
 
   refreshInvites: async () => {
@@ -640,7 +1158,10 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     setActiveFarmId(farmId);
     set({ loaded: false });
     const data = await repository.load();
-    set({ ...data, activeFarmId: farmId, loaded: true });
+    set({ ...data, activeFarmId: farmId, loaded: true, offline: false, snapshotAt: null });
+    void persistSnapshot(get);
+    // That farm's fila, if any, goes now.
+    void getEngine()?.kick("enqueue");
   },
 
   createFarm: async ({ name, municipality, copy }) => {
@@ -799,17 +1320,32 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   },
 
   startManejoSession: async (input) => {
-    const { data, error } = await api.manejo.post(input);
-    if (error) apiFail("iniciar o manejo", error);
+    // An entrada creates animals on the server: it never starts on the phone.
+    const entrada = input.kind === "entry";
+    if (entrada && !navigator.onLine) entradaNeedsSignal();
+    // The phone names the session: a queued retry of a start the server did get
+    // finds the same session (the id is idempotent) instead of a second one.
+    const id = crypto.randomUUID();
+    if (!entrada && (await mustQueue())) return (await queueOp("start", id, input)).sessionId;
+    const { data, error } = await api.manejo.post({ ...input, id });
+    if (error) {
+      if (entrada && networkFailed(error)) entradaNeedsSignal();
+      if (!entrada && (await queueAfter(error))) {
+        return (await queueOp("start", id, input)).sessionId;
+      }
+      apiFail("iniciar o manejo", error);
+    }
     const session = data as ManejoSession;
-    set((s) => ({ manejoSessions: [...s.manejoSessions, session] }));
+    set((s) => mergeStart(s, session));
     return session.id;
   },
 
   completeManejoAnimal: async (sessionId, earTag, data = {}) => {
+    if (await mustQueue(sessionId)) return queuePass("complete", sessionId, earTag, data);
     const animalId = animalIdByEarTag(get().animals, earTag);
     const response = await api.manejo({ id: sessionId }).animals({ animalId }).complete.post(data);
     if (response.error) {
+      if (await queueAfter(response.error)) return queuePass("complete", sessionId, earTag, data);
       if (response.error.status === CONFLICT) {
         const detail = response.error.value as { error?: string };
         if (detail.error === "out_of_stock") {
@@ -827,70 +1363,39 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       }
       apiFail("concluir o animal no manejo", response.error);
     }
-    const result = response.data as {
-      entry: ManejoSessionAnimal;
-      treatments: Treatment[];
-      weighing?: Weighing;
-      animal?: PassAnimalPatch;
-      breeding?: Breeding;
-    };
-    set((s) => {
-      let animals = s.animals;
-      // An inseminação pass recorded an IATF cobertura on the cow.
-      const breeding = result.breeding;
-      if (breeding) {
-        animals = withReproduction(animals, earTag, (r) => ({
-          ...r,
-          breedings: [...r.breedings, breeding],
-        }));
-      }
-      const weighing = result.weighing;
-      if (weighing) {
-        animals = animals.map((a) =>
-          a.earTag === earTag
-            ? { ...a, weighings: [...a.weighings, weighing].sort(compareByDate) }
-            : a
-        );
-      }
-      // A transferência/venda pass moved the animal: take the server's word for
-      // its lot and herd membership.
-      const patch = result.animal;
-      if (patch) {
-        animals = animals.map((a) =>
-          a.earTag === patch.earTag
-            ? { ...a, active: patch.active, lotId: patch.lotId }
-            : a
-        );
-      }
-      return {
-        treatments: [...s.treatments, ...result.treatments],
-        animals,
-        manejoSessions: withSessionAnimal(s.manejoSessions, sessionId, earTag, result.entry),
-      };
-    });
+    const result = response.data as CompleteResult;
+    set((s) => mergeCompleteResult(s, sessionId, earTag, result));
     return true;
   },
 
   skipManejoAnimal: async (sessionId, earTag, notes) => {
+    if (await mustQueue(sessionId)) {
+      await queuePass("skip", sessionId, earTag, { notes });
+      return;
+    }
     const animalId = animalIdByEarTag(get().animals, earTag);
     const { data, error } = await api.manejo({ id: sessionId }).animals({ animalId }).skip.post({ notes });
     if (error) {
+      if (await queueAfter(error)) {
+        await queuePass("skip", sessionId, earTag, { notes });
+        return;
+      }
       if (error.status === CONFLICT) return;
       apiFail("pular o animal no manejo", error);
     }
     const entry = data as ManejoSessionAnimal;
-    set((s) => ({
-      manejoSessions: withSessionAnimal(s.manejoSessions, sessionId, earTag, entry),
-    }));
+    set((s) => mergeSkipResult(s, sessionId, earTag, entry));
   },
 
   setAsideManejoAnimal: async (sessionId, earTag, input) => {
+    if (await mustQueue(sessionId)) return queuePass("set-aside", sessionId, earTag, input);
     const animalId = animalIdByEarTag(get().animals, earTag);
     const { data, error } = await api
       .manejo({ id: sessionId })
       .animals({ animalId })["set-aside"]
       .post(input);
     if (error) {
+      if (await queueAfter(error)) return queuePass("set-aside", sessionId, earTag, input);
       if (error.status === CONFLICT) {
         const detail = error.value as { error?: string };
         if (detail.error === "animal_inactive") {
@@ -901,33 +1406,19 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       }
       apiFail("apartar o animal", error);
     }
-    const result = data as { entry: ManejoSessionAnimal; weighing?: Weighing };
-    set((s) => {
-      const weighing = result.weighing;
-      const animals = weighing
-        ? s.animals.map((a) =>
-            a.earTag === earTag
-              ? { ...a, weighings: [...a.weighings, weighing].sort(compareByDate) }
-              : a
-          )
-        : s.animals;
-      return {
-        animals,
-        manejoSessions: withSessionAnimal(s.manejoSessions, sessionId, earTag, result.entry),
-      };
-    });
+    const result = data as SetAsideResult;
+    set((s) => mergeSetAsideResult(s, sessionId, earTag, result));
     return true;
   },
 
   baixaManejoAnimal: async (sessionId, earTag, input) => {
-    const animalId = animalIdByEarTag(get().animals, earTag);
     const notes = input.notes?.trim();
-    const { data, error } = await api.manejo({ id: sessionId }).animals({ animalId }).baixa.post({
-      reason: input.reason,
-      date: input.date,
-      notes: notes ? notes : undefined,
-    });
+    const body = { reason: input.reason, date: input.date, notes: notes ? notes : undefined };
+    if (await mustQueue(sessionId)) return queuePass("baixa", sessionId, earTag, body);
+    const animalId = animalIdByEarTag(get().animals, earTag);
+    const { data, error } = await api.manejo({ id: sessionId }).animals({ animalId }).baixa.post(body);
     if (error) {
+      if (await queueAfter(error)) return queuePass("baixa", sessionId, earTag, body);
       if (error.status === CONFLICT) {
         const detail = error.value as { error?: string };
         if (detail.error === "animal_inactive") toast.error(inactiveAnimalMessage(earTag));
@@ -936,31 +1427,17 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       }
       apiFail("dar baixa no animal", error);
     }
-    const result = data as {
-      entry: ManejoSessionAnimal;
-      animal: Pick<Animal, "active" | "inactiveReason" | "inactiveDate" | "inactiveNotes">;
-    };
-    set((s) => ({
-      animals: s.animals.map((a) =>
-        a.earTag === earTag
-          ? {
-              ...a,
-              active: result.animal.active,
-              inactiveReason: result.animal.inactiveReason,
-              inactiveDate: result.animal.inactiveDate,
-              inactiveNotes: result.animal.inactiveNotes,
-            }
-          : a
-      ),
-      manejoSessions: withSessionAnimal(s.manejoSessions, sessionId, earTag, result.entry),
-    }));
+    const result = data as { entry: ManejoSessionAnimal; animal: BaixaAnimalPatch };
+    set((s) => mergeBaixaResult(s, sessionId, earTag, result));
     return true;
   },
 
   reopenManejoAnimal: async (sessionId, earTag) => {
+    if (await mustQueue(sessionId)) return queueReopen(sessionId, earTag);
     const animalId = animalIdByEarTag(get().animals, earTag);
     const { data, error } = await api.manejo({ id: sessionId }).animals({ animalId }).reopen.post();
     if (error) {
+      if (await queueAfter(error)) return queueReopen(sessionId, earTag);
       if (error.status === CONFLICT) {
         const detail = error.value as { error?: string; breedingId?: string };
         if (detail.error === "has_diagnosis") {
@@ -1000,107 +1477,40 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       }
       apiFail("desfazer o registro do animal", error);
     }
-    const result = data as {
-      entry: ManejoSessionAnimal;
-      removedTreatmentIds: string[];
-      removedWeighing?: Weighing;
-      animal?: PassAnimalPatch;
-      removedEarTag?: string;
-      removedBreedingId?: string;
-    };
-    set((s) => {
-      const removedIds = new Set(result.removedTreatmentIds);
-      const treatments =
-        removedIds.size > 0 ? s.treatments.filter((t) => !removedIds.has(t.id)) : s.treatments;
-
-      // Undoing an entry pass unregisters the animal it created.
-      if (result.removedEarTag !== undefined) {
-        const gone = result.removedEarTag;
-        return {
-          treatments,
-          animals: s.animals.filter((a) => a.earTag !== gone),
-          manejoSessions: s.manejoSessions.map((session) =>
-            session.id === sessionId
-              ? { ...session, animals: session.animals.filter((a) => a.earTag !== gone) }
-              : session
-          ),
-        };
-      }
-
-      let animals = s.animals;
-      const removed = result.removedWeighing;
-      if (removed) {
-        animals = animals.map((a) => {
-          if (a.earTag !== earTag) return a;
-          // Remove the single weighing the pass appended (last date+value match).
-          let index = -1;
-          for (let i = a.weighings.length - 1; i >= 0; i--) {
-            if (a.weighings[i].date === removed.date && a.weighings[i].weightKg === removed.weightKg) {
-              index = i;
-              break;
-            }
-          }
-          if (index === -1) return a;
-          return { ...a, weighings: a.weighings.filter((_, i) => i !== index) };
-        });
-      }
-
-      // Undoing an inseminação pass deleted its cobertura; the dose is back in stock.
-      const breedingId = result.removedBreedingId;
-      if (breedingId !== undefined) {
-        animals = withReproduction(animals, earTag, (r) => ({
-          ...r,
-          breedings: r.breedings.filter((b) => b.id !== breedingId),
-        }));
-      }
-
-      // The undo put the animal back in its lot / in the active herd.
-      const patch = result.animal;
-      if (patch) {
-        animals = animals.map((a) =>
-          a.earTag === patch.earTag
-            ? { ...a, active: patch.active, lotId: patch.lotId }
-            : a
-        );
-      }
-
-      return {
-        treatments,
-        animals,
-        manejoSessions: withSessionAnimal(s.manejoSessions, sessionId, earTag, result.entry),
-      };
-    });
+    const result = data as ReopenResult;
+    set((s) => mergeReopenResult(s, sessionId, earTag, result));
   },
 
   setSaleCarcassYield: async (sessionId, carcassYieldPct) => {
+    if (await mustQueue(sessionId)) {
+      await queueOp("carcass-yield", sessionId, { carcassYieldPct });
+      return;
+    }
     const { data, error } = await api
       .manejo({ id: sessionId })["carcass-yield"]
       .post({ carcassYieldPct });
-    if (error) apiFail("definir o rendimento de carcaça", error);
-    const result = data as {
-      carcassYieldPct: number;
-      amounts: { earTag: string; amountBrl: number }[];
-    };
-    const amountByEarTag = new Map(result.amounts.map((a) => [a.earTag, a.amountBrl]));
-    set((s) => ({
-      manejoSessions: s.manejoSessions.map((m) =>
-        m.id === sessionId
-          ? {
-              ...m,
-              carcassYieldPct: result.carcassYieldPct,
-              animals: m.animals.map((a) => {
-                const amountBrl = amountByEarTag.get(a.earTag);
-                return amountBrl === undefined ? a : { ...a, amountBrl };
-              }),
-            }
-          : m
-      ),
-    }));
+    if (error) {
+      if (await queueAfter(error)) {
+        await queueOp("carcass-yield", sessionId, { carcassYieldPct });
+        return;
+      }
+      apiFail("definir o rendimento de carcaça", error);
+    }
+    const result = data as CarcassYieldResult;
+    set((s) => mergeCarcassYield(s, sessionId, result));
   },
 
   closeManejoSession: async (sessionId) => {
+    if (await mustQueue(sessionId)) {
+      await queueOp("close", sessionId, {});
+      return;
+    }
     const { error } = await api.manejo({ id: sessionId }).close.post();
     if (error) {
+      if (await queueAfter(error)) {
+        await queueOp("close", sessionId, {});
+        return;
+      }
       if (error.status === CONFLICT) {
         const detail = error.value as { error?: string };
         if (detail.error === "held_pending") {
@@ -1113,11 +1523,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       }
       apiFail("encerrar o manejo", error);
     }
-    set((s) => ({
-      manejoSessions: s.manejoSessions.map((m) =>
-        m.id === sessionId ? { ...m, status: "closed" as const } : m
-      ),
-    }));
+    set((s) => mergeClose(s, sessionId));
   },
 
   deleteManejoSession: async (sessionId) => {
@@ -1192,6 +1598,11 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   },
 
   registerEntryAnimal: async (sessionId, animal) => {
+    // An entrada creates the animal on the server; the fila never holds one.
+    if (!navigator.onLine) {
+      toast.error("Entrada precisa de sinal");
+      return false;
+    }
     const { data, error } = await api.manejo({ id: sessionId }).animals.post(animal);
     if (error) {
       if (error.status === CONFLICT) return false; // ear tag already in use

@@ -19,6 +19,8 @@ const { state } = vi.hoisted(() => ({
     writes: [] as string[],
     /** Columns of every `update().set()` call. */
     updates: [] as Record<string, unknown>[],
+    /** Whether the transaction ended by a throw (Postgres would roll it back). */
+    rolledBack: false,
   },
 }));
 
@@ -63,7 +65,10 @@ vi.mock("@/lib/db", () => ({
             return builder;
           },
         })
-      ),
+      ).catch((error: unknown) => {
+        state.rolledBack = true;
+        throw error;
+      }),
   },
 }));
 
@@ -108,6 +113,7 @@ beforeEach(() => {
   state.selectResults = [];
   state.writes = [];
   state.updates = [];
+  state.rolledBack = false;
 });
 
 describe("setAsideAnimal", () => {
@@ -178,7 +184,10 @@ describe("setAsideAnimal", () => {
       input: { list: "held" },
     });
 
-    expect(result).toEqual({ conflict: "entry_not_actionable" });
+    expect(result).toEqual({
+      conflict: "entry_not_actionable",
+      entry: expect.objectContaining({ earTag: "V-01", outcome: "done" }),
+    });
     expect(state.writes).toEqual([]);
   });
 
@@ -194,5 +203,48 @@ describe("setAsideAnimal", () => {
 
     expect(result).toEqual({ conflict: "animal_inactive" });
     expect(state.writes).toEqual([]);
+  });
+});
+
+describe("setAsideAnimal — force over another device's pass", () => {
+  /** Another phone sold this animal first: pesagem kept, animal out of the herd. */
+  const SOLD_ENTRY = { ...PENDING_ENTRY, outcome: "done", weighingId: 5, amountBrl: 4200 };
+  const SOLD_ANIMAL = { ...ACTIVE_ANIMAL, active: false };
+  const run = (input: { list: "rejected" | "held" }) =>
+    new SetAsideAnimalUseCase().run({ farmId: 7, sessionId: "s-1", animalId: "a-1", input, force: true });
+
+  it("force on a done entry reverts then applies", async () => {
+    state.selectResults = passRows(SESSION_ROW, SOLD_ANIMAL, SOLD_ENTRY);
+
+    const result = await run({ list: "held" });
+
+    // The undo drops the other pass's pesagem, puts the animal back in the
+    // herd and resets the entry; then the dúvida is written.
+    expect(state.writes).toEqual([
+      "update weighings",
+      "update animals",
+      "update manejo_session_animals",
+      "update manejo_session_animals",
+    ]);
+    expect(state.updates[1]).toMatchObject({ active: true });
+    expect(state.updates.at(-1)).toMatchObject({ outcome: "held" });
+    expect(result).toMatchObject({ entry: { earTag: "V-01", outcome: "held" } });
+  });
+
+  it("force on a closed session → session_closed", async () => {
+    state.selectResults = passRows({ ...SESSION_ROW, status: "closed" }, ACTIVE_ANIMAL, SOLD_ENTRY);
+
+    expect(await run({ list: "held" })).toEqual({
+      conflict: "session_closed",
+      entry: expect.objectContaining({ earTag: "V-01", outcome: "done", amountBrl: 4200 }),
+    });
+    expect(state.writes).toEqual([]);
+  });
+
+  it("rolls the undo back when a dúvida's animal had a baixa elsewhere", async () => {
+    state.selectResults = passRows(SESSION_ROW, SOLD_ANIMAL, { ...PENDING_ENTRY, outcome: "held" });
+
+    expect(await run({ list: "rejected" })).toEqual({ conflict: "animal_inactive" });
+    expect(state.rolledBack).toBe(true);
   });
 });

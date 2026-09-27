@@ -4,8 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileTabBar } from "@/components/layout/MobileTabBar";
+import { ServiceWorker } from "@/components/layout/ServiceWorker";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import { PrintRoot } from "@/components/print/PrintRoot";
+import { SyncSheet } from "@/components/offline/SyncSheet";
 import { BrandBar } from "@/components/errors/BrandBar";
 import { RetryButton } from "@/components/errors/ErrorActions";
 import { ErrorScene } from "@/components/errors/ErrorScene";
@@ -70,6 +72,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <MobileTabBar />
       </div>
       <PrintRoot />
+      <ServiceWorker />
+      <SyncSheet />
     </div>
   );
 }

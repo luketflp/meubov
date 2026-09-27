@@ -12,10 +12,11 @@
  */
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Play, Search } from "lucide-react";
+import { Play, Search, WifiOff } from "lucide-react";
 import { useHerdStore, type NewManejoSession } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
 import { useToast } from "@/components/providers/Toasts";
+import { useOffline } from "@/lib/offline/useOffline";
 import {
   activeAnimals,
   currentPlacementForLot,
@@ -187,6 +188,9 @@ export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoD
   const semenBulls = useHerdStore((s) => s.semenBulls);
   const startManejoSession = useHerdStore((s) => s.startManejoSession);
   const { addToast } = useToast();
+  // Offline the start goes to the fila (the store decides); only the entrada,
+  // which creates animals, needs the signal.
+  const { online } = useOffline();
 
   const [open, setOpen] = useState(false);
   const [fields, setFields] = useState<ManejoFields>(() =>
@@ -400,6 +404,18 @@ export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoD
           </DialogDescription>
         </DialogHeader>
 
+        {online ? null : (
+          <div
+            role="status"
+            className="flex items-start gap-2 rounded-lg bg-attention-soft px-3 py-2.5 text-attention"
+          >
+            <WifiOff className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <p className="text-[13px] leading-[18px] text-ink">
+              Sem conexão: o manejo começa no celular e é enviado quando o sinal voltar.
+            </p>
+          </div>
+        )}
+
         <form onSubmit={onSubmit} noValidate className="grid gap-4">
           <div className="grid gap-4 sm:grid-cols-2">
             {initialAction === undefined ? (
@@ -411,12 +427,21 @@ export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoD
                   </SelectTrigger>
                   <SelectContent>
                     {actionList.map((action) => (
-                      <SelectItem key={action} value={action}>
+                      <SelectItem
+                        key={action}
+                        value={action}
+                        disabled={!online && action === "entry"}
+                      >
                         {MANEJO_ACTION_LABEL[action]}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {!online && actionList.includes("entry") ? (
+                  <p className="text-xs text-ink-soft">
+                    Entrada (compra): precisa de sinal (cria animais novos).
+                  </p>
+                ) : null}
                 {canEditFinance ? null : (
                   <p className="text-xs text-ink-soft">
                     Venda e entrada (compra) ficam com quem cuida do financeiro.
@@ -829,10 +854,17 @@ export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoD
             <Button
               type="submit"
               className="min-h-11"
-              // Nothing to inseminate with until a bull is registered on Reprodução.
-              disabled={inseminates && semenBulls.length === 0}
+              // Nothing to inseminate with until a bull is registered on Reprodução;
+              // an entrada already picked (or preset) cannot start without signal.
+              disabled={
+                (inseminates && semenBulls.length === 0) || (!online && fields.action === "entry")
+              }
             >
-              {inseminates ? "Iniciar inseminação" : "Iniciar manejo"}
+              {!online
+                ? "Começar no celular"
+                : inseminates
+                  ? "Iniciar inseminação"
+                  : "Iniciar manejo"}
             </Button>
           </DialogFooter>
         </form>
