@@ -83,6 +83,13 @@ export const ROUTE_REQUIREMENTS: Readonly<Record<string, RouteRequirement>> = {
   "POST /api/herd/accounts": edit("finance"),
   "PATCH /api/herd/accounts/:id": edit("finance"),
   "POST /api/herd/accounts/defaults": edit("finance"),
+  // Anexos: reading one is seeing money, writing one is editing a lançamento.
+  "GET /api/herd/attachments/status": { view: "finance" },
+  "POST /api/herd/attachments/upload-token": edit("finance"),
+  "GET /api/herd/attachments/:id": { view: "finance" },
+  "DELETE /api/herd/attachments/:id": edit("finance"),
+  "GET /api/herd/expenses/:id/attachments": { view: "finance" },
+  "POST /api/herd/expenses/:id/attachments": edit("finance"),
 
   "PUT /api/herd/farm": edit("farm"),
 

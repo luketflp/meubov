@@ -7,9 +7,8 @@
  * extrato" links land on a filtered list and reloading keeps it.
  */
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Plus, Receipt, SearchX } from "lucide-react";
+import { Plus, Receipt, SearchX } from "lucide-react";
 import type { AccountGroup } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
@@ -24,6 +23,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
 import { ExportMenu } from "@/components/export/ExportMenu";
 import { EntryDialog } from "@/components/finance/EntryDialog";
+import { FinanceSubnav } from "@/components/finance/FinanceSubnav";
 import { LancarButton } from "@/components/finance/LancarButton";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -127,14 +127,6 @@ export function ExtratoPage() {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 pb-16 md:px-8 md:pb-6">
-      <Link
-        href={`/finance?${periodSearch(period)}`}
-        className="inline-flex min-h-11 w-fit items-center gap-1.5 text-sm font-medium text-ink-soft transition-colors hover:text-ink md:min-h-0"
-      >
-        <ArrowLeft className="size-4" aria-hidden />
-        Financeiro
-      </Link>
-
       <PageHeader
         title="Extrato"
         subtitle={`${lancamentos(filtered.length)} entre ${periodLabel}`}
@@ -157,6 +149,8 @@ export function ExtratoPage() {
           </>
         }
       />
+
+      <FinanceSubnav current="extrato" period={period} />
 
       <ExtratoFilters
         period={period}

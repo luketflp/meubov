@@ -411,6 +411,55 @@ export interface Expense {
   accountId?: string;
   /** Centro de custo; absent means the whole farm. */
   lotId?: string;
+  /** The série (parcelamento or recorrência) this row belongs to. */
+  seriesId?: string;
+  /** 1-based position in its série: the "2" of "2/3". */
+  seriesIndex?: number;
+  /** Parcelas of its parcelamento: the "3" of "2/3". Recorrências leave it out. */
+  seriesCount?: number;
+  /** How its recorrência repeats. Parcelas leave it out. */
+  seriesFrequency?: SeriesFrequency;
+  /** Day of the month a monthly recorrência falls on ("todo dia 20"). */
+  seriesDay?: number;
+  /**
+   * Anexos (photos, PDFs) attached to it. The API always sends it (0 when
+   * none); optional so a new lançamento and test fixtures need not carry it.
+   */
+  attachmentCount?: number;
+}
+
+/** A parcelamento (N parcelas of one purchase) or a recorrência (the same bill again and again). */
+export type SeriesMode = "installments" | "recurring";
+
+/** Interval between two lançamentos of a série. */
+export type SeriesFrequency = "monthly" | "weekly";
+
+/** Which rows of a série an edit or a removal reaches: "Só esta", "Esta e as próximas", "Todas". */
+export type SeriesScope = "one" | "following" | "all";
+
+/** How a new lançamento repeats (POST /expenses `repeat`). */
+export interface SeriesRepeat {
+  mode: SeriesMode;
+  /** Parcelas, 2–48; installments only. */
+  count?: number;
+  frequency: SeriesFrequency;
+  /** 1–31, monthly only; a shorter month uses its last day. Defaults to the day of `startsOn`. */
+  dayOfMonth?: number;
+  /** First vencimento. */
+  startsOn: string;
+  /** Last day an ocorrência may fall on; recurring only, absent = sem fim. */
+  endsOn?: string;
+}
+
+/** A photo or PDF attached to a lançamento. */
+export interface Attachment {
+  id: string;
+  expenseId: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  /** ISO timestamp. */
+  createdAt: string;
 }
 
 /** Grupo of a conta: the seven expense categories plus receitas. */

@@ -199,6 +199,7 @@ describe("addSemenBull", () => {
         category: "breeding",
         amountBrl: 1140,
         notes: "Sêmen — Tufão da Serra, 30 doses",
+        attachmentCount: 0,
       },
     });
   });

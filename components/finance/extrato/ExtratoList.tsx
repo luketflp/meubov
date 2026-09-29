@@ -23,6 +23,7 @@ import {
   LedgerStatusPill,
 } from "@/components/finance/extrato/ExtratoTable";
 import { RowActions } from "@/components/finance/extrato/RowActions";
+import { AttachmentCount, InstallmentChip, RecurrenceTag } from "@/components/finance/SeriesMarkers";
 
 const PAGE_SIZE = 50;
 
@@ -63,10 +64,15 @@ export function ExtratoList({ rows }: { rows: LedgerRow[] }) {
             >
               <span className="font-mono text-xs text-ink-soft">{formatDate(row.date).slice(0, 5)}</span>
               <span className="min-w-0">
-                <span className="block truncate text-sm font-medium text-ink">
-                  {row.account ?? row.groupLabel}
+                <span className="flex items-center gap-1.5 text-sm font-medium text-ink">
+                  <span className="truncate">{row.account ?? row.groupLabel}</span>
+                  <InstallmentChip expense={row.expense} />
                 </span>
-                <span className="block truncate text-xs text-ink-soft">{subline(row)}</span>
+                <span className="flex items-center gap-1 text-xs text-ink-soft">
+                  <AttachmentCount expense={row.expense} />
+                  <span className="truncate">{subline(row)}</span>
+                  <RecurrenceTag expense={row.expense} />
+                </span>
               </span>
               <span className="flex flex-col items-end gap-1">
                 <LedgerAmount row={row} className="text-sm" />

@@ -151,6 +151,12 @@ export const expenseCategoryEnum = pgEnum("expense_category", [
 /** Whether a lançamento is money out (despesa) or money in (receita). */
 export const entryKindEnum = pgEnum("entry_kind", ["expense", "revenue"]);
 
+/** A parcelamento (N parcelas of one purchase) or a recorrência (the same bill again and again). */
+export const seriesModeEnum = pgEnum("series_mode", ["installments", "recurring"]);
+
+/** Interval between two lançamentos of a série. */
+export const seriesFrequencyEnum = pgEnum("series_frequency", ["monthly", "weekly"]);
+
 /** Grupo of a conta: the seven expense categories plus receitas. */
 export const accountGroupEnum = pgEnum("account_group", [
   "nutrition",
@@ -592,6 +598,48 @@ export const accounts = pgTable(
 );
 
 /**
+ * The rule behind a parcelamento or a recorrência and the template of every
+ * lançamento it generates. `amountBrl` is the total of a parcelamento and the
+ * value of each ocorrência of a recorrência. `generatedCount` is how many
+ * ocorrências were written so far: the top-up continues after it, so an
+ * ocorrência removed on its own never comes back.
+ */
+export const expenseSeries = pgTable(
+  "expense_series",
+  {
+    id: text("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farm.id, { onDelete: "cascade" }),
+    mode: seriesModeEnum("mode").notNull(),
+    frequency: seriesFrequencyEnum("frequency").notNull(),
+    /** 1–31, monthly only; a shorter month uses its last day. */
+    dayOfMonth: integer("day_of_month"),
+    /** First vencimento. */
+    startsOn: date("starts_on").notNull(),
+    /** Recurring only; null = sem fim. */
+    endsOn: date("ends_on"),
+    /** Parcelas; installments only. */
+    count: integer("count"),
+    generatedCount: integer("generated_count").notNull().default(0),
+    kind: entryKindEnum("kind").notNull().default("expense"),
+    category: expenseCategoryEnum("category").notNull(),
+    amountBrl: numeric("amount_brl", { mode: "number" }).notNull(),
+    accountId: text("account_id").references(() => accounts.id, { onDelete: "set null" }),
+    lotId: text("lot_id").references(() => lots.id, { onDelete: "set null" }),
+    counterparty: text("counterparty"),
+    document: text("document"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("expense_series_farm_id_idx").on(t.farmId),
+    check("expense_series_day_of_month_check", sql`${t.dayOfMonth} between 1 and 31`),
+    check("expense_series_count_check", sql`${t.count} between 2 and 48`),
+  ]
+);
+
+/**
  * A lançamento: one line of money the farm typed, a despesa or a receita
  * (costs outside the sanitary treatments, revenue outside the vendas).
  */
@@ -620,8 +668,41 @@ export const expenses = pgTable(
     accountId: text("account_id").references(() => accounts.id, { onDelete: "set null" }),
     /** Centro de custo; null means the whole farm. */
     lotId: text("lot_id").references(() => lots.id, { onDelete: "set null" }),
+    /** The série that generated this row; null for a lançamento typed once. */
+    seriesId: text("series_id").references(() => expenseSeries.id, { onDelete: "set null" }),
+    /** 1-based position in the série. */
+    seriesIndex: integer("series_index"),
   },
-  (t) => [index("expenses_farm_id_date_idx").on(t.farmId, t.date)]
+  (t) => [
+    index("expenses_farm_id_date_idx").on(t.farmId, t.date),
+    // One row per position: the top-up of a recorrência can run twice without doubling a bill.
+    uniqueIndex("expenses_series_id_series_index_idx").on(t.seriesId, t.seriesIndex),
+  ]
+);
+
+/**
+ * A photo or PDF attached to a lançamento. The file lives in Vercel Blob
+ * (private store) at `pathname`, always under `farms/<farmId>/expenses/<expenseId>/`.
+ */
+export const attachments = pgTable(
+  "attachments",
+  {
+    id: text("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farm.id, { onDelete: "cascade" }),
+    expenseId: text("expense_id")
+      .notNull()
+      .references(() => expenses.id, { onDelete: "cascade" }),
+    pathname: text("pathname").notNull().unique(),
+    fileName: text("file_name").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    /** User id of who attached it; no FK, the anexo outlives a removed member. */
+    createdBy: text("created_by").notNull(),
+  },
+  (t) => [index("attachments_expense_id_idx").on(t.expenseId)]
 );
 
 /** Recurring health protocol of the farm. */
@@ -749,6 +830,8 @@ export type CalvingRow = typeof calvings.$inferSelect;
 export type MovementRow = typeof movements.$inferSelect;
 export type ExpenseRow = typeof expenses.$inferSelect;
 export type FarmAccountRow = typeof accounts.$inferSelect;
+export type ExpenseSeriesRow = typeof expenseSeries.$inferSelect;
+export type AttachmentRow = typeof attachments.$inferSelect;
 export type CustomCategoryRow = typeof customCategories.$inferSelect;
 export type HealthProtocolRow = typeof healthProtocols.$inferSelect;
 export type ManejoSessionRow = typeof manejoSessions.$inferSelect;

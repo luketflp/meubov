@@ -1,7 +1,8 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { expenses, manejoSessions, semenBulls, semenPurchases } from "@/lib/db/schema";
+import { attachments, expenses, manejoSessions, semenBulls, semenPurchases } from "@/lib/db/schema";
+import { deleteBlobsQuietly, vercelBlobStore, type BlobStore } from "@/lib/api/blob";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
 
 import { lockBullStock } from "../_shared/stock";
@@ -37,14 +38,17 @@ type CurrUseCase = _UseCase<DeleteBullUseCaseProps, DeleteBullUseCaseResponse>;
  */
 export class DeleteBullUseCase implements CurrUseCase {
   private repository: RepositoryType;
+  private blob: BlobStore;
 
-  constructor(repo: RepositoryType = db) {
+  constructor(repo: RepositoryType = db, blob: BlobStore = vercelBlobStore) {
     __throwOnBrowser("DeleteBullUseCase.constructor");
     this.repository = repo;
+    this.blob = blob;
   }
 
   public run: CurrUseCase["run"] = async ({ farmId, id, canRemoveExpenses }) => {
-    return this.repository.transaction(async (tx) => {
+    let pathnames: string[] = [];
+    const result = await this.repository.transaction(async (tx) => {
       const stock = await lockBullStock(tx, farmId, id);
       if (!stock) return "not_found";
       if (stock.used > 0) return "doses_used";
@@ -72,6 +76,11 @@ export class DeleteBullUseCase implements CurrUseCase {
 
       // The expenses by the ids just read: the purchases go with the bull (cascade).
       if (expenseIds.length > 0) {
+        const files = await tx
+          .select({ pathname: attachments.pathname })
+          .from(attachments)
+          .where(and(eq(attachments.farmId, farmId), inArray(attachments.expenseId, expenseIds)));
+        pathnames = files.map((file) => file.pathname);
         await tx
           .delete(expenses)
           .where(and(eq(expenses.farmId, farmId), inArray(expenses.id, expenseIds)));
@@ -81,5 +90,8 @@ export class DeleteBullUseCase implements CurrUseCase {
         .where(and(eq(semenBulls.farmId, farmId), eq(semenBulls.id, stock.bull.id)));
       return { id: stock.bull.id, expenseIds };
     });
+    // The anexos' files after commit; a failure is logged, never blocks the removal.
+    if (pathnames.length > 0) await deleteBlobsQuietly(this.blob, pathnames);
+    return result;
   };
 }

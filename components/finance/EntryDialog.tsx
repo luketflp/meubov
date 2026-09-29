@@ -2,20 +2,32 @@
 
 /**
  * "Novo lançamento": a despesa or a receita with vencimento, pagamento, conta,
- * pago para, documento and lote (centro de custo). With `expense` it edits that
- * lançamento and the Despesa | Receita switch is hidden. Vendas and compras de
- * gado come from the manejos, never from here.
+ * pago para, documento, lote (centro de custo), Repetir (uma vez, parcelado,
+ * recorrente) and anexos. With `expense` it edits that lançamento: the
+ * Despesa | Receita switch and Repetir are hidden, a row of a série says which
+ * ("Parcela 2/3", "Recorrente · todo dia 20") and saving asks where the change
+ * applies. Vendas and compras de gado come from the manejos, never from here.
  */
 import { useState, type FormEvent } from "react";
-import { useHerdStore } from "@/lib/store/useHerdStore";
+import { Repeat } from "lucide-react";
+import { useHerdStore, type ExpensePatch } from "@/lib/store/useHerdStore";
 import { activeAnimals, activeLots } from "@/lib/store/selectors";
 import { useToast } from "@/components/providers/Toasts";
-import type { AccountGroup, EntryKind, Expense, ExpenseCategory } from "@/lib/types";
+import type { AccountGroup, EntryKind, Expense, ExpenseCategory, SeriesScope } from "@/lib/types";
 import { accountsByGroup, counterpartySuggestions } from "@/lib/domain/accounts";
 import { todayISO } from "@/lib/domain/dates";
 import { EXPENSE_CATEGORY_LABEL } from "@/lib/domain/labels";
+import { MAX_INSTALLMENTS, MIN_INSTALLMENTS, installmentLabel, recurrenceLabel } from "@/lib/domain/series";
 import { cn } from "@/lib/utils";
 import { parseAmount } from "@/components/finance/parseAmount";
+import {
+  RepeatSection,
+  initialRepeat,
+  repeatFromFields,
+  type RepeatFields,
+} from "@/components/finance/RepeatSection";
+import { SeriesScopeDialog } from "@/components/finance/SeriesScopeDialog";
+import { AttachmentsField, type PendingFile } from "@/components/finance/attachments/AttachmentsField";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -100,6 +112,12 @@ function initialFields(expense: Expense | undefined, defaultKind: EntryKind): En
   };
 }
 
+/** Whether "Parcelas" holds a count the server takes (2–48). */
+function countInRange(typed: string): boolean {
+  const count = Number(typed);
+  return Number.isInteger(count) && count >= MIN_INSTALLMENTS && count <= MAX_INSTALLMENTS;
+}
+
 export function EntryDialog({
   open,
   onOpenChange,
@@ -111,8 +129,15 @@ export function EntryDialog({
   expense?: Expense;
   defaultKind?: EntryKind;
 }) {
+  // While saving (and uploading) the dialog stays: Esc, outside click and Cancelar wait.
+  const [busy, setBusy] = useState(false);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!busy) onOpenChange(next);
+      }}
+    >
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{expense ? "Editar lançamento" : "Novo lançamento"}</DialogTitle>
@@ -121,7 +146,12 @@ export function EntryDialog({
             manejos.
           </DialogDescription>
         </DialogHeader>
-        <EntryForm expense={expense} defaultKind={defaultKind} onDone={() => onOpenChange(false)} />
+        <EntryForm
+          expense={expense}
+          defaultKind={defaultKind}
+          onBusyChange={setBusy}
+          onDone={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -130,10 +160,12 @@ export function EntryDialog({
 function EntryForm({
   expense,
   defaultKind,
+  onBusyChange,
   onDone,
 }: {
   expense?: Expense;
   defaultKind: EntryKind;
+  onBusyChange(busy: boolean): void;
   onDone(): void;
 }) {
   const accounts = useHerdStore((s) => s.accounts);
@@ -143,12 +175,21 @@ function EntryForm({
   const addExpense = useHerdStore((s) => s.addExpense);
   const updateExpense = useHerdStore((s) => s.updateExpense);
   const addAccount = useHerdStore((s) => s.addAccount);
+  const uploadAttachment = useHerdStore((s) => s.uploadAttachment);
   const { addToast } = useToast();
 
   const [fields, setFields] = useState<EntryFields>(() => initialFields(expense, defaultKind));
+  const [repeatFields, setRepeatFields] = useState<RepeatFields>(() => initialRepeat(todayISO()));
+  const [pending, setPending] = useState<PendingFile[]>([]);
+  /** The edit waiting for "Só esta" · "Esta e as próximas" · "Todas". */
+  const [scopePatch, setScopePatch] = useState<ExpensePatch | null>(null);
   const [newAccountName, setNewAccountName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSavingState] = useState(false);
+  const setSaving = (next: boolean) => {
+    setSavingState(next);
+    onBusyChange(next);
+  };
   const [creatingAccount, setCreatingAccount] = useState(false);
 
   const set = (patch: Partial<EntryFields>) => setFields((f) => ({ ...f, ...patch }));
@@ -169,8 +210,58 @@ function EntryForm({
   ];
   const suggestions = counterpartySuggestions(expenses);
 
+  const repeating = !expense && repeatFields.choice !== "once";
+  const seriesLine = expense
+    ? installmentLabel(expense)
+      ? `Parcela ${installmentLabel(expense)}`
+      : recurrenceLabel(expense)
+        ? `Recorrente · ${recurrenceLabel(expense)}`
+        : null
+    : null;
+
   function onDateChange(date: string) {
     setFields((f) => ({ ...f, date, dueDate: f.dueTouched ? f.dueDate : date }));
+    // The first parcela never falls before Data; the day follows Data until Repetir is chosen.
+    if (date === "") return;
+    setRepeatFields((r) => ({
+      ...r,
+      firstDue: r.firstDue < date ? date : r.firstDue,
+      day: r.choice === "once" ? String(Number(date.slice(8, 10))) : r.day,
+    }));
+  }
+
+  async function saveEdit(target: Expense, patch: ExpensePatch, scope: SeriesScope) {
+    setSaving(true);
+    try {
+      await updateExpense(target.id, patch, scope);
+      addToast({ messageType: "success", text: "Lançamento salvo" });
+    } catch {
+      setSaving(false); // apiFail already toasted
+      return;
+    }
+    setSaving(false);
+    onDone();
+  }
+
+  /**
+   * Uploads the files chosen before the lançamento existed, one at a time, with
+   * progress; answers how many failed.
+   */
+  async function uploadPending(expenseId: string): Promise<number> {
+    let failed = 0;
+    for (const item of pending) {
+      const patch = (next: Partial<PendingFile>) =>
+        setPending((files) => files.map((f) => (f.key === item.key ? { ...f, ...next } : f)));
+      try {
+        patch({ progress: 0 });
+        await uploadAttachment(expenseId, item.file, (progress) => patch({ progress }));
+        patch({ progress: 100 });
+      } catch {
+        patch({ progress: null, error: "não enviado" }); // the store already toasted
+        failed += 1;
+      }
+    }
+    return failed;
   }
 
   async function onCreateAccount() {
@@ -204,11 +295,16 @@ function EntryForm({
       setError("Informe o valor (maior que zero).");
       return;
     }
-    if (fields.dueDate === "") {
+    const repeat = expense ? null : repeatFromFields(repeatFields, fields.date);
+    if (typeof repeat === "string") {
+      setError(repeat);
+      return;
+    }
+    if (!repeat && fields.dueDate === "") {
       setError("Informe o vencimento.");
       return;
     }
-    if (fields.dueDate < fields.date) {
+    if (!repeat && fields.dueDate < fields.date) {
       setError("O vencimento não pode ser antes da data");
       return;
     }
@@ -217,7 +313,6 @@ function EntryForm({
       return;
     }
     setError(null);
-    setSaving(true);
 
     const category: ExpenseCategory = revenue ? "other" : fields.category;
     const paidAt = fields.paid ? fields.paidAt : null;
@@ -227,23 +322,30 @@ function EntryForm({
     const lotId = fields.lotId === NONE ? null : fields.lotId;
     const notes = fields.notes.trim() || null;
 
+    if (expense) {
+      const patch: ExpensePatch = {
+        date: fields.date,
+        category,
+        amountBrl,
+        dueDate: fields.dueDate,
+        paidAt,
+        counterparty,
+        document: docNumber,
+        accountId,
+        lotId,
+        notes,
+      };
+      // A row of a série asks where the change applies before saving.
+      if (expense.seriesId) setScopePatch(patch);
+      else await saveEdit(expense, patch, "one");
+      return;
+    }
+
+    setSaving(true);
+    let created: Expense[];
     try {
-      if (expense) {
-        await updateExpense(expense.id, {
-          date: fields.date,
-          category,
-          amountBrl,
-          dueDate: fields.dueDate,
-          paidAt,
-          counterparty,
-          document: docNumber,
-          accountId,
-          lotId,
-          notes,
-        });
-        addToast({ messageType: "success", text: "Lançamento salvo" });
-      } else {
-        await addExpense({
+      created = await addExpense(
+        {
           kind: fields.kind,
           date: fields.date,
           category,
@@ -255,12 +357,30 @@ function EntryForm({
           accountId: accountId ?? undefined,
           lotId: lotId ?? undefined,
           notes: notes ?? undefined,
-        });
-        addToast({ messageType: "success", text: revenue ? "Receita lançada" : "Despesa lançada" });
-      }
+        },
+        repeat ?? undefined
+      );
     } catch {
       setSaving(false); // apiFail already toasted
       return;
+    }
+    // The NF or recibo belongs to the purchase: the first parcela or ocorrência carries it.
+    const failed = created.length > 0 && pending.length > 0 ? await uploadPending(created[0].id) : 0;
+    if (failed > 0) {
+      addToast({
+        messageType: "warning",
+        text: `Lançamento salvo; ${failed} anexo(s) não enviado(s) — anexe em Editar.`,
+      });
+    } else {
+      const text =
+        created.length > 1
+          ? repeatFields.choice === "recurring"
+            ? "Recorrência lançada"
+            : "Parcelas lançadas"
+          : revenue
+            ? "Receita lançada"
+            : "Despesa lançada";
+      addToast({ messageType: "success", text });
     }
     setSaving(false);
     onDone();
@@ -312,7 +432,9 @@ function EntryForm({
           />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="entry-amount">Valor (R$)</Label>
+          <Label htmlFor="entry-amount">
+            {repeatFields.choice === "installments" && !expense ? "Valor total (R$)" : "Valor (R$)"}
+          </Label>
           <Input
             id="entry-amount"
             type="text"
@@ -414,10 +536,18 @@ function EntryForm({
           <Input
             id="entry-due"
             type="date"
-            value={fields.dueDate}
+            value={repeating ? "" : fields.dueDate}
+            disabled={repeating}
             onChange={(e) => set({ dueDate: e.target.value, dueTouched: true })}
             className="min-h-11 font-mono md:min-h-0"
           />
+          {repeating ? (
+            <p className="text-xs text-ink-soft">
+              {repeatFields.choice === "installments"
+                ? "segue a 1ª parcela, abaixo"
+                : "segue a recorrência, abaixo"}
+            </p>
+          ) : null}
         </div>
         <div className="grid gap-1.5">
           <span className="text-sm leading-none font-medium">
@@ -444,8 +574,38 @@ function EntryForm({
               />
             ) : null}
           </div>
+          {repeating ? (
+            <p className="text-xs text-ink-soft">
+              {repeatFields.choice === "installments" ? "só a 1ª parcela" : "só a 1ª conta"}
+            </p>
+          ) : null}
         </div>
       </div>
+
+      {expense ? (
+        seriesLine ? (
+          <p className="flex items-center gap-1.5 border-t border-hairline pt-4 text-sm text-ink">
+            <Repeat className="size-4 text-ink-soft" aria-hidden />
+            {seriesLine}
+          </p>
+        ) : null
+      ) : (
+        <RepeatSection
+          fields={repeatFields}
+          onChange={(patch) =>
+            setRepeatFields((r) => ({
+              ...r,
+              ...patch,
+              // Parcelado picks up a Vencimento the user already set.
+              ...(patch.choice === "installments" && r.choice !== "installments" && fields.dueTouched && fields.dueDate
+                ? { firstDue: fields.dueDate }
+                : {}),
+            }))
+          }
+          date={fields.date}
+          amount={parseAmount(fields.amount)}
+        />
+      )}
 
       <div className="grid gap-1.5">
         <Label htmlFor="entry-counterparty">{revenue ? "Recebido de" : "Pago para"}</Label>
@@ -496,6 +656,13 @@ function EntryForm({
         </div>
       </div>
 
+      <AttachmentsField
+        expenseId={expense?.id}
+        pending={pending}
+        onPendingChange={setPending}
+        busy={saving}
+      />
+
       <div className="grid gap-1.5">
         <Label htmlFor="entry-notes">Observação</Label>
         <Textarea
@@ -506,18 +673,46 @@ function EntryForm({
         />
       </div>
 
-      {error ? <p className="text-xs text-overdue">{error}</p> : null}
+      {error ? (
+        <p role="alert" className="text-xs text-overdue">
+          {error}
+        </p>
+      ) : null}
 
       <DialogFooter>
         <DialogClose asChild>
-          <Button type="button" variant="outline" className="min-h-11">
+          <Button type="button" variant="outline" className="min-h-11" disabled={saving}>
             Cancelar
           </Button>
         </DialogClose>
         <Button type="submit" className="min-h-11" disabled={saving}>
-          {expense ? "Salvar" : "Lançar"}
+          {expense
+            ? "Salvar"
+            : repeatFields.choice === "installments"
+              ? `Lançar ${countInRange(repeatFields.count) ? `${repeatFields.count} ` : ""}parcelas`
+              : repeatFields.choice === "recurring"
+                ? "Lançar recorrência"
+                : "Lançar"}
         </Button>
       </DialogFooter>
+
+      {expense && scopePatch ? (
+        <SeriesScopeDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setScopePatch(null);
+          }}
+          expense={expense}
+          action="edit"
+          amountChange={
+            scopePatch.amountBrl !== undefined && scopePatch.amountBrl !== expense.amountBrl
+              ? { from: expense.amountBrl, to: scopePatch.amountBrl }
+              : null
+          }
+          busy={saving}
+          onConfirm={(scope) => void saveEdit(expense, scopePatch, scope)}
+        />
+      ) : null}
     </form>
   );
 }

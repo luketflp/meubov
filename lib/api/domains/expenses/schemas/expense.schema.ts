@@ -16,10 +16,27 @@ export const ExpenseCategoryModel = t.Union([
 
 export const EntryKindModel = t.Union([t.Literal("expense"), t.Literal("revenue")]);
 
+/** "Só esta" · "Esta e as próximas" · "Todas" (as não pagas). */
+export const SeriesScopeModel = t.Union([t.Literal("one"), t.Literal("following"), t.Literal("all")]);
+
+/** How a new lançamento repeats: N parcelas, or the same bill every week or month. */
+export const RepeatModel = t.Object({
+  mode: t.Union([t.Literal("installments"), t.Literal("recurring")]),
+  count: t.Optional(t.Integer({ minimum: 2, maximum: 48 })),
+  frequency: t.Union([t.Literal("monthly"), t.Literal("weekly")]),
+  dayOfMonth: t.Optional(t.Integer({ minimum: 1, maximum: 31 })),
+  startsOn: DateString,
+  endsOn: t.Optional(DateString),
+});
+
 const Counterparty = t.String({ maxLength: 120 });
 const Document = t.String({ maxLength: 120 });
 
-/** Body of POST /expenses. A receita sends `kind: "revenue"` and `category: "other"`. */
+/**
+ * Body of POST /expenses. A receita sends `kind: "revenue"` and `category: "other"`.
+ * With `repeat` it creates the whole série; `amountBrl` is then the total of a
+ * parcelamento or the value of each ocorrência of a recorrência.
+ */
 export const NewExpenseBody = t.Object({
   date: DateString,
   category: ExpenseCategoryModel,
@@ -32,6 +49,7 @@ export const NewExpenseBody = t.Object({
   document: t.Optional(Document),
   accountId: t.Optional(t.String()),
   lotId: t.Optional(t.String()),
+  repeat: t.Optional(RepeatModel),
 });
 
 /**
@@ -50,4 +68,9 @@ export const UpdateExpenseBody = t.Object({
   document: t.Optional(t.Nullable(Document)),
   accountId: t.Optional(t.Nullable(t.String())),
   lotId: t.Optional(t.Nullable(t.String())),
+  /** For a row of a série; absent = "one". */
+  scope: t.Optional(SeriesScopeModel),
 });
+
+/** Query of DELETE /expenses/:id; absent scope = "one". */
+export const DeleteExpenseQuery = t.Object({ scope: t.Optional(SeriesScopeModel) });

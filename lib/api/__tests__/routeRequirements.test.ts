@@ -78,6 +78,23 @@ describe("ROUTE_REQUIREMENTS", () => {
       expect(ROUTE_REQUIREMENTS[key]).toEqual({ edit: ["finance"] });
     }
   });
+
+  it("lets Financeiro view read anexos and keeps their writes behind Financeiro edit", () => {
+    for (const key of [
+      "GET /api/herd/attachments/status",
+      "GET /api/herd/attachments/:id",
+      "GET /api/herd/expenses/:id/attachments",
+    ]) {
+      expect(ROUTE_REQUIREMENTS[key]).toEqual({ view: "finance" });
+    }
+    for (const key of [
+      "POST /api/herd/attachments/upload-token",
+      "DELETE /api/herd/attachments/:id",
+      "POST /api/herd/expenses/:id/attachments",
+    ]) {
+      expect(ROUTE_REQUIREMENTS[key]).toEqual({ edit: ["finance"] });
+    }
+  });
 });
 
 describe("ROUTE_REQUIREMENTS against the mounted app", () => {

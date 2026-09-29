@@ -1,7 +1,8 @@
 import { and, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { expenses, semenPurchases } from "@/lib/db/schema";
+import { attachments, expenses, semenPurchases } from "@/lib/db/schema";
+import { deleteBlobsQuietly, vercelBlobStore, type BlobStore } from "@/lib/api/blob";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
 
 import { lockBullStock } from "../_shared/stock";
@@ -30,14 +31,17 @@ type CurrUseCase = _UseCase<DeletePurchaseUseCaseProps, DeletePurchaseUseCaseRes
  */
 export class DeletePurchaseUseCase implements CurrUseCase {
   private repository: RepositoryType;
+  private blob: BlobStore;
 
-  constructor(repo: RepositoryType = db) {
+  constructor(repo: RepositoryType = db, blob: BlobStore = vercelBlobStore) {
     __throwOnBrowser("DeletePurchaseUseCase.constructor");
     this.repository = repo;
+    this.blob = blob;
   }
 
   public run: CurrUseCase["run"] = async ({ farmId, bullId, purchaseId }) => {
-    return this.repository.transaction(async (tx) => {
+    let pathnames: string[] = [];
+    const result = await this.repository.transaction(async (tx) => {
       const stock = await lockBullStock(tx, farmId, bullId);
       if (!stock) return "not_found";
 
@@ -56,11 +60,19 @@ export class DeletePurchaseUseCase implements CurrUseCase {
       // Purchase first: deleting the expense first would only null its link.
       await tx.delete(semenPurchases).where(eq(semenPurchases.id, purchase.id));
       if (purchase.expenseId !== null) {
+        const files = await tx
+          .select({ pathname: attachments.pathname })
+          .from(attachments)
+          .where(and(eq(attachments.farmId, farmId), eq(attachments.expenseId, purchase.expenseId)));
+        pathnames = files.map((file) => file.pathname);
         await tx
           .delete(expenses)
           .where(and(eq(expenses.farmId, farmId), eq(expenses.id, purchase.expenseId)));
       }
       return { id: purchase.id, expenseId: purchase.expenseId };
     });
+    // The anexos' files after commit; a failure is logged, never blocks the removal.
+    if (pathnames.length > 0) await deleteBlobsQuietly(this.blob, pathnames);
+    return result;
   };
 }

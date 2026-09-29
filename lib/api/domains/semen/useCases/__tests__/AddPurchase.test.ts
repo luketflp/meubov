@@ -123,6 +123,7 @@ describe("addSemenPurchase", () => {
         counterparty: "CRV Lagoa",
         accountId: "acc-semen",
         notes: "Sêmen — Tufão da Serra, 1 dose",
+        attachmentCount: 0,
       },
     });
   });

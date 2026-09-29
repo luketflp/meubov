@@ -21,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { RowActions } from "@/components/finance/extrato/RowActions";
+import { AttachmentCount, InstallmentChip, RecurrenceTag } from "@/components/finance/SeriesMarkers";
 import { cn } from "@/lib/utils";
 
 const PILL =
@@ -112,14 +113,21 @@ export function ExtratoTable({ page, onPageChange }: ExtratoTableProps) {
                 <LedgerKindPill kind={row.kind} />
               </TableCell>
               <TableCell className="min-w-36 whitespace-normal">
-                <span className="block font-medium text-ink">{row.account ?? row.groupLabel}</span>
-                {row.account ? (
-                  <span className="block text-xs text-ink-soft">{row.groupLabel}</span>
-                ) : null}
+                <span className="flex items-center gap-1.5 font-medium text-ink">
+                  {row.account ?? row.groupLabel}
+                  <InstallmentChip expense={row.expense} />
+                </span>
+                <span className="flex items-center gap-1 text-xs text-ink-soft empty:hidden">
+                  {row.account ? <span>{row.groupLabel}</span> : null}
+                  <RecurrenceTag expense={row.expense} />
+                </span>
               </TableCell>
               <TableCell className="max-w-44 whitespace-normal text-ink">{row.counterparty ?? "—"}</TableCell>
               <TableCell className="max-w-36 font-mono text-xs whitespace-normal text-ink">
-                {row.document ?? "—"}
+                <span className="inline-flex items-center gap-1.5">
+                  {row.document ?? "—"}
+                  <AttachmentCount expense={row.expense} />
+                </span>
               </TableCell>
               <TableCell>
                 {row.lotName ? (

@@ -9,6 +9,7 @@
 import type {
   Account,
   Animal,
+  Attachment,
   Breeding,
   Calving,
   CustomCategory,
@@ -31,10 +32,12 @@ import type {
 } from "@/lib/types";
 import type {
   AnimalRow,
+  AttachmentRow,
   BreedingRow,
   CalvingRow,
   CustomCategoryRow,
   ExpenseRow,
+  ExpenseSeriesRow,
   FarmAccountRow,
   FarmRow,
   HealthProtocolRow,
@@ -205,7 +208,16 @@ export function toMovement(row: MovementRow): Movement {
   };
 }
 
-export function toExpense(row: ExpenseRow): Expense {
+/**
+ * `series` is the row's série when it has one: a parcela gets the parcela
+ * count ("2/3"), an ocorrência the frequency and day ("todo dia 20").
+ */
+export function toExpense(
+  row: ExpenseRow,
+  series?: ExpenseSeriesRow,
+  attachmentCount = 0
+): Expense {
+  const recurring = series?.mode === "recurring";
   return {
     id: row.id,
     kind: row.kind,
@@ -219,6 +231,23 @@ export function toExpense(row: ExpenseRow): Expense {
     document: orNothing(row.document),
     accountId: orNothing(row.accountId),
     lotId: orNothing(row.lotId),
+    seriesId: orNothing(row.seriesId),
+    seriesIndex: orNothing(row.seriesIndex),
+    seriesCount: series?.mode === "installments" ? orNothing(series.count) : undefined,
+    seriesFrequency: recurring ? series.frequency : undefined,
+    seriesDay: recurring && series.frequency === "monthly" ? orNothing(series.dayOfMonth) : undefined,
+    attachmentCount,
+  };
+}
+
+export function toAttachment(row: AttachmentRow): Attachment {
+  return {
+    id: row.id,
+    expenseId: row.expenseId,
+    fileName: row.fileName,
+    contentType: row.contentType,
+    sizeBytes: row.sizeBytes,
+    createdAt: row.createdAt.toISOString(),
   };
 }
 

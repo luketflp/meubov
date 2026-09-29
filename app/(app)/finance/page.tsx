@@ -24,6 +24,7 @@ import { cashSummary, ledgerRows, pendingBills } from "@/lib/domain/ledger";
 import { lotEconomics } from "@/lib/domain/lotEconomics";
 import { RequireAccess } from "@/components/layout/RequireAccess";
 import { FinanceHeader } from "@/components/finance/FinanceHeader";
+import { FinanceSubnav } from "@/components/finance/FinanceSubnav";
 import { CashStrip } from "@/components/finance/CashStrip";
 import { Placar } from "@/components/finance/Placar";
 import { RevenueCostChart } from "@/components/finance/RevenueCostChart";
@@ -129,6 +130,8 @@ function FinanceContent() {
         lots={lotEcon.lots}
         farm={lotEcon.farm}
       />
+
+      <FinanceSubnav current="painel" period={period} />
 
       <CashStrip cash={cash} />
 

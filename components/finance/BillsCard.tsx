@@ -10,6 +10,7 @@ import { formatCurrency } from "@/lib/domain/format";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
 import { LancarButton } from "@/components/finance/LancarButton";
+import { AttachmentCount, InstallmentChip, RecurrenceTag } from "@/components/finance/SeriesMarkers";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import { cn } from "@/lib/utils";
@@ -135,8 +136,15 @@ export function BillsCard({ payables, receivables, canEdit }: BillsCardProps) {
                     />
                   </label>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-ink">{title}</p>
-                    {detail ? <p className="mt-px truncate text-xs text-ink-soft">{detail}</p> : null}
+                    <p className="flex items-center gap-1.5 text-sm font-medium text-ink">
+                      <span className="truncate">{title}</span>
+                      <InstallmentChip expense={entry} />
+                    </p>
+                    <p className="mt-px flex items-center gap-1 text-xs text-ink-soft empty:hidden">
+                      <AttachmentCount expense={entry} />
+                      {detail ? <span className="truncate">{detail}</span> : null}
+                      <RecurrenceTag expense={entry} />
+                    </p>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-0.5 pl-2">
                     <span className="font-mono text-sm font-medium whitespace-nowrap text-ink">

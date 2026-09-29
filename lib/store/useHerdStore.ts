@@ -8,6 +8,7 @@ import type {
   Account,
   AccountGroup,
   Animal,
+  Attachment,
   Breeding,
   Calving,
   CustomCategory,
@@ -26,6 +27,8 @@ import type {
   ScheduleTreatmentsInput,
   SemenBull,
   SemenPurchase,
+  SeriesRepeat,
+  SeriesScope,
   Sex,
   Weighing,
   HealthProtocol,
@@ -75,6 +78,7 @@ import {
   type SetAsideResult,
 } from "@/lib/store/manejoMerge";
 import { todayISO } from "@/lib/domain/dates";
+import { attachmentContentType, attachmentPathname } from "@/lib/domain/attachments";
 import { localApply, localStartSession } from "@/lib/offline/localApply";
 import type { SyncStatus } from "@/lib/offline/sync";
 import type { OutboxKind, OutboxOp } from "@/lib/offline/types";
@@ -406,12 +410,39 @@ export interface HerdStore extends HerdData {
   ) => Promise<void>;
   addProtocol: (p: Omit<HealthProtocol, "id">, generateSchedule: boolean) => Promise<void>;
   removeProtocol: (id: string) => Promise<void>;
-  addExpense: (e: Omit<Expense, "id">) => Promise<void>;
-  /** Saves the sent fields of a lançamento and keeps the server's row. */
-  updateExpense: (id: string, patch: ExpensePatch) => Promise<void>;
+  /**
+   * Lança a despesa or receita — with `repeat`, the whole parcelamento or
+   * recorrência — and resolves every row created, first position first.
+   */
+  addExpense: (e: Omit<Expense, "id">, repeat?: SeriesRepeat) => Promise<Expense[]>;
+  /**
+   * Saves the sent fields of a lançamento and keeps the server's row. On a row
+   * of a série, "following"/"all" rewrite its other rows too, so the herd is
+   * re-read.
+   */
+  updateExpense: (id: string, patch: ExpensePatch, scope?: SeriesScope) => Promise<void>;
   /** Marks a lançamento paid/received on `paidAt`, or pendente again with null. */
   markExpensePaid: (id: string, paidAt: string | null) => Promise<void>;
-  removeExpense: (id: string) => Promise<void>;
+  /** Removes a lançamento; on a row of a série "following"/"all" remove the unpaid rows in scope. */
+  removeExpense: (id: string, scope?: SeriesScope) => Promise<void>;
+  /**
+   * Whether this environment stores anexos (a Blob token is configured); null
+   * when the check itself failed (no signal), so the UI waits instead of
+   * saying "indisponíveis".
+   */
+  attachmentsEnabled: () => Promise<boolean | null>;
+  /** The anexos of a lançamento, oldest first. */
+  listAttachments: (expenseId: string) => Promise<Attachment[]>;
+  /**
+   * Uploads a file straight to the Blob store with a token from our API, then
+   * registers it on the lançamento. `onProgress` gets 0–100.
+   */
+  uploadAttachment: (
+    expenseId: string,
+    file: File,
+    onProgress?: (percentage: number) => void
+  ) => Promise<Attachment>;
+  removeAttachment: (attachment: Attachment) => Promise<void>;
   /** Creates a conta; null when its grupo already has that name (409). */
   addAccount: (input: { group: AccountGroup; name: string }) => Promise<Account | null>;
   /** Renames, archives or restores a conta; false when the name is taken (409). */
@@ -515,6 +546,9 @@ function apiFail(action: string, error: { status: number; value?: unknown }): ne
   }
   throw new Error(`${action} failed (status ${error.status})`);
 }
+
+/** A scoped edit or removal was saved but the re-read of the other rows failed. */
+const SCOPED_RELOAD_FAILED = "Alteração salva. Recarregue para ver as outras parcelas.";
 
 /** What a refused DELETE /farms/:id tells the Dono. */
 const DELETE_FARM_ERRORS: Record<string, string> = {
@@ -1873,26 +1907,109 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     set((s) => ({ protocols: s.protocols.filter((p) => p.id !== id) }));
   },
 
-  addExpense: async (e) => {
-    const { data, error } = await api.expenses.post(e);
-    if (error) apiFail("lançar a despesa", error);
-    const expense = data as Expense;
-    set((s) => ({ expenses: [...s.expenses, expense] }));
+  addExpense: async (e, repeat) => {
+    const { data, error } = await api.expenses.post(repeat ? { ...e, repeat } : e);
+    if (error) {
+      if ((error.value as { error?: string } | null)?.error === "starts_too_old") {
+        toast.error("A recorrência não pode começar há mais de 12 meses.");
+        throw new Error("lançar a despesa failed (starts_too_old)");
+      }
+      apiFail("lançar a despesa", error);
+    }
+    const created = data as Expense[];
+    set((s) => ({ expenses: [...s.expenses, ...created] }));
+    return created;
   },
 
-  updateExpense: async (id, patch) => {
-    const { data, error } = await api.expenses({ id }).patch(patch);
+  updateExpense: async (id, patch, scope = "one") => {
+    const { data, error } = await api.expenses({ id }).patch({ ...patch, scope });
     if (error) apiFail("salvar o lançamento", error);
+    if (scope !== "one") {
+      if (!(await reloadHerd(set))) toast.info(SCOPED_RELOAD_FAILED);
+      return;
+    }
+    // The PATCH answers the full row, série fields and anexo count included.
     const expense = data as Expense;
     set((s) => ({ expenses: s.expenses.map((e) => (e.id === id ? expense : e)) }));
   },
 
   markExpensePaid: (id, paidAt) => get().updateExpense(id, { paidAt }),
 
-  removeExpense: async (id) => {
-    const { error } = await api.expenses({ id }).delete();
+  removeExpense: async (id, scope = "one") => {
+    const { error } = await api.expenses({ id }).delete(undefined, { query: { scope } });
     if (error) apiFail("remover a despesa", error);
+    if (scope !== "one") {
+      if (!(await reloadHerd(set))) toast.info(SCOPED_RELOAD_FAILED);
+      return;
+    }
     set((s) => ({ expenses: s.expenses.filter((e) => e.id !== id) }));
+  },
+
+  attachmentsEnabled: async () => {
+    try {
+      const { data, error } = await api.attachments.status.get();
+      return error ? null : data.enabled;
+    } catch {
+      return null;
+    }
+  },
+
+  listAttachments: async (expenseId) => {
+    const { data, error } = await api.expenses({ id: expenseId }).attachments.get();
+    if (error) apiFail("carregar os anexos", error);
+    return data as Attachment[];
+  },
+
+  uploadAttachment: async (expenseId, file, onProgress) => {
+    const farmId = get().activeFarmId;
+    if (farmId === null) throw new Error("no active farm for the upload");
+    const { upload } = await import("@vercel/blob/client");
+    let pathname: string;
+    try {
+      const blob = await upload(
+        attachmentPathname(farmId, expenseId, crypto.randomUUID(), file.name),
+        file,
+        {
+          access: "private",
+          handleUploadUrl: "/api/herd/attachments/upload-token",
+          headers: { "x-farm-id": String(farmId) },
+          contentType: attachmentContentType(file.name, file.type),
+          onUploadProgress: ({ percentage }) => onProgress?.(percentage),
+        }
+      );
+      pathname = blob.pathname;
+    } catch (error) {
+      // A refused token reaches us only as "Failed to retrieve the client token":
+      // ask the farm check again so a lost membership or access gets apiFail's 403 handling.
+      if (error instanceof Error && error.message.includes("client token")) {
+        const check = await api.attachments.status.get().catch(() => null);
+        if (check?.error?.status === 403) apiFail(`enviar ${file.name}`, check.error);
+      }
+      toast.error(`Não foi possível enviar ${file.name}. Tente novamente.`);
+      throw error;
+    }
+    const { data, error } = await api
+      .expenses({ id: expenseId })
+      .attachments.post({ pathname, fileName: file.name });
+    if (error) apiFail("salvar o anexo", error);
+    set((s) => ({
+      expenses: s.expenses.map((e) =>
+        e.id === expenseId ? { ...e, attachmentCount: (e.attachmentCount ?? 0) + 1 } : e
+      ),
+    }));
+    return data as Attachment;
+  },
+
+  removeAttachment: async (attachment) => {
+    const { error } = await api.attachments({ id: attachment.id }).delete();
+    if (error) apiFail("remover o anexo", error);
+    set((s) => ({
+      expenses: s.expenses.map((e) =>
+        e.id === attachment.expenseId
+          ? { ...e, attachmentCount: Math.max(0, (e.attachmentCount ?? 0) - 1) }
+          : e
+      ),
+    }));
   },
 
   addAccount: async (input) => {

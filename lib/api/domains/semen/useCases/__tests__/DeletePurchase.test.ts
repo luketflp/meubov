@@ -52,6 +52,8 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
+import { memoryBlobStore } from "@/lib/api/__tests__/memoryBlob";
+
 import { DeletePurchaseUseCase } from "../DeletePurchase.useCase";
 
 const BULL_ROW = {
@@ -95,6 +97,16 @@ describe("deleteSemenPurchase", () => {
     expect(result).toEqual({ id: "p-2", expenseId: "e-2" });
     expect(state.locked).toBe(true);
     expect(state.deletes).toEqual(["semen_purchases", "expenses"]);
+  });
+
+  it("deletes the anexos' files of its expense after the rows", async () => {
+    const PATH = "farms/7/expenses/e-2/u-nf.pdf";
+    const blob = memoryBlobStore({ [PATH]: { size: 1, contentType: "application/pdf" } });
+    state.selectResults = [...stockSelects(30), [PURCHASE_ROW], [{ pathname: PATH }]];
+
+    await new DeletePurchaseUseCase(undefined, blob.store).run({ farmId: 7, bullId: "bull-1", purchaseId: "p-2" });
+
+    expect(blob.deleted).toEqual([PATH]);
   });
 
   it("deletes only the purchase when its expense is already gone", async () => {

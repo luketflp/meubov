@@ -5,15 +5,17 @@
  * joining through `animals` (they carry no farm_id of their own). Weighings
  * come sorted asc from SQL, matching the domain invariant.
  */
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, count, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   accounts,
   animals,
+  attachments,
   breedings,
   breeds,
   calvings,
   customCategories,
+  expenseSeries,
   expenses,
   farm,
   healthProtocols,
@@ -31,6 +33,8 @@ import {
 } from "@/lib/db/schema";
 import type { HerdData, ReproductionRecord, SemenPurchase, Weighing } from "@/lib/types";
 import { herdMovements } from "@/lib/domain/movements";
+import { todayISO } from "@/lib/domain/dates";
+import { TopUpSeriesUseCase } from "@/lib/api/domains/expenses/useCases/TopUpSeries.useCase";
 import {
   toAccount,
   toAnimal,
@@ -74,6 +78,14 @@ export class LoadHerdUseCase implements CurrUseCase {
   }
 
   public run: CurrUseCase["run"] = async ({ farmId }) => {
+    // Recorrências keep a year of bills ahead in Contas: write what now falls in the window.
+    // A failure there never blocks the load: the next one tries again.
+    try {
+      await new TopUpSeriesUseCase(this.repository).run({ farmId, todayIso: todayISO() });
+    } catch (error) {
+      console.error("[recorrências] top-up failed", farmId, error);
+    }
+
     const [
       farmRows,
       animalRows,
@@ -95,6 +107,8 @@ export class LoadHerdUseCase implements CurrUseCase {
       semenBullRows,
       semenPurchaseRows,
       accountRows,
+      seriesRows,
+      attachmentCountRows,
     ] = await Promise.all([
       this.repository.select().from(farm).where(eq(farm.id, farmId)),
       this.repository.select().from(animals).where(eq(animals.farmId, farmId)).orderBy(asc(animals.earTag)),
@@ -189,6 +203,12 @@ export class LoadHerdUseCase implements CurrUseCase {
         .from(accounts)
         .where(eq(accounts.farmId, farmId))
         .orderBy(asc(accounts.group), asc(accounts.name)),
+      this.repository.select().from(expenseSeries).where(eq(expenseSeries.farmId, farmId)),
+      this.repository
+        .select({ expenseId: attachments.expenseId, total: count() })
+        .from(attachments)
+        .where(eq(attachments.farmId, farmId))
+        .groupBy(attachments.expenseId),
     ]);
 
     const weighingsByAnimal = new Map<string, Weighing[]>();
@@ -228,6 +248,11 @@ export class LoadHerdUseCase implements CurrUseCase {
       purchasesByBull.set(row.bullId, list);
     }
 
+    const seriesById = new Map(seriesRows.map((row) => [row.id, row]));
+    const attachmentsByExpense = new Map(
+      attachmentCountRows.map((row) => [row.expenseId, row.total])
+    );
+
     const herdAnimals = animalRows.map((row) =>
       toAnimal(row, weighingsByAnimal.get(row.id) ?? [], reproductionByAnimal.get(row.id))
     );
@@ -255,7 +280,13 @@ export class LoadHerdUseCase implements CurrUseCase {
       breeds: breedRows.map((row) => row.name),
       protocols: protocolRows.map(toProtocol),
       manejoSessions: sessions,
-      expenses: expenseRows.map(toExpense),
+      expenses: expenseRows.map((row) =>
+        toExpense(
+          row,
+          row.seriesId === null ? undefined : seriesById.get(row.seriesId),
+          attachmentsByExpense.get(row.id) ?? 0
+        )
+      ),
       accounts: accountRows.map(toAccount),
       customCategories: customCategoryRows.map(toCustomCategory),
       semenBulls: semenBullRows.map((row) => toSemenBull(row, purchasesByBull.get(row.id) ?? [])),

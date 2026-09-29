@@ -12,6 +12,11 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
       "herd",
     ],
   },
+  "DELETE /api/herd/attachments/:id": {
+    "edit": [
+      "finance",
+    ],
+  },
   "DELETE /api/herd/breeds/:name": {
     "edit": [
       "herd",
@@ -80,6 +85,15 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
   },
   "GET /api/herd": {
     "read": true,
+  },
+  "GET /api/herd/attachments/:id": {
+    "view": "finance",
+  },
+  "GET /api/herd/attachments/status": {
+    "view": "finance",
+  },
+  "GET /api/herd/expenses/:id/attachments": {
+    "view": "finance",
   },
   "GET /api/herd/farm/team": {
     "view": "team",
@@ -186,6 +200,11 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
       "lots",
     ],
   },
+  "POST /api/herd/attachments/upload-token": {
+    "edit": [
+      "finance",
+    ],
+  },
   "POST /api/herd/births/import": {
     "edit": [
       "reproduction",
@@ -202,6 +221,11 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
     ],
   },
   "POST /api/herd/expenses": {
+    "edit": [
+      "finance",
+    ],
+  },
+  "POST /api/herd/expenses/:id/attachments": {
     "edit": [
       "finance",
     ],

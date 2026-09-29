@@ -6,6 +6,7 @@ import { formatDate } from "@/lib/domain/dates";
 import { formatCurrency } from "@/lib/domain/format";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
+import { AttachmentCount, InstallmentChip, RecurrenceTag } from "@/components/finance/SeriesMarkers";
 import { cn } from "@/lib/utils";
 
 const RECENT = 5;
@@ -71,13 +72,20 @@ export function RecentEntriesCard({ rows, period }: { rows: LedgerRow[]; period:
                   {income ? <ArrowDownLeft className="size-4" /> : <ArrowUpRight className="size-4" />}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-ink">
-                    {title}
-                    {row.locked ? (
-                      <span className="text-[11px] font-normal text-ink-soft"> · automático</span>
-                    ) : null}
+                  <p className="flex items-center gap-1.5 text-sm font-medium text-ink">
+                    <span className="truncate">
+                      {title}
+                      {row.locked ? (
+                        <span className="text-[11px] font-normal text-ink-soft"> · automático</span>
+                      ) : null}
+                    </span>
+                    <InstallmentChip expense={row.expense} />
                   </p>
-                  {detail ? <p className="mt-px truncate text-xs text-ink-soft">{detail}</p> : null}
+                  <p className="mt-px flex items-center gap-1 text-xs text-ink-soft empty:hidden">
+                    <AttachmentCount expense={row.expense} />
+                    {detail ? <span className="truncate">{detail}</span> : null}
+                    <RecurrenceTag expense={row.expense} />
+                  </p>
                 </div>
                 {/* Phone: the pill sits under the value; wider: beside it. */}
                 <div className="flex shrink-0 flex-col-reverse items-end gap-0.5 sm:flex-row sm:items-center sm:gap-3">

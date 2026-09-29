@@ -1,19 +1,24 @@
 "use client";
 
 /**
- * What a row of the Extrato lets you do. A lançamento: Editar (the
- * EntryDialog filled in), Marcar como pago / recebido while pending, and
- * Remover after a confirmation. A row the manejos wrote is locked and says
- * so. The buttons need Financeiro at edit.
+ * What a row of the Extrato lets you do. A lançamento: Ver anexos when it has
+ * any (Financeiro at view is enough), Editar (the EntryDialog filled in),
+ * Marcar como pago / recebido while pending, and Remover after a confirmation
+ * — for a row of a série, the choice of "Só esta", "Esta e as próximas" or
+ * "Todas". A row the manejos wrote is locked and says so. Editing needs
+ * Financeiro at edit.
  */
 import { useState } from "react";
-import { CheckCircle2, Lock, Pencil, Trash2 } from "lucide-react";
+import { CheckCircle2, Lock, Paperclip, Pencil, Trash2 } from "lucide-react";
+import type { SeriesScope } from "@/lib/types";
 import type { LedgerRow } from "@/lib/domain/ledger";
 import { todayISO } from "@/lib/domain/dates";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
 import { useToast } from "@/components/providers/Toasts";
 import { EntryDialog } from "@/components/finance/EntryDialog";
+import { SeriesScopeDialog } from "@/components/finance/SeriesScopeDialog";
+import { AttachmentsDialog } from "@/components/finance/attachments/AttachmentsDialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -42,6 +47,7 @@ export function RowActions({ row, labeled = false, onDone }: RowActionsProps) {
   const { addToast } = useToast();
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [viewing, setViewing] = useState(false);
   const [busy, setBusy] = useState(false);
 
   if (row.locked) {
@@ -62,7 +68,9 @@ export function RowActions({ row, labeled = false, onDone }: RowActionsProps) {
   }
 
   const expense = row.expense;
-  if (!canEdit || !expense) return null;
+  if (!expense) return null;
+  const hasFiles = (expense.attachmentCount ?? 0) > 0;
+  if (!canEdit && !hasFiles) return null;
 
   const revenue = expense.kind === "revenue";
   const pending = row.paidAt === null;
@@ -81,10 +89,10 @@ export function RowActions({ row, labeled = false, onDone }: RowActionsProps) {
     }
   };
 
-  const remove = async () => {
+  const remove = async (scope: SeriesScope = "one") => {
     setBusy(true);
     try {
-      await removeExpense(expense.id);
+      await removeExpense(expense.id, scope);
       addToast({ messageType: "success", text: "Lançamento removido" });
       setConfirming(false);
       onDone?.();
@@ -102,52 +110,82 @@ export function RowActions({ row, labeled = false, onDone }: RowActionsProps) {
   return (
     <>
       <div className={labeled ? "flex flex-col gap-2" : "flex items-center justify-end gap-0.5"}>
-        <Button
-          type="button"
-          variant={variant}
-          size={size}
-          className={buttonClass}
-          aria-label={labeled ? undefined : "Editar lançamento"}
-          title={labeled ? undefined : "Editar"}
-          onClick={() => setEditing(true)}
-        >
-          <Pencil aria-hidden />
-          {labeled ? "Editar" : null}
-        </Button>
-        {pending ? (
+        {hasFiles ? (
           <Button
             type="button"
             variant={variant}
             size={size}
             className={buttonClass}
-            aria-label={labeled ? undefined : markLabel}
-            title={labeled ? undefined : markLabel}
-            disabled={busy}
-            onClick={markPaid}
+            aria-label={labeled ? undefined : "Ver anexos"}
+            title={labeled ? undefined : "Ver anexos"}
+            onClick={() => setViewing(true)}
           >
-            <CheckCircle2 aria-hidden />
-            {labeled ? markLabel : null}
+            <Paperclip aria-hidden />
+            {labeled ? "Ver anexos" : null}
           </Button>
         ) : null}
-        <Button
-          type="button"
-          variant={variant}
-          size={size}
-          className={cn(buttonClass, "hover:text-overdue")}
-          aria-label={labeled ? undefined : "Remover lançamento"}
-          title={labeled ? undefined : "Remover"}
-          onClick={() => setConfirming(true)}
-        >
-          <Trash2 aria-hidden />
-          {labeled ? "Remover" : null}
-        </Button>
+        {canEdit ? (
+          <>
+            <Button
+              type="button"
+              variant={variant}
+              size={size}
+              className={buttonClass}
+              aria-label={labeled ? undefined : "Editar lançamento"}
+              title={labeled ? undefined : "Editar"}
+              onClick={() => setEditing(true)}
+            >
+              <Pencil aria-hidden />
+              {labeled ? "Editar" : null}
+            </Button>
+            {pending ? (
+              <Button
+                type="button"
+                variant={variant}
+                size={size}
+                className={buttonClass}
+                aria-label={labeled ? undefined : markLabel}
+                title={labeled ? undefined : markLabel}
+                disabled={busy}
+                onClick={markPaid}
+              >
+                <CheckCircle2 aria-hidden />
+                {labeled ? markLabel : null}
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant={variant}
+              size={size}
+              className={cn(buttonClass, "hover:text-overdue")}
+              aria-label={labeled ? undefined : "Remover lançamento"}
+              title={labeled ? undefined : "Remover"}
+              onClick={() => setConfirming(true)}
+            >
+              <Trash2 aria-hidden />
+              {labeled ? "Remover" : null}
+            </Button>
+          </>
+        ) : null}
       </div>
 
       {/* Mounted only while open, so the form starts from the row every time. */}
       {editing ? <EntryDialog open onOpenChange={setEditing} expense={expense} /> : null}
+      {viewing ? <AttachmentsDialog expense={expense} onOpenChange={setViewing} /> : null}
+
+      {expense.seriesId && confirming ? (
+        <SeriesScopeDialog
+          open
+          onOpenChange={setConfirming}
+          expense={expense}
+          action="remove"
+          busy={busy}
+          onConfirm={(scope) => void remove(scope)}
+        />
+      ) : null}
 
       <Dialog
-        open={confirming}
+        open={confirming && !expense.seriesId}
         onOpenChange={(open) => {
           if (!busy) setConfirming(open);
         }}
@@ -174,7 +212,7 @@ export function RowActions({ row, labeled = false, onDone }: RowActionsProps) {
               variant="destructive"
               className="min-h-11 md:min-h-9"
               disabled={busy}
-              onClick={remove}
+              onClick={() => void remove()}
             >
               {busy ? "Removendo…" : "Remover"}
             </Button>
