@@ -539,7 +539,8 @@ function apiFail(action: string, error: { status: number; value?: unknown }): ne
     clearActiveFarmId();
     window.location.reload();
   } else if (error.status === 403 && code === "forbidden") {
-    toast.error("Seu acesso a esta fazenda mudou.");
+    // One id: several uploads refused at once show a single toast.
+    toast.error("Seu acesso a esta fazenda mudou.", { id: "access-changed" });
     void useHerdStore.getState().refreshAccess().catch(() => {});
   } else {
     toast.error(`Não foi possível ${action}. Tente novamente.`);
@@ -1991,13 +1992,20 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const { data, error } = await api
       .expenses({ id: expenseId })
       .attachments.post({ pathname, fileName: file.name });
-    if (error) apiFail("salvar o anexo", error);
+    let saved = data as Attachment;
+    if (error?.status === CONFLICT) {
+      // The pathname is registered already, so the anexo is saved: answer it as saved.
+      const list = await get().listAttachments(expenseId);
+      const match = list.filter((a) => a.fileName === file.name).at(-1);
+      if (!match) apiFail("salvar o anexo", error);
+      saved = match;
+    } else if (error) apiFail("salvar o anexo", error);
     set((s) => ({
       expenses: s.expenses.map((e) =>
         e.id === expenseId ? { ...e, attachmentCount: (e.attachmentCount ?? 0) + 1 } : e
       ),
     }));
-    return data as Attachment;
+    return saved;
   },
 
   removeAttachment: async (attachment) => {

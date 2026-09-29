@@ -24,14 +24,15 @@ export function AttachmentsDialog({
   const attachmentsEnabled = useHerdStore((s) => s.attachmentsEnabled);
   const listAttachments = useHerdStore((s) => s.listAttachments);
   const [list, setList] = useState<Attachment[] | null>(null);
-  const [disabled, setDisabled] = useState(false);
+  /** "disabled": no Blob store here; "offline": the status check failed, so no signal. */
+  const [unavailable, setUnavailable] = useState<"disabled" | "offline" | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     attachmentsEnabled()
       .then(async (enabled) => {
-        if (enabled === false) {
-          if (!cancelled) setDisabled(true);
+        if (enabled !== true) {
+          if (!cancelled) setUnavailable(enabled === false ? "disabled" : "offline");
           return;
         }
         const found = await listAttachments(expense.id);
@@ -51,8 +52,10 @@ export function AttachmentsDialog({
         <DialogHeader>
           <DialogTitle>Anexos</DialogTitle>
           <DialogDescription>
-            {disabled
+            {unavailable === "disabled"
               ? "Anexos indisponíveis neste ambiente"
+              : unavailable === "offline"
+                ? "Os anexos precisam de sinal. Tente de novo quando conectar."
               : list === null
                 ? "Carregando…"
                 : `${fileCountLabel(list.length)} · toque para abrir`}
