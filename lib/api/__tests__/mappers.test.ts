@@ -1,8 +1,11 @@
-/** toExpense: the série a row belongs to decides its markers ("2/3", "todo dia 20"). */
+/**
+ * toExpense: the série a row belongs to decides its markers ("2/3", "todo dia 20").
+ * toBankAccount: "conciliado até" and the pending count come from its linhas.
+ */
 import { describe, expect, it } from "vitest";
 
-import { toExpense } from "@/lib/api/mappers";
-import type { ExpenseRow, ExpenseSeriesRow } from "@/lib/db/schema";
+import { toBankAccount, toExpense } from "@/lib/api/mappers";
+import type { BankAccountRow, ExpenseRow, ExpenseSeriesRow } from "@/lib/db/schema";
 
 const ROW: ExpenseRow = {
   id: "e-1",
@@ -20,6 +23,7 @@ const ROW: ExpenseRow = {
   lotId: null,
   seriesId: "s-1",
   seriesIndex: 2,
+  bankAccountId: null,
 };
 
 const SERIES: ExpenseSeriesRow = {
@@ -61,5 +65,59 @@ describe("toExpense", () => {
     expect(expense.seriesId).toBeUndefined();
     expect(expense.seriesIndex).toBeUndefined();
     expect(expense.attachmentCount).toBe(0);
+  });
+});
+
+const BANK: BankAccountRow = {
+  id: "b-1",
+  farmId: 7,
+  kind: "checking",
+  name: "Sicredi",
+  label: "c/c 12.345-6",
+  openingBalanceBrl: 1000,
+  openingDate: "2026-08-31",
+  isMain: true,
+  closingDay: null,
+  dueDay: null,
+  paysFromId: null,
+  csvMapping: null,
+  archivedAt: null,
+  createdAt: new Date("2026-09-01T12:00:00Z"),
+};
+
+const LINES = {
+  pending: 0,
+  firstDate: "2026-09-01",
+  firstPendingDate: null,
+  lastDate: "2026-09-20",
+  pendingImportId: null,
+  lastImportId: "imp-2",
+};
+
+describe("toBankAccount", () => {
+  it("is conciliado up to the last linha when nothing waits", () => {
+    expect(toBankAccount(BANK, LINES)).toMatchObject({
+      pendingLines: 0,
+      reconciledUntil: "2026-09-20",
+      lastImportId: "imp-2",
+      label: "c/c 12.345-6",
+      isMain: true,
+    });
+  });
+
+  it("stops the day before the oldest pending linha and names its import", () => {
+    const account = toBankAccount(BANK, {
+      ...LINES,
+      pending: 12,
+      firstPendingDate: "2026-09-16",
+      pendingImportId: "imp-1",
+    });
+    expect(account).toMatchObject({ pendingLines: 12, reconciledUntil: "2026-09-15", pendingImportId: "imp-1" });
+  });
+
+  it("says nothing when the very first linha still waits, or there is no extrato", () => {
+    expect(toBankAccount(BANK, { ...LINES, pending: 3, firstPendingDate: "2026-09-01" }).reconciledUntil).toBeUndefined();
+    expect(toBankAccount(BANK)).toMatchObject({ pendingLines: 0 });
+    expect(toBankAccount(BANK).reconciledUntil).toBeUndefined();
   });
 });

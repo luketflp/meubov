@@ -1,9 +1,12 @@
 "use client";
 
 /**
- * "Novo lançamento": a despesa or a receita with vencimento, pagamento, conta,
- * pago para, documento, lote (centro de custo), Repetir (uma vez, parcelado,
- * recorrente) and anexos. With `expense` it edits that lançamento: the
+ * "Novo lançamento": a despesa or a receita with vencimento, pagamento and
+ * the conta bancária it was paid by ("Pago por"), conta do plano, pago para,
+ * documento, lote (centro de custo), Repetir (uma vez, parcelado, recorrente)
+ * and anexos. With `fromLine` it is "Criar lançamento" of the conciliação: the
+ * linha do extrato fixes the kind, the value and the payment (on its date, by
+ * its conta) and the lançamento is saved paired with it. With `expense` it edits that lançamento: the
  * Despesa | Receita switch and Repetir are hidden, a row of a série says which
  * ("Parcela 2/3", "Recorrente · todo dia 20") and saving asks where the change
  * applies. Vendas and compras de gado come from the manejos, never from here.
@@ -13,7 +16,16 @@ import { Repeat } from "lucide-react";
 import { useHerdStore, type ExpensePatch } from "@/lib/store/useHerdStore";
 import { activeAnimals, activeLots } from "@/lib/store/selectors";
 import { useToast } from "@/components/providers/Toasts";
-import type { AccountGroup, EntryKind, Expense, ExpenseCategory, SeriesScope } from "@/lib/types";
+import type {
+  AccountGroup,
+  BankAccount,
+  EntryKind,
+  Expense,
+  ExpenseCategory,
+  SeriesScope,
+  StatementLine,
+} from "@/lib/types";
+import type { Resolved } from "@/lib/api/domains/statements/useCases/ResolveLine.useCase";
 import { accountsByGroup, counterpartySuggestions } from "@/lib/domain/accounts";
 import { todayISO } from "@/lib/domain/dates";
 import { EXPENSE_CATEGORY_LABEL } from "@/lib/domain/labels";
@@ -28,6 +40,7 @@ import {
 } from "@/components/finance/RepeatSection";
 import { SeriesScopeDialog } from "@/components/finance/SeriesScopeDialog";
 import { AttachmentsField, type PendingFile } from "@/components/finance/attachments/AttachmentsField";
+import { PaidByField, defaultPaidBy, paidByOptions } from "@/components/finance/contas/PaidByField";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -70,14 +83,39 @@ interface EntryFields {
   dueTouched: boolean;
   paid: boolean;
   paidAt: string;
+  /** "Pago por": a conta bancária id, "" when the farm has none. */
+  bankAccountId: string;
   counterparty: string;
   document: string;
   lotId: string;
   notes: string;
 }
 
-function initialFields(expense: Expense | undefined, defaultKind: EntryKind): EntryFields {
+function initialFields(
+  expense: Expense | undefined,
+  defaultKind: EntryKind,
+  bankAccounts: BankAccount[],
+  fromLine?: StatementLine
+): EntryFields {
   const today = todayISO();
+  if (fromLine) {
+    return {
+      kind: fromLine.amountBrl < 0 ? "expense" : "revenue",
+      date: fromLine.date,
+      amount: String(Math.abs(fromLine.amountBrl)).replace(".", ","),
+      category: "nutrition",
+      accountId: NONE,
+      dueDate: fromLine.date,
+      dueTouched: false,
+      paid: true,
+      paidAt: fromLine.date,
+      bankAccountId: fromLine.bankAccountId,
+      counterparty: "",
+      document: "",
+      lotId: NONE,
+      notes: fromLine.description,
+    };
+  }
   if (!expense) {
     return {
       kind: defaultKind,
@@ -89,6 +127,7 @@ function initialFields(expense: Expense | undefined, defaultKind: EntryKind): En
       dueTouched: false,
       paid: true,
       paidAt: today,
+      bankAccountId: defaultPaidBy(bankAccounts, defaultKind),
       counterparty: "",
       document: "",
       lotId: NONE,
@@ -105,6 +144,8 @@ function initialFields(expense: Expense | undefined, defaultKind: EntryKind): En
     dueTouched: expense.dueDate !== undefined && expense.dueDate !== expense.date,
     paid: expense.paidAt !== undefined,
     paidAt: expense.paidAt ?? today,
+    // A row paid before the contas existed stays without one until the farmer picks it.
+    bankAccountId: expense.bankAccountId ?? (expense.paidAt ? "" : defaultPaidBy(bankAccounts, expense.kind)),
     counterparty: expense.counterparty ?? "",
     document: expense.document ?? "",
     lotId: expense.lotId ?? NONE,
@@ -123,11 +164,17 @@ export function EntryDialog({
   onOpenChange,
   expense,
   defaultKind = "expense",
+  fromLine,
+  onResolved,
 }: {
   open: boolean;
   onOpenChange(open: boolean): void;
   expense?: Expense;
   defaultKind?: EntryKind;
+  /** "Criar lançamento" from a linha do extrato. */
+  fromLine?: StatementLine;
+  /** After the lançamento was created and paired with `fromLine`. */
+  onResolved?(resolved: Resolved): void;
 }) {
   // While saving (and uploading) the dialog stays: Esc, outside click and Cancelar wait.
   const [busy, setBusy] = useState(false);
@@ -140,15 +187,18 @@ export function EntryDialog({
     >
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{expense ? "Editar lançamento" : "Novo lançamento"}</DialogTitle>
+          <DialogTitle>{expense ? "Editar lançamento" : fromLine ? "Criar lançamento" : "Novo lançamento"}</DialogTitle>
           <DialogDescription>
-            Despesas e receitas da fazenda. Vendas e compras de gado entram sozinhas pelos
-            manejos.
+            {fromLine
+              ? "Preenchido pela linha do banco · confira a conta do plano."
+              : "Despesas e receitas da fazenda. Vendas e compras de gado entram sozinhas pelos manejos."}
           </DialogDescription>
         </DialogHeader>
         <EntryForm
           expense={expense}
           defaultKind={defaultKind}
+          fromLine={fromLine}
+          onResolved={onResolved}
           onBusyChange={setBusy}
           onDone={() => onOpenChange(false)}
         />
@@ -160,15 +210,20 @@ export function EntryDialog({
 function EntryForm({
   expense,
   defaultKind,
+  fromLine,
+  onResolved,
   onBusyChange,
   onDone,
 }: {
   expense?: Expense;
   defaultKind: EntryKind;
+  fromLine?: StatementLine;
+  onResolved?(resolved: Resolved): void;
   onBusyChange(busy: boolean): void;
   onDone(): void;
 }) {
   const accounts = useHerdStore((s) => s.accounts);
+  const bankAccounts = useHerdStore((s) => s.bankAccounts);
   const expenses = useHerdStore((s) => s.expenses);
   const lots = useHerdStore((s) => s.lots);
   const animals = useHerdStore((s) => s.animals);
@@ -176,9 +231,14 @@ function EntryForm({
   const updateExpense = useHerdStore((s) => s.updateExpense);
   const addAccount = useHerdStore((s) => s.addAccount);
   const uploadAttachment = useHerdStore((s) => s.uploadAttachment);
+  const resolveStatementLine = useHerdStore((s) => s.resolveStatementLine);
   const { addToast } = useToast();
+  /** The linha do extrato fixes the kind, the value and the payment. */
+  const fixed = fromLine !== undefined;
 
-  const [fields, setFields] = useState<EntryFields>(() => initialFields(expense, defaultKind));
+  const [fields, setFields] = useState<EntryFields>(() =>
+    initialFields(expense, defaultKind, bankAccounts, fromLine)
+  );
   const [repeatFields, setRepeatFields] = useState<RepeatFields>(() => initialRepeat(todayISO()));
   const [pending, setPending] = useState<PendingFile[]>([]);
   /** The edit waiting for "Só esta" · "Esta e as próximas" · "Todas". */
@@ -210,7 +270,7 @@ function EntryForm({
   ];
   const suggestions = counterpartySuggestions(expenses);
 
-  const repeating = !expense && repeatFields.choice !== "once";
+  const repeating = !expense && !fixed && repeatFields.choice !== "once";
   const seriesLine = expense
     ? installmentLabel(expense)
       ? `Parcela ${installmentLabel(expense)}`
@@ -295,7 +355,7 @@ function EntryForm({
       setError("Informe o valor (maior que zero).");
       return;
     }
-    const repeat = expense ? null : repeatFromFields(repeatFields, fields.date);
+    const repeat = expense || fixed ? null : repeatFromFields(repeatFields, fields.date);
     if (typeof repeat === "string") {
       setError(repeat);
       return;
@@ -319,6 +379,7 @@ function EntryForm({
     const counterparty = fields.counterparty.trim() || null;
     const docNumber = fields.document.trim() || null;
     const accountId = fields.accountId === NONE ? null : fields.accountId;
+    const bankAccountId = fields.paid && fields.bankAccountId !== "" ? fields.bankAccountId : null;
     const lotId = fields.lotId === NONE ? null : fields.lotId;
     const notes = fields.notes.trim() || null;
 
@@ -332,12 +393,45 @@ function EntryForm({
         counterparty,
         document: docNumber,
         accountId,
+        bankAccountId,
         lotId,
         notes,
       };
       // A row of a série asks where the change applies before saving.
       if (expense.seriesId) setScopePatch(patch);
       else await saveEdit(expense, patch, "one");
+      return;
+    }
+
+    if (fromLine) {
+      setSaving(true);
+      const resolved = await resolveStatementLine(fromLine, {
+        type: "create",
+        entry: {
+          date: fields.date,
+          category,
+          amountBrl,
+          dueDate: fields.dueDate,
+          counterparty: counterparty ?? undefined,
+          document: docNumber ?? undefined,
+          accountId: accountId ?? undefined,
+          lotId: lotId ?? undefined,
+          notes: notes ?? undefined,
+        },
+      }).catch(() => null); // apiFail already toasted
+      if (!resolved?.expense) {
+        setSaving(false);
+        return;
+      }
+      const failed = pending.length > 0 ? await uploadPending(resolved.expense.id) : 0;
+      addToast(
+        failed > 0
+          ? { messageType: "warning", text: `Lançamento conciliado; ${failed} anexo(s) não enviado(s) — anexe em Editar.` }
+          : { messageType: "success", text: "Lançamento criado e conciliado" }
+      );
+      setSaving(false);
+      onResolved?.(resolved);
+      onDone();
       return;
     }
 
@@ -355,6 +449,7 @@ function EntryForm({
           counterparty: counterparty ?? undefined,
           document: docNumber ?? undefined,
           accountId: accountId ?? undefined,
+          bankAccountId: bankAccountId ?? undefined,
           lotId: lotId ?? undefined,
           notes: notes ?? undefined,
         },
@@ -388,7 +483,7 @@ function EntryForm({
 
   return (
     <form onSubmit={onSubmit} noValidate className="grid gap-4">
-      {expense ? null : (
+      {expense || fixed ? null : (
         <div
           role="radiogroup"
           aria-label="Tipo de lançamento"
@@ -403,7 +498,14 @@ function EntryForm({
                 role="radio"
                 aria-checked={selected}
                 onClick={() => {
-                  set({ kind, accountId: NONE });
+                  // A receita never goes into a cartão; a despesa with no conta starts on the principal.
+                  const card = bankAccounts.find((a) => a.id === fields.bankAccountId)?.kind === "card";
+                  const redefault = (kind === "revenue" && card) || (kind === "expense" && fields.bankAccountId === "");
+                  set({
+                    kind,
+                    accountId: NONE,
+                    ...(redefault ? { bankAccountId: defaultPaidBy(bankAccounts, kind) } : {}),
+                  });
                   setNewAccountName(null);
                 }}
                 className={cn(
@@ -441,6 +543,7 @@ function EntryForm({
             inputMode="decimal"
             placeholder="0,00"
             value={fields.amount}
+            readOnly={fixed}
             onChange={(e) => set({ amount: e.target.value })}
             className="min-h-11 font-mono md:min-h-0"
           />
@@ -479,7 +582,7 @@ function EntryForm({
           )}
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="entry-account">Conta</Label>
+          <Label htmlFor="entry-account">Conta do plano</Label>
           {newAccountName === null ? (
             <>
               <Select value={fields.accountId} onValueChange={(accountId) => set({ accountId })}>
@@ -558,6 +661,7 @@ function EntryForm({
               <input
                 type="checkbox"
                 checked={fields.paid}
+                disabled={fixed}
                 onChange={(e) => set({ paid: e.target.checked })}
                 className="size-4 shrink-0 accent-brand"
               />
@@ -569,6 +673,7 @@ function EntryForm({
                 type="date"
                 aria-label={revenue ? "Data do recebimento" : "Data do pagamento"}
                 value={fields.paidAt}
+                disabled={fixed}
                 onChange={(e) => set({ paidAt: e.target.value })}
                 className="min-h-11 min-w-0 flex-1 font-mono md:min-h-9"
               />
@@ -580,9 +685,21 @@ function EntryForm({
             </p>
           ) : null}
         </div>
+        {fields.paid && paidByOptions(bankAccounts, fields.kind, fields.bankAccountId).length > 0 ? (
+          <div className="sm:col-start-2">
+            <PaidByField
+              id="entry-paid-by"
+              accounts={bankAccounts}
+              kind={fields.kind}
+              value={fields.bankAccountId}
+              disabled={fixed}
+              onChange={(bankAccountId) => set({ bankAccountId })}
+            />
+          </div>
+        ) : null}
       </div>
 
-      {expense ? (
+      {fixed ? null : expense ? (
         seriesLine ? (
           <p className="flex items-center gap-1.5 border-t border-hairline pt-4 text-sm text-ink">
             <Repeat className="size-4 text-ink-soft" aria-hidden />
@@ -688,11 +805,13 @@ function EntryForm({
         <Button type="submit" className="min-h-11" disabled={saving}>
           {expense
             ? "Salvar"
-            : repeatFields.choice === "installments"
-              ? `Lançar ${countInRange(repeatFields.count) ? `${repeatFields.count} ` : ""}parcelas`
-              : repeatFields.choice === "recurring"
-                ? "Lançar recorrência"
-                : "Lançar"}
+            : fixed
+              ? "Salvar e conciliar"
+              : repeatFields.choice === "installments"
+                ? `Lançar ${countInRange(repeatFields.count) ? `${repeatFields.count} ` : ""}parcelas`
+                : repeatFields.choice === "recurring"
+                  ? "Lançar recorrência"
+                  : "Lançar"}
         </Button>
       </DialogFooter>
 

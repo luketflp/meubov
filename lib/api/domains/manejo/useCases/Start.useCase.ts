@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import {
   animals,
+  bankAccounts,
   manejoSessionAnimals,
   manejoSessions,
   semenBulls,
@@ -146,6 +147,12 @@ export class StartSessionUseCase implements CurrUseCase {
           planCostBrl: plan?.costBrl,
           planNextDate: plan?.nextDate,
           planNotes: plan?.notes,
+          // A venda or compra goes through the conta principal; "Conta" in the Extrato changes it.
+          ...(input.kind === "sale" || input.kind === "entry"
+            ? {
+                bankAccountId: sql`(select ${bankAccounts.id} from ${bankAccounts} where ${bankAccounts.farmId} = ${farmId} and ${bankAccounts.isMain})`,
+              }
+            : {}),
         })
         .returning();
 

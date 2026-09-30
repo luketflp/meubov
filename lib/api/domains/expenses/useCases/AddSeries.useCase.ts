@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { expenseSeries, expenses } from "@/lib/db/schema";
 import { toExpense } from "@/lib/api/mappers";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
+import { isPayingAccount } from "@/lib/api/domains/bankAccounts/payingAccount";
 import { parseISODate } from "@/lib/domain/dates";
 import {
   addMonths,
@@ -34,6 +35,8 @@ interface AddSeriesUseCaseProps {
   document?: string;
   accountId?: string;
   lotId?: string;
+  /** "Pago por" of the first row, when it is paid. */
+  bankAccountId?: string;
   repeat: SeriesRepeat;
 }
 
@@ -43,7 +46,12 @@ interface AddSeriesUseCaseProps {
  * centavo each), a recorrência ends before it starts, or nothing falls in the
  * window; `starts_too_old` when a recorrência starts more than 12 months ago.
  */
-type AddSeriesUseCaseResponse = Expense[] | "due_before_date" | "invalid_repeat" | "starts_too_old";
+type AddSeriesUseCaseResponse =
+  | Expense[]
+  | "due_before_date"
+  | "invalid_repeat"
+  | "starts_too_old"
+  | "invalid_bank_account";
 
 type CurrUseCase = _UseCase<AddSeriesUseCaseProps, AddSeriesUseCaseResponse>;
 
@@ -93,6 +101,10 @@ export class AddSeriesUseCase implements CurrUseCase {
           seriesHorizon(todayIso)
         ).map(({ index, date }) => ({ index, date, dueDate: date, amountBrl: entry.amountBrl }));
     if (lines.length === 0) return "invalid_repeat";
+    const firstAccountId = entry.paidAt === undefined ? null : (entry.bankAccountId ?? null);
+    if (firstAccountId !== null && !(await isPayingAccount(this.repository, farmId, firstAccountId, kind))) {
+      return "invalid_bank_account";
+    }
 
     const template = {
       kind,
@@ -133,6 +145,7 @@ export class AddSeriesUseCase implements CurrUseCase {
             amountBrl: line.amountBrl,
             // "Já pago" belongs to the first row; the others are bills to come.
             paidAt: line.index === 1 ? (entry.paidAt ?? null) : null,
+            bankAccountId: line.index === 1 ? firstAccountId : null,
             seriesId: series.id,
             seriesIndex: line.index,
           }))

@@ -25,6 +25,7 @@ function selectBuilder() {
     from: () => builder,
     where: () => builder,
     limit: () => builder,
+    for: () => builder,
     then: (resolve: (value: Record<string, unknown>[]) => unknown) => resolve(rows),
   };
   return builder;
@@ -42,7 +43,14 @@ function updateBuilder() {
   return builder;
 }
 
-vi.mock("@/lib/db", () => ({ db: { select: selectBuilder, update: updateBuilder } }));
+vi.mock("@/lib/db", () => {
+  const db = {
+    select: selectBuilder,
+    update: updateBuilder,
+    transaction: (run: (tx: unknown) => unknown) => Promise.resolve(run(db)),
+  };
+  return { db };
+});
 
 import type { Expense } from "@/lib/types";
 

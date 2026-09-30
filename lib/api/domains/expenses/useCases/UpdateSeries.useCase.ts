@@ -18,7 +18,7 @@ interface UpdateSeriesUseCaseProps {
 }
 
 /** Null when the lançamento is not on this farm. */
-type UpdateSeriesUseCaseResponse = Expense | "due_before_date" | null;
+type UpdateSeriesUseCaseResponse = Expense | "due_before_date" | "invalid_bank_account" | null;
 
 type CurrUseCase = _UseCase<UpdateSeriesUseCaseProps, UpdateSeriesUseCaseResponse>;
 
@@ -88,7 +88,7 @@ export class UpdateSeriesUseCase implements CurrUseCase {
         id,
         patch: moved ? { ...patch, date: dueDate } : patch,
       });
-      if (updated === null || updated === "due_before_date") return updated;
+      if (updated === null || typeof updated === "string") return updated;
 
       const shared = sharedFields(patch, recurring);
       const rule = moved ? ruleFromOccurrence(series.frequency, current.seriesIndex, dueDate) : null;

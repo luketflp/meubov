@@ -8,7 +8,7 @@
  * `insert(...).values(...)` also chains `.onConflictDoNothing()`, which
  * resolves to nothing and never touches `returning`.
  * `delete()` counts. `execute()` (an advisory lock) resolves to no rows.
- * `transaction(run)` runs `run` against the same handle.
+ * `transaction(run)` runs `run` against the same handle, nested ones too.
  *
  * An `insert(...).values(...).returning()` rejects with the next entry of
  * `insertErrors` instead, when that queue is non-empty — for a test simulating
@@ -108,8 +108,8 @@ export function createDbStub(state: DbStubState) {
     }),
   };
 
-  return {
-    ...handle,
-    transaction: (run: (tx: typeof handle) => unknown) => Promise.resolve(run(handle)),
-  };
+  // A nested transaction (a savepoint in Drizzle) runs on the same handle too.
+  const transaction = (run: (tx: typeof handle) => unknown) => Promise.resolve(run(handle));
+  Object.assign(handle, { transaction });
+  return { ...handle, transaction };
 }

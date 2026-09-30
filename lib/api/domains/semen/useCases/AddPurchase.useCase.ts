@@ -63,8 +63,8 @@ export async function writeSemenPurchase(
     accountId: account?.id,
     notes: purchaseExpenseNotes(bull.name, input.doses),
   });
-  // No vencimento is sent, so Add's only refusal cannot happen here.
-  if (expense === "due_before_date") throw new Error(expense);
+  // No vencimento and no conta are sent, so Add's refusals cannot happen here.
+  if (typeof expense === "string") throw new Error(expense);
   const [row] = await repository
     .insert(semenPurchases)
     .values({

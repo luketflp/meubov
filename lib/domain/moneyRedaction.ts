@@ -95,8 +95,9 @@ function redactPassAnimal(animal: ManejoSessionAnimal): ManejoSessionAnimal {
   return animal.amountBrl === undefined ? animal : without(animal, "amountBrl");
 }
 
+/** The value and the conta bancária it went through. */
 function redactMovement(movement: Movement): Movement {
-  return movement.amountBrl === undefined ? movement : without(movement, "amountBrl");
+  return without(without(movement, "amountBrl"), "bankAccountId");
 }
 
 export function redactManejoSession(session: ManejoSession): ManejoSession {
@@ -105,9 +106,10 @@ export function redactManejoSession(session: ManejoSession): ManejoSession {
     session.totalAmountBrl !== undefined ||
     session.treatment?.costBrl !== undefined ||
     session.animals.some((animal) => animal.amountBrl !== undefined);
-  if (!hidden) return session;
+  // The conta bancária a venda/compra went through is Financeiro's too.
+  if (!hidden) return session.bankAccountId === undefined ? session : without(session, "bankAccountId");
 
-  const bare = without(without(session, "pricePerArroba"), "totalAmountBrl");
+  const bare = without(without(without(session, "pricePerArroba"), "totalAmountBrl"), "bankAccountId");
   return {
     ...bare,
     animals: session.animals.map(redactPassAnimal),
@@ -147,5 +149,8 @@ export function redactHerdMoney(data: HerdData): HerdData {
     movements: data.movements.map(redactMovement),
     semenBulls: data.semenBulls.map(redactSemenBull),
     expenses: [],
+    bankAccounts: [],
+    transfers: [],
+    reconciledIds: [],
   };
 }

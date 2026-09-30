@@ -17,6 +17,11 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
       "finance",
     ],
   },
+  "DELETE /api/herd/bank-accounts/:id": {
+    "edit": [
+      "finance",
+    ],
+  },
   "DELETE /api/herd/breeds/:name": {
     "edit": [
       "herd",
@@ -73,6 +78,11 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
       "finance",
     ],
   },
+  "DELETE /api/herd/transfers/:id": {
+    "edit": [
+      "finance",
+    ],
+  },
   "DELETE /api/herd/treatments/:id": {
     "edit": [
       "sanitary",
@@ -104,6 +114,9 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
   "GET /api/herd/health": {
     "read": true,
   },
+  "GET /api/herd/imports/:id": {
+    "view": "finance",
+  },
   "PATCH /api/herd/accounts/:id": {
     "edit": [
       "finance",
@@ -117,6 +130,11 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
   "PATCH /api/herd/animals/:id/weighings/:weighingId": {
     "edit": [
       "herd",
+    ],
+  },
+  "PATCH /api/herd/bank-accounts/:id": {
+    "edit": [
+      "finance",
     ],
   },
   "PATCH /api/herd/expenses/:id": {
@@ -139,9 +157,19 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
       "lots",
     ],
   },
+  "PATCH /api/herd/movements/:id/bank-account": {
+    "edit": [
+      "finance",
+    ],
+  },
   "PATCH /api/herd/semen-bulls/:id": {
     "edit": [
       "reproduction",
+    ],
+  },
+  "PATCH /api/herd/transfers/:id": {
+    "edit": [
+      "finance",
     ],
   },
   "POST /api/herd/accounts": {
@@ -205,6 +233,21 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
       "finance",
     ],
   },
+  "POST /api/herd/bank-accounts": {
+    "edit": [
+      "finance",
+    ],
+  },
+  "POST /api/herd/bank-accounts/:id/archive": {
+    "edit": [
+      "finance",
+    ],
+  },
+  "POST /api/herd/bank-accounts/:id/imports": {
+    "edit": [
+      "finance",
+    ],
+  },
   "POST /api/herd/births/import": {
     "edit": [
       "reproduction",
@@ -237,6 +280,11 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
   },
   "POST /api/herd/farm/leave": {
     "read": true,
+  },
+  "POST /api/herd/imports/:id/confirm-high": {
+    "edit": [
+      "finance",
+    ],
   },
   "POST /api/herd/invernadas": {
     "edit": [
@@ -318,6 +366,36 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
   "POST /api/herd/semen-bulls/:id/purchases": {
     "edit": [
       "reproduction",
+      "finance",
+    ],
+  },
+  "POST /api/herd/statement-lines/:id/create": {
+    "edit": [
+      "finance",
+    ],
+  },
+  "POST /api/herd/statement-lines/:id/ignore": {
+    "edit": [
+      "finance",
+    ],
+  },
+  "POST /api/herd/statement-lines/:id/match": {
+    "edit": [
+      "finance",
+    ],
+  },
+  "POST /api/herd/statement-lines/:id/transfer": {
+    "edit": [
+      "finance",
+    ],
+  },
+  "POST /api/herd/statement-lines/:id/undo": {
+    "edit": [
+      "finance",
+    ],
+  },
+  "POST /api/herd/transfers": {
+    "edit": [
       "finance",
     ],
   },

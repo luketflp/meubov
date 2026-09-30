@@ -9,8 +9,11 @@ import type {
   AccountGroup,
   Animal,
   Attachment,
+  BankAccount,
+  BankAccountKind,
   Breeding,
   Calving,
+  CsvMapping,
   CustomCategory,
   Expense,
   FarmData,
@@ -30,6 +33,8 @@ import type {
   SeriesRepeat,
   SeriesScope,
   Sex,
+  StatementLine,
+  Transfer,
   Weighing,
   HealthProtocol,
   Treatment,
@@ -58,6 +63,10 @@ import type { ImportAnimalPayload } from "@/lib/domain/herdImport";
 import type { ImportBirthPayload } from "@/lib/domain/birthImport";
 import type { BlockedAnimal } from "@/lib/domain/manejoRevert";
 import type { DeletedManejo } from "@/lib/api/domains/manejo/useCases/Delete.useCase";
+import type { ImportResult } from "@/lib/api/domains/statements/useCases/ImportStatement.useCase";
+import type { ImportView } from "@/lib/api/domains/statements/useCases/GetImport.useCase";
+import type { LineEntry, Resolved } from "@/lib/api/domains/statements/useCases/ResolveLine.useCase";
+import { pairKey, type MatchTarget } from "@/lib/domain/statements/match";
 import {
   compareByDate,
   mergeBaixaResult,
@@ -175,10 +184,36 @@ export type SemenBullPatch = Partial<Pick<SemenBull, "name" | "code" | "breed" |
 
 /** Editable fields of a lançamento: only sent ones change; null clears an optional one. */
 export type ExpensePatch = Partial<Pick<Expense, "date" | "category" | "amountBrl">> & {
-  [K in "notes" | "dueDate" | "paidAt" | "counterparty" | "document" | "accountId" | "lotId"]?:
+  [K in "notes" | "dueDate" | "paidAt" | "counterparty" | "document" | "accountId" | "lotId" | "bankAccountId"]?:
     | string
     | null;
 };
+
+/** A new conta ("Nova conta"); a cartão takes the fechamento and vencimento days. */
+export interface NewBankAccount {
+  kind: BankAccountKind;
+  name: string;
+  label?: string;
+  openingBalanceBrl?: number;
+  openingDate: string;
+  isMain?: boolean;
+  closingDay?: number;
+  dueDay?: number;
+  paysFromId?: string;
+}
+
+/** Editable fields of a conta; the kind never changes, null clears. */
+export type BankAccountPatch = Partial<
+  Pick<NewBankAccount, "name" | "openingBalanceBrl" | "openingDate" | "isMain" | "closingDay" | "dueDay">
+> & { label?: string | null; paysFromId?: string | null };
+
+/** A decision on a linha do extrato (POST /statement-lines/:id/<type>). */
+export type LineDecision =
+  | { type: "match"; target: MatchTarget }
+  | { type: "create"; entry: LineEntry }
+  | { type: "transfer"; otherAccountId: string }
+  | { type: "ignore"; reason: string }
+  | { type: "undo" };
 
 /**
  * Calving to record. The calf joins the herd in the same transaction, taking
@@ -268,6 +303,10 @@ export interface NewFarmInput {
 }
 
 export interface HerdStore extends HerdData {
+  /** Always present in the store; HerdData leaves them optional for older snapshots and fixtures. */
+  bankAccounts: BankAccount[];
+  transfers: Transfer[];
+  reconciledIds: string[];
   loaded: boolean;
   /** True when the API was unreachable at boot and the store came from the phone's snapshot. */
   offline: boolean;
@@ -421,8 +460,11 @@ export interface HerdStore extends HerdData {
    * re-read.
    */
   updateExpense: (id: string, patch: ExpensePatch, scope?: SeriesScope) => Promise<void>;
-  /** Marks a lançamento paid/received on `paidAt`, or pendente again with null. */
-  markExpensePaid: (id: string, paidAt: string | null) => Promise<void>;
+  /**
+   * Marks a lançamento paid/received on `paidAt` from `bankAccountId` ("Pago
+   * por"), or pendente again with null (which clears the conta).
+   */
+  markExpensePaid: (id: string, paidAt: string | null, bankAccountId?: string | null) => Promise<void>;
   /** Removes a lançamento; on a row of a série "following"/"all" remove the unpaid rows in scope. */
   removeExpense: (id: string, scope?: SeriesScope) => Promise<void>;
   /**
@@ -449,6 +491,40 @@ export interface HerdStore extends HerdData {
   updateAccount: (id: string, patch: { name?: string; archived?: boolean }) => Promise<boolean>;
   /** Creates the standard contas the farm lacks; resolves how many were created. */
   seedDefaultAccounts: () => Promise<number>;
+  /** "Nova conta"; one marked principal (or the farm's first) takes the place of the current one. */
+  addBankAccount: (input: NewBankAccount) => Promise<BankAccount>;
+  updateBankAccount: (id: string, patch: BankAccountPatch) => Promise<BankAccount>;
+  /** Archives or restores a conta; false when it is the conta principal (409). */
+  archiveBankAccount: (id: string, archived: boolean) => Promise<boolean>;
+  /** Deletes an unused conta; "in_use" or "is_main" when the server keeps it. */
+  removeBankAccount: (id: string) => Promise<"deleted" | "in_use" | "is_main">;
+  addTransfer: (input: Omit<Transfer, "id">) => Promise<Transfer>;
+  updateTransfer: (id: string, patch: Partial<Omit<Transfer, "id" | "notes">> & { notes?: string | null }) => Promise<Transfer>;
+  removeTransfer: (id: string) => Promise<void>;
+  /** The Extrato's "Conta" on a venda or compra (its session id, or a legacy movement id). */
+  setMovementBankAccount: (id: string, bankAccountId: string | null) => Promise<void>;
+  /**
+   * Imports an extrato into a conta corrente and re-reads the herd (the conta's
+   * pending count). A refusal the dialog shows comes back as `{ error }`:
+   * `nothing_new`, `mapping_required` or a parser code.
+   */
+  importStatement: (
+    bankAccountId: string,
+    file: { fileName: string; content: string; mapping?: CsvMapping }
+  ) => Promise<ImportResult | { error: string }>;
+  /** One import with its lines and the records already paired; null when it is not on this farm. */
+  loadImport: (importId: string) => Promise<ImportView | null>;
+  /**
+   * Decides one line and merges what changed (the lançamento paid or created,
+   * the venda's conta, the transferência). Null when the server refused with a
+   * reason the toast explains (paid by another conta, already decided, …).
+   */
+  resolveStatementLine: (line: StatementLine, decision: LineDecision) => Promise<Resolved | null>;
+  /** "Confirmar as N de confiança alta". */
+  confirmHighMatches: (
+    importId: string,
+    pairs: ({ lineId: string } & MatchTarget)[]
+  ) => Promise<{ resolved: Resolved[]; refused: number }>;
   /** Creates a custom category; false when the name is already in use. */
   addCustomCategory: (c: Omit<CustomCategory, "id">) => Promise<boolean>;
   /** Removes a custom category; false when an active animal still uses it. */
@@ -533,6 +609,25 @@ export interface LotPatch {
  * (important actions only reach here). `action` is the pt-BR verb phrase shown
  * to the user, e.g. "cadastrar o animal".
  */
+/** Refusals of the contas bancárias the farmer can act on, whatever the action. */
+const BANK_REFUSALS: Record<string, string> = {
+  same_account: "Escolha contas diferentes.",
+  invalid_bank_account:
+    "Essa conta não serve aqui: um cartão só paga despesas e uma conta arquivada não recebe lançamentos.",
+  amount_differs: "O valor do lançamento é diferente do banco. Ajuste o valor antes de conciliar.",
+  card_days: "Informe o dia de fechamento e o de vencimento do cartão.",
+  card_cannot_be_main: "Um cartão não pode ser a conta principal.",
+  invalid_pays_from: "A fatura só pode ser paga por uma conta corrente ativa.",
+  main_required: "Marque outra conta como principal antes de desmarcar esta.",
+  archived: "Essa conta está arquivada. Desarquive-a antes.",
+  card_from: "Um cartão só recebe o pagamento da fatura: escolha outra conta em De.",
+};
+
+/** True when a linha do extrato confirms the record (`pairKey`: a transferência per side). */
+function isReconciled(reconciledIds: string[], id: string): boolean {
+  return reconciledIds.some((key) => key === id || key.startsWith(`${id}:`));
+}
+
 function apiFail(action: string, error: { status: number; value?: unknown }): never {
   const code = (error.value as { error?: string } | null | undefined)?.error;
   if (error.status === 403 && code === "not_a_member") {
@@ -543,7 +638,8 @@ function apiFail(action: string, error: { status: number; value?: unknown }): ne
     toast.error("Seu acesso a esta fazenda mudou.", { id: "access-changed" });
     void useHerdStore.getState().refreshAccess().catch(() => {});
   } else {
-    toast.error(`Não foi possível ${action}. Tente novamente.`);
+    const known = code === undefined ? undefined : BANK_REFUSALS[code];
+    toast.error(known ?? `Não foi possível ${action}. Tente novamente.`);
   }
   throw new Error(`${action} failed (status ${error.status})`);
 }
@@ -598,6 +694,9 @@ function herdDataOf(s: HerdStore): HerdData {
     manejoSessions: s.manejoSessions,
     expenses: s.expenses,
     accounts: s.accounts,
+    bankAccounts: s.bankAccounts,
+    transfers: s.transfers,
+    reconciledIds: s.reconciledIds,
     customCategories: s.customCategories,
     semenBulls: s.semenBulls,
     farm: s.farm,
@@ -724,6 +823,77 @@ const OUT_OF_STOCK_MESSAGE = "Esse touro não tem mais doses.";
 /** Toast of a pass refused because the animal had a baixa (409 animal_inactive). */
 const inactiveAnimalMessage = (earTag: string) =>
   `O animal ${earTag} teve baixa e não passa mais no brete.`;
+
+/** A new conta principal unmarks the one before it. */
+function withoutMain(accounts: BankAccount[], saved: BankAccount): BankAccount[] {
+  return saved.isMain ? accounts.map((a) => (a.isMain && a.id !== saved.id ? { ...a, isMain: false } : a)) : accounts;
+}
+
+/** A write answers the conta without its linhas' figures; the store keeps the ones it has. */
+function keepLines(current: BankAccount, saved: BankAccount): BankAccount {
+  return {
+    ...saved,
+    pendingLines: current.pendingLines,
+    reconciledUntil: current.reconciledUntil,
+    pendingImportId: current.pendingImportId,
+    lastImportId: current.lastImportId,
+  };
+}
+
+/** Refusals of a decision on a linha do extrato the farmer can act on. */
+const LINE_REFUSALS: Record<string, string> = {
+  paid_by_other: "Esse lançamento foi pago por outra conta.",
+  already_paired: "Esse lançamento já confere com outra linha do extrato.",
+  not_pending: "Essa linha já foi resolvida. Recarregue a página.",
+  wrong_side: "Uma entrada só confere com receita, venda ou transferência recebida (e a saída, com o contrário).",
+  target_not_found: "Esse lançamento não existe mais. Recarregue a página.",
+  due_before_date: "O vencimento não pode ser antes da data",
+  amount_differs: BANK_REFUSALS.amount_differs,
+  card_from: "Um cartão só recebe o pagamento da fatura: escolha outra conta.",
+  same_account: BANK_REFUSALS.same_account,
+};
+
+/**
+ * Merges decided lines into the store: the lançamento paid or created, the
+ * venda's conta, the new transferência, what is conciliado, and the conta's
+ * pending count. `unpaired` is the record an undo released.
+ */
+function mergeResolved(
+  s: HerdStore,
+  resolved: Resolved[],
+  unpaired: string | undefined,
+  statusBefore: StatementLine["status"]
+): Partial<HerdStore> {
+  let expenses = s.expenses;
+  let movements = s.movements;
+  let manejoSessions = s.manejoSessions;
+  let transfers = s.transfers;
+  const reconciled = new Set(s.reconciledIds);
+  if (unpaired) reconciled.delete(unpaired);
+  const pendingDelta = new Map<string, number>();
+  for (const r of resolved) {
+    if (r.expense) {
+      const e = r.expense;
+      expenses = expenses.some((x) => x.id === e.id) ? expenses.map((x) => (x.id === e.id ? e : x)) : [...expenses, e];
+    }
+    if (r.movement) {
+      const { id, bankAccountId } = r.movement;
+      movements = movements.map((m) => (m.id === id ? { ...m, bankAccountId } : m));
+      manejoSessions = manejoSessions.map((m) => (m.id === id ? { ...m, bankAccountId } : m));
+    }
+    const t = r.transfer;
+    if (t && !transfers.some((x) => x.id === t.id)) transfers = [...transfers, t];
+    const paired = pairKey(r.line);
+    if (paired) reconciled.add(paired);
+    const delta = Number(r.line.status === "pending") - Number(statusBefore === "pending");
+    pendingDelta.set(r.line.bankAccountId, (pendingDelta.get(r.line.bankAccountId) ?? 0) + delta);
+  }
+  // ponytail: "conciliado até" and the pending import stay as loaded until the next load.
+  const bankAccounts = s.bankAccounts.map((a) =>
+    pendingDelta.has(a.id) ? { ...a, pendingLines: Math.max(0, a.pendingLines + pendingDelta.get(a.id)!) } : a
+  );
+  return { expenses, movements, manejoSessions, transfers, bankAccounts, reconciledIds: [...reconciled] };
+}
 
 /** Immutably updates one semen bull's purchases. */
 function withPurchases(
@@ -1088,6 +1258,9 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   manejoSessions: [],
   expenses: [],
   accounts: [],
+  bankAccounts: [],
+  transfers: [],
+  reconciledIds: [],
   customCategories: [],
   semenBulls: [],
   farm: { name: "", municipality: "", stateRegistration: "", manager: "" },
@@ -1932,9 +2105,13 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     // The PATCH answers the full row, série fields and anexo count included.
     const expense = data as Expense;
     set((s) => ({ expenses: s.expenses.map((e) => (e.id === id ? expense : e)) }));
+    // The server may have unpaired its linha do extrato (pago, conta, valor or tipo changed).
+    const unpairs = ["paidAt", "bankAccountId", "amountBrl", "kind"].some((key) => key in patch);
+    if (unpairs && isReconciled(get().reconciledIds, id)) await reloadHerd(set);
   },
 
-  markExpensePaid: (id, paidAt) => get().updateExpense(id, { paidAt }),
+  markExpensePaid: (id, paidAt, bankAccountId) =>
+    get().updateExpense(id, { paidAt, bankAccountId: paidAt === null ? null : (bankAccountId ?? null) }),
 
   removeExpense: async (id, scope = "one") => {
     const { error } = await api.expenses({ id }).delete(undefined, { query: { scope } });
@@ -1944,6 +2121,8 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       return;
     }
     set((s) => ({ expenses: s.expenses.filter((e) => e.id !== id) }));
+    // Its linha do extrato went back to pending: the conta's figures change.
+    if (isReconciled(get().reconciledIds, id)) await reloadHerd(set);
   },
 
   attachmentsEnabled: async () => {
@@ -2048,6 +2227,140 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const { created } = data as { created: Account[] };
     set((s) => ({ accounts: [...s.accounts, ...created] }));
     return created.length;
+  },
+
+  addBankAccount: async (input) => {
+    const { data, error } = await api["bank-accounts"].post(input);
+    if (error) apiFail("criar a conta", error);
+    const account = data as BankAccount;
+    set((s) => ({ bankAccounts: [...withoutMain(s.bankAccounts, account), account] }));
+    return account;
+  },
+
+  updateBankAccount: async (id, patch) => {
+    const { data, error } = await api["bank-accounts"]({ id }).patch(patch);
+    if (error) apiFail("salvar a conta", error);
+    const saved = data as BankAccount;
+    set((s) => ({
+      bankAccounts: withoutMain(s.bankAccounts, saved).map((a) => (a.id === id ? keepLines(a, saved) : a)),
+    }));
+    return saved;
+  },
+
+  archiveBankAccount: async (id, archived) => {
+    const { data, error } = await api["bank-accounts"]({ id }).archive.post({ archived });
+    if (error) {
+      if (error.status === CONFLICT) {
+        toast.error("Marque outra conta como principal antes de arquivar esta.");
+        return false;
+      }
+      apiFail("arquivar a conta", error);
+    }
+    const saved = data as BankAccount;
+    set((s) => ({ bankAccounts: s.bankAccounts.map((a) => (a.id === id ? keepLines(a, saved) : a)) }));
+    return true;
+  },
+
+  removeBankAccount: async (id) => {
+    const { error } = await api["bank-accounts"]({ id }).delete();
+    if (error) {
+      const code = (error.value as { error?: string } | null)?.error;
+      if (error.status === CONFLICT && (code === "in_use" || code === "is_main")) return code;
+      apiFail("excluir a conta", error);
+    }
+    set((s) => ({ bankAccounts: s.bankAccounts.filter((a) => a.id !== id) }));
+    return "deleted";
+  },
+
+  addTransfer: async (input) => {
+    const { data, error } = await api.transfers.post({ ...input, notes: input.notes || undefined });
+    if (error) apiFail("registrar a transferência", error);
+    const transfer = data as Transfer;
+    set((s) => ({ transfers: [...s.transfers, transfer] }));
+    return transfer;
+  },
+
+  updateTransfer: async (id, patch) => {
+    const { data, error } = await api.transfers({ id }).patch(patch);
+    if (error) apiFail("salvar a transferência", error);
+    const transfer = data as Transfer;
+    set((s) => ({ transfers: s.transfers.map((t) => (t.id === id ? transfer : t)) }));
+    const unpairs = patch.fromId !== undefined || patch.toId !== undefined || patch.amountBrl !== undefined;
+    if (unpairs && isReconciled(get().reconciledIds, id)) await reloadHerd(set);
+    return transfer;
+  },
+
+  removeTransfer: async (id) => {
+    const { error } = await api.transfers({ id }).delete();
+    if (error) apiFail("remover a transferência", error);
+    set((s) => ({ transfers: s.transfers.filter((t) => t.id !== id) }));
+    if (isReconciled(get().reconciledIds, id)) await reloadHerd(set);
+  },
+
+  setMovementBankAccount: async (id, bankAccountId) => {
+    const { error } = await api.movements({ id })["bank-account"].patch({ bankAccountId });
+    if (error) apiFail("salvar a conta da venda", error);
+    const conta = bankAccountId ?? undefined;
+    set((s) => ({
+      movements: s.movements.map((m) => (m.id === id ? { ...m, bankAccountId: conta } : m)),
+      manejoSessions: s.manejoSessions.map((m) => (m.id === id ? { ...m, bankAccountId: conta } : m)),
+    }));
+    if (isReconciled(get().reconciledIds, id)) await reloadHerd(set);
+  },
+
+  importStatement: async (bankAccountId, file) => {
+    const { data, error } = await api["bank-accounts"]({ id: bankAccountId }).imports.post(file);
+    if (error) {
+      const code = (error.value as { error?: string } | null)?.error;
+      if ((error.status === 400 || error.status === CONFLICT) && code) return { error: code };
+      apiFail("importar o extrato", error);
+    }
+    if (!(await reloadHerd(set))) toast.info("Extrato importado. Recarregue para ver as contas.");
+    return data as ImportResult;
+  },
+
+  loadImport: async (importId) => {
+    const { data, error } = await api.imports({ id: importId }).get();
+    if (error) {
+      if (error.status === 404) return null;
+      apiFail("carregar o extrato", error);
+    }
+    return data as ImportView;
+  },
+
+  resolveStatementLine: async (line, decision) => {
+    const lines = api["statement-lines"]({ id: line.id });
+    const response =
+      decision.type === "match"
+        ? await lines.match.post(decision.target)
+        : decision.type === "create"
+          ? await lines.create.post(decision.entry)
+          : decision.type === "transfer"
+            ? await lines.transfer.post({ otherAccountId: decision.otherAccountId })
+            : decision.type === "ignore"
+              ? await lines.ignore.post({ reason: decision.reason })
+              : await lines.undo.post();
+    if (response.error) {
+      const code = (response.error.value as { error?: string } | null)?.error ?? "";
+      const message = LINE_REFUSALS[code];
+      if (message) {
+        toast.error(message);
+        return null;
+      }
+      apiFail("conciliar a linha", response.error);
+    }
+    const resolved = response.data as Resolved;
+    const pairedBefore = pairKey(line);
+    set((s) => mergeResolved(s, [resolved], decision.type === "undo" ? pairedBefore : undefined, line.status));
+    return resolved;
+  },
+
+  confirmHighMatches: async (importId, pairs) => {
+    const { data, error } = await api.imports({ id: importId })["confirm-high"].post({ pairs });
+    if (error) apiFail("confirmar as sugestões", error);
+    const result = data as { resolved: Resolved[]; refused: number };
+    set((s) => mergeResolved(s, result.resolved, undefined, "pending"));
+    return result;
   },
 
   addCustomCategory: async (c) => {

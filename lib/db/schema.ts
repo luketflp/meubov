@@ -33,9 +33,11 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { Permissions } from "@/lib/domain/permissions";
+import type { CsvMapping } from "@/lib/types";
 
 /* -------------------------------------------------------------------------- */
 /* Enums (stored unions only)                                                 */
@@ -156,6 +158,21 @@ export const seriesModeEnum = pgEnum("series_mode", ["installments", "recurring"
 
 /** Interval between two lançamentos of a série. */
 export const seriesFrequencyEnum = pgEnum("series_frequency", ["monthly", "weekly"]);
+
+/** Conta corrente, caixa or cartão de crédito. */
+export const bankAccountKindEnum = pgEnum("bank_account_kind", ["checking", "cash", "card"]);
+
+/** File format of an imported extrato. */
+export const statementFormatEnum = pgEnum("statement_format", ["ofx", "csv"]);
+
+/** Where a linha do extrato stands in the conciliação. */
+export const statementLineStatusEnum = pgEnum("statement_line_status", [
+  "pending",
+  "matched",
+  "created",
+  "transfer",
+  "ignored",
+]);
 
 /** Grupo of a conta: the seven expense categories plus receitas. */
 export const accountGroupEnum = pgEnum("account_group", [
@@ -552,6 +569,45 @@ export const calvings = pgTable("calvings", {
 });
 
 /**
+ * A place money sits: a conta corrente (takes extratos), the farm's caixa or a
+ * cartão de crédito. Archived, it leaves "Pago por" and keeps its rows.
+ */
+export const bankAccounts = pgTable(
+  "bank_accounts",
+  {
+    id: text("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farm.id, { onDelete: "cascade" }),
+    kind: bankAccountKindEnum("kind").notNull(),
+    name: text("name").notNull(),
+    /** "c/c 12.345-6", "final 4471". */
+    label: text("label"),
+    /** Saldo at the end of `openingDate`; for a card, negative = owed. */
+    openingBalanceBrl: numeric("opening_balance_brl", { mode: "number" }).notNull().default(0),
+    openingDate: date("opening_date").notNull(),
+    isMain: boolean("is_main").notNull().default(false),
+    /** Card only. */
+    closingDay: integer("closing_day"),
+    dueDay: integer("due_day"),
+    /** Card only: the conta corrente that pays the fatura. */
+    paysFromId: text("pays_from_id").references((): AnyPgColumn => bankAccounts.id, {
+      onDelete: "set null",
+    }),
+    csvMapping: jsonb("csv_mapping").$type<CsvMapping>(),
+    archivedAt: timestamp("archived_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("bank_accounts_farm_id_idx").on(t.farmId),
+    // One conta principal per farm.
+    uniqueIndex("bank_accounts_farm_id_main_idx").on(t.farmId).where(sql`${t.isMain}`),
+    check("bank_accounts_closing_day_check", sql`${t.closingDay} between 1 and 31`),
+    check("bank_accounts_due_day_check", sql`${t.dueDay} between 1 and 31`),
+  ]
+);
+
+/**
  * Animal movement (purchase, sale or transfer) — LEGACY, read-only.
  *
  * New movements are manejo sessions of kind transfer/sale/entry, and the
@@ -559,21 +615,29 @@ export const calvings = pgTable("calvings", {
  * model: their head count and category were typed by hand and no animal is
  * linked, hence both columns are nullable for anything written since.
  */
-export const movements = pgTable("movements", {
-  id: text("id").primaryKey(),
-  farmId: integer("farm_id")
-    .notNull()
-    .references(() => farm.id, { onDelete: "cascade" }),
-  type: movementTypeEnum("type").notNull(),
-  date: date("date").notNull(),
-  quantity: integer("quantity"),
-  category: categoryEnum("category"),
-  origin: text("origin").notNull(),
-  destination: text("destination").notNull(),
-  /** Total value in BRL; present for purchase/sale, null for transfer. */
-  amountBrl: numeric("amount_brl", { mode: "number" }),
-  notes: text("notes"),
-});
+export const movements = pgTable(
+  "movements",
+  {
+    id: text("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farm.id, { onDelete: "cascade" }),
+    type: movementTypeEnum("type").notNull(),
+    date: date("date").notNull(),
+    quantity: integer("quantity"),
+    category: categoryEnum("category"),
+    origin: text("origin").notNull(),
+    destination: text("destination").notNull(),
+    /** Total value in BRL; present for purchase/sale, null for transfer. */
+    amountBrl: numeric("amount_brl", { mode: "number" }),
+    notes: text("notes"),
+    /** Conta bancária of a purchase/sale. */
+    bankAccountId: text("bank_account_id").references(() => bankAccounts.id, {
+      onDelete: "set null",
+    }),
+  },
+  (t) => [index("movements_bank_account_id_idx").on(t.bankAccountId)]
+);
 
 /**
  * A conta of the farm's plano de contas, inside one grupo. Never deleted: a
@@ -672,9 +736,14 @@ export const expenses = pgTable(
     seriesId: text("series_id").references(() => expenseSeries.id, { onDelete: "set null" }),
     /** 1-based position in the série. */
     seriesIndex: integer("series_index"),
+    /** "Pago por": the conta the money left or entered; paid rows only. */
+    bankAccountId: text("bank_account_id").references(() => bankAccounts.id, {
+      onDelete: "set null",
+    }),
   },
   (t) => [
     index("expenses_farm_id_date_idx").on(t.farmId, t.date),
+    index("expenses_bank_account_id_idx").on(t.bankAccountId),
     // One row per position: the top-up of a recorrência can run twice without doubling a bill.
     uniqueIndex("expenses_series_id_series_index_idx").on(t.seriesId, t.seriesIndex),
   ]
@@ -703,6 +772,106 @@ export const attachments = pgTable(
     createdBy: text("created_by").notNull(),
   },
   (t) => [index("attachments_expense_id_idx").on(t.expenseId)]
+);
+
+/** Money moving between two contas of the farm (saque, aplicação, pagamento de fatura). */
+export const transfers = pgTable(
+  "transfers",
+  {
+    id: text("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farm.id, { onDelete: "cascade" }),
+    fromId: text("from_id")
+      .notNull()
+      .references(() => bankAccounts.id, { onDelete: "restrict" }),
+    toId: text("to_id")
+      .notNull()
+      .references(() => bankAccounts.id, { onDelete: "restrict" }),
+    date: date("date").notNull(),
+    amountBrl: numeric("amount_brl", { mode: "number" }).notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    /** User id; no FK, the row outlives a removed member. */
+    createdBy: text("created_by").notNull(),
+  },
+  (t) => [
+    index("transfers_farm_id_idx").on(t.farmId),
+    check("transfers_accounts_check", sql`${t.fromId} <> ${t.toId}`),
+    check("transfers_amount_check", sql`${t.amountBrl} > 0`),
+  ]
+);
+
+/** An extrato file (OFX or CSV) imported into a conta corrente. */
+export const statementImports = pgTable(
+  "statement_imports",
+  {
+    id: text("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farm.id, { onDelete: "cascade" }),
+    bankAccountId: text("bank_account_id")
+      .notNull()
+      .references(() => bankAccounts.id, { onDelete: "cascade" }),
+    fileName: text("file_name").notNull(),
+    format: statementFormatEnum("format").notNull(),
+    periodFrom: date("period_from").notNull(),
+    periodTo: date("period_to").notNull(),
+    /** OFX LEDGERBAL. */
+    bankBalanceBrl: numeric("bank_balance_brl", { mode: "number" }),
+    bankBalanceDate: date("bank_balance_date"),
+    lineCount: integer("line_count").notNull(),
+    /** Lines of the file already seen in an earlier import. */
+    skippedCount: integer("skipped_count").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    createdBy: text("created_by").notNull(),
+  },
+  (t) => [index("statement_imports_bank_account_id_idx").on(t.bankAccountId)]
+);
+
+/**
+ * One line of an imported extrato and what it confirms. `externalId` is the
+ * OFX FITID, or for a CSV a hash of date, description, value and occurrence,
+ * so importing the same period twice skips what was seen. A record pairs with
+ * one line at most (unique indexes; a transferência one per conta); removing it returns the line to pending
+ * (the FK nulls the pointer and a trigger resets the status, migration 0023).
+ */
+export const statementLines = pgTable(
+  "statement_lines",
+  {
+    id: text("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farm.id, { onDelete: "cascade" }),
+    bankAccountId: text("bank_account_id")
+      .notNull()
+      .references(() => bankAccounts.id, { onDelete: "cascade" }),
+    importId: text("import_id")
+      .notNull()
+      .references(() => statementImports.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    description: text("description").notNull(),
+    /** Signed: + entrada, − saída. */
+    amountBrl: numeric("amount_brl", { mode: "number" }).notNull(),
+    externalId: text("external_id").notNull(),
+    status: statementLineStatusEnum("status").notNull().default("pending"),
+    expenseId: text("expense_id").references(() => expenses.id, { onDelete: "set null" }),
+    /** A sale/entry manejo session id or a legacy movement id: no FK, it names either. */
+    movementId: text("movement_id"),
+    transferId: text("transfer_id").references(() => transfers.id, { onDelete: "set null" }),
+    ignoreReason: text("ignore_reason"),
+    resolvedAt: timestamp("resolved_at"),
+    resolvedBy: text("resolved_by"),
+  },
+  (t) => [
+    uniqueIndex("statement_lines_account_external_idx").on(t.bankAccountId, t.externalId),
+    index("statement_lines_import_id_idx").on(t.importId),
+    index("statement_lines_farm_id_status_idx").on(t.farmId, t.status),
+    uniqueIndex("statement_lines_expense_id_idx").on(t.expenseId),
+    uniqueIndex("statement_lines_movement_id_idx").on(t.movementId),
+    // A transferência has two sides: one line per conta.
+    uniqueIndex("statement_lines_transfer_id_idx").on(t.transferId, t.bankAccountId),
+  ]
 );
 
 /** Recurring health protocol of the farm. */
@@ -758,8 +927,15 @@ export const manejoSessions = pgTable(
     planNotes: text("plan_notes"),
     /** Soft delete: the manejo leaves the history, the row stays for audit. */
     deletedAt: timestamp("deleted_at"),
+    /** Venda or compra: the conta bancária its money went through. */
+    bankAccountId: text("bank_account_id").references(() => bankAccounts.id, {
+      onDelete: "set null",
+    }),
   },
-  (t) => [index("manejo_sessions_farm_id_idx").on(t.farmId)]
+  (t) => [
+    index("manejo_sessions_farm_id_idx").on(t.farmId),
+    index("manejo_sessions_bank_account_id_idx").on(t.bankAccountId),
+  ]
 );
 
 /**
@@ -832,6 +1008,10 @@ export type ExpenseRow = typeof expenses.$inferSelect;
 export type FarmAccountRow = typeof accounts.$inferSelect;
 export type ExpenseSeriesRow = typeof expenseSeries.$inferSelect;
 export type AttachmentRow = typeof attachments.$inferSelect;
+export type BankAccountRow = typeof bankAccounts.$inferSelect;
+export type TransferRow = typeof transfers.$inferSelect;
+export type StatementImportRow = typeof statementImports.$inferSelect;
+export type StatementLineRow = typeof statementLines.$inferSelect;
 export type CustomCategoryRow = typeof customCategories.$inferSelect;
 export type HealthProtocolRow = typeof healthProtocols.$inferSelect;
 export type ManejoSessionRow = typeof manejoSessions.$inferSelect;

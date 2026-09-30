@@ -220,6 +220,7 @@ describe("ledgerRows", () => {
       group: "nutrition",
       groupLabel: "Nutrição",
       account: "Sal mineral",
+      bankAccountId: null,
       counterparty: "Agrovét Casa do Campo",
       document: "NF 4.812",
       lotId: "lot-1",
@@ -242,6 +243,20 @@ describe("ledgerRows", () => {
     expect(row("e-paid")).toMatchObject({ account: null, notes: "Salário de agosto" });
   });
 
+  it("carries the conta bancária of a paid lançamento and of a venda", () => {
+    const rows = ledgerRows(
+      {
+        ...input,
+        expenses: [{ ...expenses[0], bankAccountId: "sicredi" }],
+        movements: [{ id: "legacy-sale", type: "sale", date: "2026-09-12", origin: "A", destination: "B", amountBrl: 10, bankAccountId: "bb" }],
+      },
+      PERIOD,
+      TODAY
+    );
+    expect(rows.find((r) => r.id === "e-paid-lot")?.bankAccountId).toBe("sicredi");
+    expect(rows.find((r) => r.id === "legacy-sale")?.bankAccountId).toBe("bb");
+  });
+
   it("builds a venda from its manejo session", () => {
     expect(row("s-sale")).toEqual({
       id: "s-sale",
@@ -253,6 +268,7 @@ describe("ledgerRows", () => {
       group: "revenue",
       groupLabel: "Receitas",
       account: null,
+      bankAccountId: null,
       counterparty: "Frigorífico Boi Bom",
       document: "manejo · 2 animais · 32,9 @",
       lotId: "lot-1",
@@ -329,6 +345,7 @@ describe("ledgerRows", () => {
       group: "health",
       groupLabel: "Sanidade",
       account: null,
+      bankAccountId: null,
       counterparty: null,
       document: null,
       lotId: null,

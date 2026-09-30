@@ -9,6 +9,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { LedgerKind, LedgerRow, LedgerStatus } from "@/lib/domain/ledger";
 import { formatDate } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
+import { useHerdStore } from "@/lib/store/useHerdStore";
 import { ELLIPSIS, pageWindow, type Page } from "@/components/herd/pagination";
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/ui/section-card";
@@ -83,6 +84,8 @@ interface ExtratoTableProps {
 }
 
 export function ExtratoTable({ page, onPageChange }: ExtratoTableProps) {
+  const bankAccounts = useHerdStore((s) => s.bankAccounts);
+  const bankName = (id: string | null) => (id === null ? null : (bankAccounts.find((a) => a.id === id)?.name ?? null));
   return (
     <SectionCard
       title="Lançamentos"
@@ -95,10 +98,11 @@ export function ExtratoTable({ page, onPageChange }: ExtratoTableProps) {
             <TableHead className={cn(HEAD, "pl-4")}>Data</TableHead>
             <TableHead className={HEAD}>Vencimento</TableHead>
             <TableHead className={HEAD}>Tipo</TableHead>
-            <TableHead className={HEAD}>Grupo › Conta</TableHead>
+            <TableHead className={cn(HEAD, "whitespace-normal")}>Grupo › Conta do plano</TableHead>
             <TableHead className={cn(HEAD, "whitespace-normal")}>Pago para / Recebido de</TableHead>
             <TableHead className={HEAD}>Documento</TableHead>
             <TableHead className={HEAD}>Lote</TableHead>
+            <TableHead className={HEAD}>Conta</TableHead>
             <TableHead className={cn(HEAD, "text-right")}>Valor</TableHead>
             <TableHead className={HEAD}>Status</TableHead>
             <TableHead className={cn(HEAD, "pr-4 text-right")}>Ações</TableHead>
@@ -135,6 +139,9 @@ export function ExtratoTable({ page, onPageChange }: ExtratoTableProps) {
                 ) : (
                   <span className="text-xs text-ink-soft">fazenda</span>
                 )}
+              </TableCell>
+              <TableCell className="max-w-32 whitespace-normal">
+                {bankName(row.bankAccountId) ?? <span className="text-xs text-ink-soft">—</span>}
               </TableCell>
               <TableCell className="text-right">
                 <LedgerAmount row={row} />

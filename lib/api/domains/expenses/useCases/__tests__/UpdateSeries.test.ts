@@ -75,7 +75,8 @@ beforeEach(() => {
 
 describe("updateSeries", () => {
   it("Esta e as próximas: rewrites the unpaid rows from this one on, never a paid one", async () => {
-    state.selectResults = [[ROWS[1]], [SERIES], [ROWS[1]], ROWS];
+    // The row, the série, the row again (its own update), its linhas do extrato (none), the siblings.
+    state.selectResults = [[ROWS[1]], [SERIES], [ROWS[1]], [], ROWS];
     state.returning = [[{ ...ROWS[1], amountBrl: 1350 }]];
 
     const result = await new UpdateSeriesUseCase().run({
@@ -122,7 +123,7 @@ describe("updateSeries", () => {
     // Todo dia 31: the February row falls on the 28th; editing it must not drift the série to 28.
     const feb = { ...row(5, null, "2027-02-28") };
     const series31 = { ...SERIES, dayOfMonth: 31, startsOn: "2026-10-31" };
-    state.selectResults = [[feb], [series31], [feb], [feb]];
+    state.selectResults = [[feb], [series31], [feb], [], [feb]];
     state.returning = [[{ ...feb, amountBrl: 1300 }]];
 
     await new UpdateSeriesUseCase().run({
@@ -138,7 +139,7 @@ describe("updateSeries", () => {
 
   it("never re-splits a parcelamento's value", async () => {
     const parcela = { ...ROWS[1], amountBrl: 4000 };
-    state.selectResults = [[parcela], [{ ...SERIES, mode: "installments", count: 4 }], [parcela], ROWS];
+    state.selectResults = [[parcela], [{ ...SERIES, mode: "installments", count: 4 }], [parcela], [], ROWS];
     state.returning = [[{ ...parcela, amountBrl: 4100 }]];
 
     await new UpdateSeriesUseCase().run({ farmId: 7, id: "e-2", patch: { amountBrl: 4100, notes: "3x no boleto" }, scope: "following" });

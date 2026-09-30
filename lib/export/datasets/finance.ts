@@ -3,7 +3,7 @@
  * indicators beside the prior window and their references, and the Por lote
  * table.
  */
-import type { Category, Expense } from "@/lib/types";
+import type { BankAccount, Category, Expense } from "@/lib/types";
 import type { LedgerKind, LedgerRow, LedgerStatus } from "@/lib/domain/ledger";
 import type { Indicators } from "@/lib/domain/economics";
 import type { LotEconomics } from "@/lib/domain/lotEconomics";
@@ -53,8 +53,13 @@ const LEDGER_STATUS_LABEL: Record<LedgerStatus, string> = {
   overdue: "Vencido",
 };
 
-/** The Extrato's rows as given (already filtered and ordered). */
-export function ledgerExportTable(rows: readonly LedgerRow[], title = "Extrato"): ExportTable {
+/** The Extrato's rows as given (already filtered and ordered), each with its conta bancária. */
+export function ledgerExportTable(
+  rows: readonly LedgerRow[],
+  bankAccounts: readonly BankAccount[] = [],
+  title = "Extrato"
+): ExportTable {
+  const bankName = new Map(bankAccounts.map((a) => [a.id, a.name]));
   return buildTable(
     title,
     [
@@ -63,7 +68,8 @@ export function ledgerExportTable(rows: readonly LedgerRow[], title = "Extrato")
       { header: "Pagamento", kind: "date", value: (r) => r.paidAt },
       { header: "Tipo", value: (r) => LEDGER_KIND_LABEL[r.kind] },
       { header: "Grupo", value: (r) => r.groupLabel },
-      { header: "Conta", value: (r) => r.account },
+      { header: "Conta do plano", value: (r) => r.account },
+      { header: "Conta bancária", value: (r) => (r.bankAccountId ? (bankName.get(r.bankAccountId) ?? null) : null) },
       { header: "Pago para / Recebido de", value: (r) => r.counterparty },
       { header: "Documento", value: (r) => r.document },
       { header: "Lote", value: (r) => r.lotName ?? "Fazenda" },

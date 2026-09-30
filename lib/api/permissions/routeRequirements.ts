@@ -90,6 +90,24 @@ export const ROUTE_REQUIREMENTS: Readonly<Record<string, RouteRequirement>> = {
   "DELETE /api/herd/attachments/:id": edit("finance"),
   "GET /api/herd/expenses/:id/attachments": { view: "finance" },
   "POST /api/herd/expenses/:id/attachments": edit("finance"),
+  // Contas bancárias: the herd load reads them; every write here moves money.
+  "POST /api/herd/bank-accounts": edit("finance"),
+  "PATCH /api/herd/bank-accounts/:id": edit("finance"),
+  "DELETE /api/herd/bank-accounts/:id": edit("finance"),
+  "POST /api/herd/bank-accounts/:id/archive": edit("finance"),
+  "POST /api/herd/transfers": edit("finance"),
+  "PATCH /api/herd/transfers/:id": edit("finance"),
+  "DELETE /api/herd/transfers/:id": edit("finance"),
+  "PATCH /api/herd/movements/:id/bank-account": edit("finance"),
+  // Extratos: reading one is seeing money, every decision on a line writes it.
+  "GET /api/herd/imports/:id": { view: "finance" },
+  "POST /api/herd/bank-accounts/:id/imports": edit("finance"),
+  "POST /api/herd/imports/:id/confirm-high": edit("finance"),
+  "POST /api/herd/statement-lines/:id/match": edit("finance"),
+  "POST /api/herd/statement-lines/:id/create": edit("finance"),
+  "POST /api/herd/statement-lines/:id/transfer": edit("finance"),
+  "POST /api/herd/statement-lines/:id/ignore": edit("finance"),
+  "POST /api/herd/statement-lines/:id/undo": edit("finance"),
 
   "PUT /api/herd/farm": edit("farm"),
 

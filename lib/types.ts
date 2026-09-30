@@ -295,6 +295,8 @@ export interface ManejoSession {
    * without Financeiro, so "no price" and "a price you may not see" differ.
    */
   valuesHidden?: boolean;
+  /** Venda or compra: the conta bancária its money went through. */
+  bankAccountId?: string;
   /**
    * True for a manejo started on the phone without signal that the server has
    * not created yet. Client-only: never leaves the phone.
@@ -370,6 +372,8 @@ export interface Movement {
    */
   amountBrl?: number;
   notes?: string;
+  /** Conta bancária the money of a venda or compra went through. */
+  bankAccountId?: string;
 }
 
 /** Category of a farm expense. */
@@ -411,6 +415,8 @@ export interface Expense {
   accountId?: string;
   /** Centro de custo; absent means the whole farm. */
   lotId?: string;
+  /** The conta bancária it was paid from or received into ("Pago por"); paid rows only. */
+  bankAccountId?: string;
   /** The série (parcelamento or recorrência) this row belongs to. */
   seriesId?: string;
   /** 1-based position in its série: the "2" of "2/3". */
@@ -474,6 +480,104 @@ export interface Account {
   archivedAt?: string;
 }
 
+/** Conta corrente (takes extratos), caixa (cash) or cartão de crédito. */
+export type BankAccountKind = "checking" | "cash" | "card";
+
+/** How the columns of a bank's CSV map to a linha do extrato; stored on the conta. */
+export interface CsvMapping {
+  delimiter: string;
+  /** 0-based column indexes. */
+  dateColumn: number;
+  descriptionColumn: number;
+  /** Signed value in one column, or `inColumn` + `outColumn`. */
+  amountColumn?: number;
+  inColumn?: number;
+  outColumn?: number;
+  dateFormat: "dmy" | "ymd";
+  decimal: "," | ".";
+  /** Lines before the data (header included). */
+  skipRows: number;
+}
+
+/** A place money sits: a bank account, the farm's cash or a credit card. */
+export interface BankAccount {
+  id: string;
+  kind: BankAccountKind;
+  name: string;
+  /** "c/c 12.345-6", "final 4471". */
+  label?: string;
+  /** Saldo at the end of `openingDate`; 0 for a card. */
+  openingBalanceBrl: number;
+  openingDate: string;
+  /** The conta "Pago por" defaults to; one per farm, never a card. */
+  isMain: boolean;
+  /** Card only: 1–31, a short month uses its last day. */
+  closingDay?: number;
+  dueDay?: number;
+  /** Card only: the conta corrente that pays the fatura. */
+  paysFromId?: string;
+  csvMapping?: CsvMapping;
+  /** ISO timestamp; archived contas leave "Pago por" and keep their rows. */
+  archivedAt?: string;
+  /** Linhas do extrato still waiting for a decision. */
+  pendingLines: number;
+  /** Every linha dated on or before this day is resolved. */
+  reconciledUntil?: string;
+  /** The oldest import still holding a pending linha. */
+  pendingImportId?: string;
+  /** The latest import: its Conciliar page keeps Desfazer reachable. */
+  lastImportId?: string;
+}
+
+/** Money moving between two contas of the farm; never in the resultado. */
+export interface Transfer {
+  id: string;
+  fromId: string;
+  toId: string;
+  date: string;
+  amountBrl: number;
+  notes?: string;
+}
+
+export type StatementFormat = "ofx" | "csv";
+
+/** An extrato file imported into a conta corrente. */
+export interface StatementImport {
+  id: string;
+  bankAccountId: string;
+  fileName: string;
+  format: StatementFormat;
+  periodFrom: string;
+  periodTo: string;
+  /** OFX LEDGERBAL: the bank's saldo on `bankBalanceDate`. */
+  bankBalanceBrl?: number;
+  bankBalanceDate?: string;
+  /** New lines stored by this import. */
+  lineCount: number;
+  /** Lines of the file already imported before. */
+  skippedCount: number;
+  /** ISO timestamp. */
+  createdAt: string;
+}
+
+export type StatementLineStatus = "pending" | "matched" | "created" | "transfer" | "ignored";
+
+/** One line of an extrato: + entrada, − saída. */
+export interface StatementLine {
+  id: string;
+  importId: string;
+  bankAccountId: string;
+  date: string;
+  description: string;
+  amountBrl: number;
+  status: StatementLineStatus;
+  expenseId?: string;
+  /** A venda or compra: a manejo session id, or a legacy movement row id. */
+  movementId?: string;
+  transferId?: string;
+  ignoreReason?: string;
+}
+
 /** Recurring health protocol of the farm. */
 export interface HealthProtocol {
   id: string;
@@ -516,6 +620,14 @@ export interface HerdData {
   expenses: Expense[];
   /** Plano de contas: the farm's contas, archived ones included. */
   accounts: Account[];
+  /** Contas bancárias, caixa and cartões, archived ones included. */
+  bankAccounts?: BankAccount[];
+  transfers?: Transfer[];
+  /**
+   * What a linha do extrato confirms, as `pairKey`: lançamento and venda/compra
+   * ids, and `${transferId}:${bankAccountId}` for a transferência (one per side).
+   */
+  reconciledIds?: string[];
   customCategories: CustomCategory[];
   semenBulls: SemenBull[];
   farm: FarmData;

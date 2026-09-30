@@ -9,7 +9,7 @@ import { withoutMoney } from "@/lib/export/table";
 import type { Indicators } from "@/lib/domain/economics";
 import type { LedgerRow } from "@/lib/domain/ledger";
 import type { LotEconomics } from "@/lib/domain/lotEconomics";
-import type { Expense } from "@/lib/types";
+import type { BankAccount, Expense } from "@/lib/types";
 
 describe("expensesExportTable", () => {
   it("writes every despesa newest first, value as money", () => {
@@ -52,6 +52,7 @@ const baseRow: LedgerRow = {
   group: "health",
   groupLabel: "Sanidade",
   account: "Vacinas",
+  bankAccountId: null,
   counterparty: "Agrovet Uberaba",
   document: "NF 4.812",
   lotId: "lot1",
@@ -73,7 +74,8 @@ describe("ledgerExportTable", () => {
       ["Pagamento", "date"],
       ["Tipo", undefined],
       ["Grupo", undefined],
-      ["Conta", undefined],
+      ["Conta do plano", undefined],
+      ["Conta bancária", undefined],
       ["Pago para / Recebido de", undefined],
       ["Documento", undefined],
       ["Lote", undefined],
@@ -88,6 +90,7 @@ describe("ledgerExportTable", () => {
         "Despesa",
         "Sanidade",
         "Vacinas",
+        null,
         "Agrovet Uberaba",
         "NF 4.812",
         "Recria 2",
@@ -114,9 +117,9 @@ describe("ledgerExportTable", () => {
     const [row] = ledgerExportTable([receita]).rows;
     expect(row[2]).toBe("2026-08-12");
     expect(row[3]).toBe("Receita");
-    expect(row[8]).toBe("Fazenda");
-    expect(row[9]).toBe(1800);
-    expect(row[10]).toBe("Recebido");
+    expect(row[9]).toBe("Fazenda");
+    expect(row[10]).toBe(1800);
+    expect(row[11]).toBe("Recebido");
   });
 
   it("names a derived venda and an overdue despesa", () => {
@@ -124,7 +127,7 @@ describe("ledgerExportTable", () => {
       { ...baseRow, id: "m1", kind: "sale", status: "received", group: "revenue", groupLabel: "Receitas", locked: true },
       { ...baseRow, id: "e3", status: "overdue" },
     ]).rows;
-    expect(rows.map((r) => [r[3], r[10]])).toEqual([
+    expect(rows.map((r) => [r[3], r[11]])).toEqual([
       ["Venda de gado", "Recebido"],
       ["Despesa", "Vencido"],
     ]);
@@ -133,7 +136,21 @@ describe("ledgerExportTable", () => {
   it("drops Valor when money is hidden", () => {
     const table = withoutMoney(ledgerExportTable([baseRow]), false);
     expect(table.columns.map((c) => c.header)).not.toContain("Valor (R$)");
-    expect(table.rows[0]).toHaveLength(10);
+    expect(table.rows[0]).toHaveLength(11);
+  });
+
+  it("names the conta bancária a row went through", () => {
+    const sicredi: BankAccount = {
+      id: "b-1",
+      kind: "checking",
+      name: "Sicredi",
+      openingBalanceBrl: 0,
+      openingDate: "2026-08-31",
+      isMain: true,
+      pendingLines: 0,
+    };
+    const [row] = ledgerExportTable([{ ...baseRow, bankAccountId: "b-1" }], [sicredi]).rows;
+    expect(row[6]).toBe("Sicredi");
   });
 });
 

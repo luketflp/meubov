@@ -34,6 +34,8 @@ export interface LedgerRow {
   group: AccountGroup | "capital";
   groupLabel: string;
   account: string | null;
+  /** The conta bancária it went through ("Pago por", or a venda's conta); null for none. */
+  bankAccountId: string | null;
   counterparty: string | null;
   document: string | null;
   lotId: string | null;
@@ -128,6 +130,7 @@ export function ledgerRows(input: LedgerInputs, period: Period, todayIso: string
       group,
       groupLabel: ACCOUNT_GROUP_LABEL[group],
       account: accountName(e.accountId, input.accounts),
+      bankAccountId: e.bankAccountId ?? null,
       counterparty: e.counterparty ?? null,
       document: e.document ?? null,
       lotId,
@@ -165,6 +168,7 @@ export function ledgerRows(input: LedgerInputs, period: Period, todayIso: string
       group: sale ? "revenue" : "capital",
       groupLabel: sale ? ACCOUNT_GROUP_LABEL.revenue : "Capital",
       account: null,
+      bankAccountId: m.bankAccountId ?? null,
       counterparty: session
         ? session.counterparty?.trim() || null
         : sale
@@ -201,6 +205,7 @@ export function ledgerRows(input: LedgerInputs, period: Period, todayIso: string
       group: "health",
       groupLabel: ACCOUNT_GROUP_LABEL.health,
       account: null,
+      bankAccountId: null,
       counterparty: null,
       document: null,
       lotId: null,

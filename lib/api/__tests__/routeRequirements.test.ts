@@ -79,6 +79,36 @@ describe("ROUTE_REQUIREMENTS", () => {
     }
   });
 
+  it("keeps contas bancárias, transferências and the conta of a venda behind Financeiro edit", () => {
+    for (const key of [
+      "POST /api/herd/bank-accounts",
+      "PATCH /api/herd/bank-accounts/:id",
+      "DELETE /api/herd/bank-accounts/:id",
+      "POST /api/herd/bank-accounts/:id/archive",
+      "POST /api/herd/transfers",
+      "PATCH /api/herd/transfers/:id",
+      "DELETE /api/herd/transfers/:id",
+      "PATCH /api/herd/movements/:id/bank-account",
+    ]) {
+      expect(ROUTE_REQUIREMENTS[key]).toEqual({ edit: ["finance"] });
+    }
+  });
+
+  it("lets Financeiro view read an extrato and keeps every decision on it behind Financeiro edit", () => {
+    expect(ROUTE_REQUIREMENTS["GET /api/herd/imports/:id"]).toEqual({ view: "finance" });
+    for (const key of [
+      "POST /api/herd/bank-accounts/:id/imports",
+      "POST /api/herd/imports/:id/confirm-high",
+      "POST /api/herd/statement-lines/:id/match",
+      "POST /api/herd/statement-lines/:id/create",
+      "POST /api/herd/statement-lines/:id/transfer",
+      "POST /api/herd/statement-lines/:id/ignore",
+      "POST /api/herd/statement-lines/:id/undo",
+    ]) {
+      expect(ROUTE_REQUIREMENTS[key]).toEqual({ edit: ["finance"] });
+    }
+  });
+
   it("lets Financeiro view read anexos and keeps their writes behind Financeiro edit", () => {
     for (const key of [
       "GET /api/herd/attachments/status",

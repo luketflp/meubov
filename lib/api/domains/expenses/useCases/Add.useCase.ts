@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { expenses } from "@/lib/db/schema";
 import { toExpense } from "@/lib/api/mappers";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
+import { isPayingAccount } from "@/lib/api/domains/bankAccounts/payingAccount";
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
 import type { EntryKind, Expense } from "@/lib/types";
@@ -14,8 +15,12 @@ type AddExpenseUseCaseProps = Omit<Expense, "id" | "kind"> & {
   kind?: EntryKind;
 };
 
-/** `due_before_date` when the vencimento is earlier than the data. */
-type AddExpenseUseCaseResponse = Expense | "due_before_date";
+/**
+ * `due_before_date` when the vencimento is earlier than the data;
+ * `invalid_bank_account` when "Pago por" is not a conta of the farm that may
+ * pay it (archived, or a cartão receiving a receita).
+ */
+type AddExpenseUseCaseResponse = Expense | "due_before_date" | "invalid_bank_account";
 
 type CurrUseCase = _UseCase<AddExpenseUseCaseProps, AddExpenseUseCaseResponse>;
 
@@ -41,8 +46,14 @@ export class AddExpenseUseCase implements CurrUseCase {
     document,
     accountId,
     lotId,
+    bankAccountId,
   }) => {
     if (dueDate !== undefined && dueDate < date) return "due_before_date";
+    // A pending lançamento has no conta.
+    const payingAccountId = paidAt === undefined ? null : (bankAccountId ?? null);
+    if (payingAccountId !== null && !(await isPayingAccount(this.repository, farmId, payingAccountId, kind))) {
+      return "invalid_bank_account";
+    }
     // ponytail: accountId/lotId are not checked against the farm; the FK only proves they exist.
     const [row] = await this.repository
       .insert(expenses)
@@ -60,6 +71,7 @@ export class AddExpenseUseCase implements CurrUseCase {
         document: document ?? null,
         accountId: accountId ?? null,
         lotId: lotId ?? null,
+        bankAccountId: payingAccountId,
       })
       .returning();
     return toExpense(row);

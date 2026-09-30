@@ -10,6 +10,7 @@ import type {
   Account,
   Animal,
   Attachment,
+  BankAccount,
   Breeding,
   Calving,
   CustomCategory,
@@ -27,12 +28,16 @@ import type {
   ReproductionRecord,
   SemenBull,
   SemenPurchase,
+  StatementImport,
+  StatementLine,
+  Transfer,
   Treatment,
   Weighing,
 } from "@/lib/types";
 import type {
   AnimalRow,
   AttachmentRow,
+  BankAccountRow,
   BreedingRow,
   CalvingRow,
   CustomCategoryRow,
@@ -50,9 +55,13 @@ import type {
   PregnancyDiagnosisRow,
   SemenBullRow,
   SemenPurchaseRow,
+  StatementImportRow,
+  StatementLineRow,
+  TransferRow,
   TreatmentRow,
   WeighingRow,
 } from "@/lib/db/schema";
+import { addDays } from "@/lib/domain/dates";
 
 const orNothing = <T>(value: T | null): T | undefined =>
   value === null ? undefined : value;
@@ -205,6 +214,7 @@ export function toMovement(row: MovementRow): Movement {
     destination: row.destination,
     amountBrl: orNothing(row.amountBrl),
     notes: orNothing(row.notes),
+    bankAccountId: orNothing(row.bankAccountId),
   };
 }
 
@@ -231,6 +241,7 @@ export function toExpense(
     document: orNothing(row.document),
     accountId: orNothing(row.accountId),
     lotId: orNothing(row.lotId),
+    bankAccountId: orNothing(row.bankAccountId),
     seriesId: orNothing(row.seriesId),
     seriesIndex: orNothing(row.seriesIndex),
     seriesCount: series?.mode === "installments" ? orNothing(series.count) : undefined,
@@ -257,6 +268,91 @@ export function toAccount(row: FarmAccountRow): Account {
     group: row.group,
     name: row.name,
     archivedAt: row.archivedAt?.toISOString(),
+  };
+}
+
+/** Linhas do extrato of the conta, as the load counts them. */
+export interface BankAccountLines {
+  pending: number;
+  firstDate: string | null;
+  firstPendingDate: string | null;
+  lastDate: string | null;
+  pendingImportId: string | null;
+  lastImportId: string | null;
+}
+
+/**
+ * "Conciliado até": with nothing pending, the last linha; otherwise the day
+ * before the oldest pending one (nothing when that is the very first linha).
+ */
+function reconciledUntil(lines: BankAccountLines | undefined): string | undefined {
+  if (!lines || lines.lastDate === null) return undefined;
+  if (lines.firstPendingDate === null) return lines.lastDate;
+  if (lines.firstDate === null || lines.firstPendingDate <= lines.firstDate) return undefined;
+  return addDays(lines.firstPendingDate, -1);
+}
+
+export function toBankAccount(row: BankAccountRow, lines?: BankAccountLines): BankAccount {
+  return {
+    id: row.id,
+    kind: row.kind,
+    name: row.name,
+    label: orNothing(row.label),
+    openingBalanceBrl: row.openingBalanceBrl,
+    openingDate: row.openingDate,
+    isMain: row.isMain,
+    closingDay: orNothing(row.closingDay),
+    dueDay: orNothing(row.dueDay),
+    paysFromId: orNothing(row.paysFromId),
+    csvMapping: orNothing(row.csvMapping),
+    archivedAt: row.archivedAt?.toISOString(),
+    pendingLines: lines?.pending ?? 0,
+    reconciledUntil: reconciledUntil(lines),
+    pendingImportId: orNothing(lines?.pendingImportId ?? null),
+    lastImportId: orNothing(lines?.lastImportId ?? null),
+  };
+}
+
+export function toTransfer(row: TransferRow): Transfer {
+  return {
+    id: row.id,
+    fromId: row.fromId,
+    toId: row.toId,
+    date: row.date,
+    amountBrl: row.amountBrl,
+    notes: orNothing(row.notes),
+  };
+}
+
+export function toStatementImport(row: StatementImportRow): StatementImport {
+  return {
+    id: row.id,
+    bankAccountId: row.bankAccountId,
+    fileName: row.fileName,
+    format: row.format,
+    periodFrom: row.periodFrom,
+    periodTo: row.periodTo,
+    bankBalanceBrl: orNothing(row.bankBalanceBrl),
+    bankBalanceDate: orNothing(row.bankBalanceDate),
+    lineCount: row.lineCount,
+    skippedCount: row.skippedCount,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+export function toStatementLine(row: StatementLineRow): StatementLine {
+  return {
+    id: row.id,
+    importId: row.importId,
+    bankAccountId: row.bankAccountId,
+    date: row.date,
+    description: row.description,
+    amountBrl: row.amountBrl,
+    status: row.status,
+    expenseId: orNothing(row.expenseId),
+    movementId: orNothing(row.movementId),
+    transferId: orNothing(row.transferId),
+    ignoreReason: orNothing(row.ignoreReason),
   };
 }
 
@@ -348,5 +444,6 @@ export function toManejoSession(
     totalAmountBrl: orNothing(row.totalAmountBrl),
     semenBullIds: orNothing(row.semenBullIds),
     notes: orNothing(row.notes),
+    bankAccountId: orNothing(row.bankAccountId),
   };
 }

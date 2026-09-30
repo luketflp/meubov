@@ -5,12 +5,13 @@
  * joining through `animals` (they carry no farm_id of their own). Weighings
  * come sorted asc from SQL, matching the domain invariant.
  */
-import { and, asc, count, eq, isNull } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   accounts,
   animals,
   attachments,
+  bankAccounts,
   breedings,
   breeds,
   calvings,
@@ -28,16 +29,21 @@ import {
   pregnancyDiagnoses,
   semenBulls,
   semenPurchases,
+  statementImports,
+  statementLines,
+  transfers,
   treatments,
   weighings,
 } from "@/lib/db/schema";
 import type { HerdData, ReproductionRecord, SemenPurchase, Weighing } from "@/lib/types";
 import { herdMovements } from "@/lib/domain/movements";
 import { todayISO } from "@/lib/domain/dates";
+import { pairKey } from "@/lib/domain/statements/match";
 import { TopUpSeriesUseCase } from "@/lib/api/domains/expenses/useCases/TopUpSeries.useCase";
 import {
   toAccount,
   toAnimal,
+  toBankAccount,
   toBreeding,
   toCalving,
   toCustomCategory,
@@ -53,6 +59,7 @@ import {
   toProtocol,
   toSemenBull,
   toSemenPurchase,
+  toTransfer,
   toTreatment,
   toWeighing,
 } from "@/lib/api/mappers";
@@ -109,6 +116,10 @@ export class LoadHerdUseCase implements CurrUseCase {
       accountRows,
       seriesRows,
       attachmentCountRows,
+      bankAccountRows,
+      transferRows,
+      lineSummaryRows,
+      reconciledRows,
     ] = await Promise.all([
       this.repository.select().from(farm).where(eq(farm.id, farmId)),
       this.repository.select().from(animals).where(eq(animals.farmId, farmId)).orderBy(asc(animals.earTag)),
@@ -209,6 +220,46 @@ export class LoadHerdUseCase implements CurrUseCase {
         .from(attachments)
         .where(eq(attachments.farmId, farmId))
         .groupBy(attachments.expenseId),
+      this.repository
+        .select()
+        .from(bankAccounts)
+        .where(eq(bankAccounts.farmId, farmId))
+        .orderBy(asc(bankAccounts.createdAt), asc(bankAccounts.id)),
+      this.repository
+        .select()
+        .from(transfers)
+        .where(eq(transfers.farmId, farmId))
+        .orderBy(asc(transfers.date), asc(transfers.id)),
+      // Per conta: how many linhas wait, and the dates "conciliado até" comes from.
+      this.repository
+        .select({
+          bankAccountId: statementLines.bankAccountId,
+          pending: sql<number>`count(*) filter (where ${statementLines.status} = 'pending')`.mapWith(Number),
+          firstDate: sql<string | null>`min(${statementLines.date})::text`,
+          firstPendingDate: sql<string | null>`(min(${statementLines.date}) filter (where ${statementLines.status} = 'pending'))::text`,
+          lastDate: sql<string | null>`max(${statementLines.date})::text`,
+          // The oldest import still holding a pending linha, and the latest import.
+          pendingImportId: sql<string | null>`(array_agg(${statementLines.importId} order by ${statementImports.createdAt}, ${statementImports.id}) filter (where ${statementLines.status} = 'pending'))[1]`,
+          lastImportId: sql<string | null>`(array_agg(${statementLines.importId} order by ${statementImports.createdAt} desc, ${statementImports.id} desc))[1]`,
+        })
+        .from(statementLines)
+        .innerJoin(statementImports, eq(statementImports.id, statementLines.importId))
+        .where(eq(statementLines.farmId, farmId))
+        .groupBy(statementLines.bankAccountId),
+      this.repository
+        .select({
+          bankAccountId: statementLines.bankAccountId,
+          expenseId: statementLines.expenseId,
+          movementId: statementLines.movementId,
+          transferId: statementLines.transferId,
+        })
+        .from(statementLines)
+        .where(
+          and(
+            eq(statementLines.farmId, farmId),
+            inArray(statementLines.status, ["matched", "created", "transfer"])
+          )
+        ),
     ]);
 
     const weighingsByAnimal = new Map<string, Weighing[]>();
@@ -249,6 +300,7 @@ export class LoadHerdUseCase implements CurrUseCase {
     }
 
     const seriesById = new Map(seriesRows.map((row) => [row.id, row]));
+    const linesByAccount = new Map(lineSummaryRows.map((row) => [row.bankAccountId, row]));
     const attachmentsByExpense = new Map(
       attachmentCountRows.map((row) => [row.expenseId, row.total])
     );
@@ -288,6 +340,9 @@ export class LoadHerdUseCase implements CurrUseCase {
         )
       ),
       accounts: accountRows.map(toAccount),
+      bankAccounts: bankAccountRows.map((row) => toBankAccount(row, linesByAccount.get(row.id))),
+      transfers: transferRows.map(toTransfer),
+      reconciledIds: reconciledRows.map(pairKey).filter((key): key is string => key !== undefined),
       customCategories: customCategoryRows.map(toCustomCategory),
       semenBulls: semenBullRows.map((row) => toSemenBull(row, purchasesByBull.get(row.id) ?? [])),
       farm: farmRows.length

@@ -28,9 +28,7 @@ export const expensesController = new Elysia({ prefix: "/expenses" })
       const result = repeat
         ? await new AddSeriesUseCase().run({ farmId, todayIso: todayISO(), ...entry, repeat })
         : await new AddExpenseUseCase().run({ farmId, ...entry });
-      if (result === "due_before_date" || result === "invalid_repeat" || result === "starts_too_old") {
-        return status(400, { error: result });
-      }
+      if (typeof result === "string") return status(400, { error: result });
       return Array.isArray(result) ? result : [result];
     },
     { farm: true, body: NewExpenseBody }
@@ -44,7 +42,7 @@ export const expensesController = new Elysia({ prefix: "/expenses" })
           ? await new UpdateExpenseUseCase().run({ farmId, id: params.id, patch })
           : await new UpdateSeriesUseCase().run({ farmId, id: params.id, patch, scope });
       if (result === null) return status(404, { error: "not_found" });
-      if (result === "due_before_date") return status(400, { error: result });
+      if (typeof result === "string") return status(400, { error: result });
       // The row as the load shows it: its série's fields and its anexos' count.
       return (await new GetExpenseUseCase().run({ farmId, id: params.id })) ?? result;
     },

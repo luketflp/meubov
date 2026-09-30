@@ -73,6 +73,7 @@ export function ExtratoPage() {
   const animals = useHerdStore((s) => s.animals);
   const treatments = useHerdStore((s) => s.treatments);
   const lots = useHerdStore((s) => s.lots);
+  const bankAccounts = useHerdStore((s) => s.bankAccounts);
 
   const { period, filter, pageNumber } = useMemo(() => {
     const params = new URLSearchParams(query);
@@ -141,7 +142,7 @@ export function ExtratoPage() {
                   label: "Extrato",
                   detail: lancamentos(filtered.length),
                   filters: [`Período: ${formatDate(period.start)} a ${formatDate(period.end)}`, ...filterLabels],
-                  build: () => [ledgerExportTable(filtered)],
+                  build: () => [ledgerExportTable(filtered, bankAccounts)],
                 }}
               />
             ) : null}

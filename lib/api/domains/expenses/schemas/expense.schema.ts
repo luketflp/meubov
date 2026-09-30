@@ -49,6 +49,8 @@ export const NewExpenseBody = t.Object({
   document: t.Optional(Document),
   accountId: t.Optional(t.String()),
   lotId: t.Optional(t.String()),
+  /** "Pago por"; kept only with `paidAt`. */
+  bankAccountId: t.Optional(t.String()),
   repeat: t.Optional(RepeatModel),
 });
 
@@ -68,6 +70,8 @@ export const UpdateExpenseBody = t.Object({
   document: t.Optional(t.Nullable(Document)),
   accountId: t.Optional(t.Nullable(t.String())),
   lotId: t.Optional(t.Nullable(t.String())),
+  /** "Pago por"; cleared whenever the row ends up unpaid. */
+  bankAccountId: t.Optional(t.Nullable(t.String())),
   /** For a row of a série; absent = "one". */
   scope: t.Optional(SeriesScopeModel),
 });

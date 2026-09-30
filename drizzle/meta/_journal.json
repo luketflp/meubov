@@ -162,6 +162,13 @@
       "when": 1790653747523,
       "tag": "0022_financeiro-series-e-anexos",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790725133112,
+      "tag": "0023_financeiro-contas-bancarias",
+      "breakpoints": true
     }
   ]
 }

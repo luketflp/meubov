@@ -3,22 +3,25 @@
 /**
  * What a row of the Extrato lets you do. A lançamento: Ver anexos when it has
  * any (Financeiro at view is enough), Editar (the EntryDialog filled in),
- * Marcar como pago / recebido while pending, and Remover after a confirmation
- * — for a row of a série, the choice of "Só esta", "Esta e as próximas" or
- * "Todas". A row the manejos wrote is locked and says so. Editing needs
- * Financeiro at edit.
+ * Marcar como pago / recebido while pending (asking "Pago por" when the farm
+ * has two or more contas), and Remover after a confirmation — for a row of a
+ * série, the choice of "Só esta", "Esta e as próximas" or "Todas". A row the
+ * manejos wrote is locked and says so; a venda or compra still takes its
+ * "Conta". Editing needs Financeiro at edit.
  */
 import { useState } from "react";
-import { CheckCircle2, Lock, Paperclip, Pencil, Trash2 } from "lucide-react";
+import { CheckCircle2, Landmark, Lock, Paperclip, Pencil, Trash2 } from "lucide-react";
 import type { SeriesScope } from "@/lib/types";
 import type { LedgerRow } from "@/lib/domain/ledger";
-import { todayISO } from "@/lib/domain/dates";
+import { payingAccounts } from "@/lib/domain/bankAccounts";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
 import { useToast } from "@/components/providers/Toasts";
 import { EntryDialog } from "@/components/finance/EntryDialog";
 import { SeriesScopeDialog } from "@/components/finance/SeriesScopeDialog";
 import { AttachmentsDialog } from "@/components/finance/attachments/AttachmentsDialog";
+import { MovementAccountDialog } from "@/components/finance/contas/MovementAccountDialog";
+import { useMarkPaid } from "@/components/finance/contas/useMarkPaid";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -42,27 +45,60 @@ interface RowActionsProps {
 
 export function RowActions({ row, labeled = false, onDone }: RowActionsProps) {
   const canEdit = useCan("finance", "edit");
-  const markExpensePaid = useHerdStore((s) => s.markExpensePaid);
+  const bankAccounts = useHerdStore((s) => s.bankAccounts);
+  const markPaid = useMarkPaid(onDone);
   const removeExpense = useHerdStore((s) => s.removeExpense);
   const { addToast } = useToast();
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [viewing, setViewing] = useState(false);
+  const [choosingAccount, setChoosingAccount] = useState(false);
   const [busy, setBusy] = useState(false);
 
   if (row.locked) {
-    return labeled ? (
-      <p className="flex items-center gap-2 text-sm text-ink-soft">
-        <Lock className="size-4 shrink-0" aria-hidden />
-        {LOCKED_HINT}.
-      </p>
-    ) : (
-      <span
-        title={LOCKED_HINT}
-        className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-ink-soft"
+    // A venda or compra keeps its value locked but takes the conta its money went through.
+    // Only when a conta can take it (never a cartão), or to change the one it has.
+    const takesAccount =
+      canEdit &&
+      (row.kind === "sale" || row.kind === "purchase") &&
+      (payingAccounts(bankAccounts, "revenue").length > 0 || row.bankAccountId !== null);
+    const accountButton = takesAccount ? (
+      <Button
+        type="button"
+        variant={labeled ? "outline" : "ghost"}
+        size={labeled ? "default" : "icon-sm"}
+        className={labeled ? "min-h-11 w-full justify-start" : "text-ink-soft hover:text-ink"}
+        aria-label={labeled ? undefined : "Conta"}
+        title={labeled ? undefined : "Conta"}
+        onClick={() => setChoosingAccount(true)}
       >
-        <Lock className="size-3.5" aria-hidden />
-        do manejo
+        <Landmark aria-hidden />
+        {labeled ? "Conta" : null}
+      </Button>
+    ) : null;
+    const accountDialog = choosingAccount ? (
+      <MovementAccountDialog row={row} onOpenChange={setChoosingAccount} onDone={onDone} />
+    ) : null;
+    return labeled ? (
+      <div className="flex flex-col gap-2">
+        {accountButton}
+        <p className="flex items-center gap-2 text-sm text-ink-soft">
+          <Lock className="size-4 shrink-0" aria-hidden />
+          {LOCKED_HINT}.
+        </p>
+        {accountDialog}
+      </div>
+    ) : (
+      <span className="inline-flex items-center justify-end gap-1">
+        {accountButton}
+        <span
+          title={LOCKED_HINT}
+          className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-ink-soft"
+        >
+          <Lock className="size-3.5" aria-hidden />
+          do manejo
+        </span>
+        {accountDialog}
       </span>
     );
   }
@@ -76,14 +112,11 @@ export function RowActions({ row, labeled = false, onDone }: RowActionsProps) {
   const pending = row.paidAt === null;
   const markLabel = revenue ? "Marcar como recebido" : "Marcar como pago";
 
-  const markPaid = async () => {
+  const onMarkPaid = async () => {
     setBusy(true);
     try {
-      await markExpensePaid(expense.id, todayISO());
-      addToast({ messageType: "success", text: revenue ? "Marcado como recebido" : "Marcado como pago" });
-      onDone?.();
-    } catch {
-      // apiFail already told the user.
+      // With two or more contas it opens "Pago por"; the hook marks, toasts and calls onDone.
+      await markPaid.request(expense);
     } finally {
       setBusy(false);
     }
@@ -147,7 +180,7 @@ export function RowActions({ row, labeled = false, onDone }: RowActionsProps) {
                 aria-label={labeled ? undefined : markLabel}
                 title={labeled ? undefined : markLabel}
                 disabled={busy}
-                onClick={markPaid}
+                onClick={onMarkPaid}
               >
                 <CheckCircle2 aria-hidden />
                 {labeled ? markLabel : null}
@@ -172,6 +205,7 @@ export function RowActions({ row, labeled = false, onDone }: RowActionsProps) {
       {/* Mounted only while open, so the form starts from the row every time. */}
       {editing ? <EntryDialog open onOpenChange={setEditing} expense={expense} /> : null}
       {viewing ? <AttachmentsDialog expense={expense} onOpenChange={setViewing} /> : null}
+      {markPaid.dialog}
 
       {expense.seriesId && confirming ? (
         <SeriesScopeDialog

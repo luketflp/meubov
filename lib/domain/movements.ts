@@ -304,6 +304,7 @@ export function sessionToMovement(
       session.kind === "sale" ? outside : lotName(session.destinationLotId, lotNames),
     amountBrl: session.kind === "transfer" ? undefined : amountBrl,
     notes: session.notes,
+    bankAccountId: session.bankAccountId,
   };
 }
 

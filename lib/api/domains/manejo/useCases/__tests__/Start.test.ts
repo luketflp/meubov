@@ -55,6 +55,9 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
+import type { SQL } from "drizzle-orm";
+import { renderSql } from "@/lib/api/__tests__/dbStub";
+
 import { StartSessionUseCase } from "../Start.useCase";
 
 const INSEMINATION = {
@@ -157,6 +160,27 @@ describe("startSession — inseminação", () => {
     expect(state.inserts[0][0].semenBullIds).toBeUndefined();
     expect(result).toMatchObject({ kind: "weighing" });
     expect(result).not.toHaveProperty("semenBullIds", ["bull-1", "bull-2"]);
+  });
+});
+
+describe("startSession — venda and compra", () => {
+  it("send their money through the conta principal; other kinds carry no conta", async () => {
+    state.selectResults = [[{ id: "a-1", earTag: "V-01", sex: "male" }]];
+    await new StartSessionUseCase().run({
+      farmId: 7,
+      input: { date: "2026-09-25", kind: "sale", earTags: ["V-01"], weighing: true },
+    });
+    const { sql, params } = renderSql(state.inserts[0][0].bankAccountId as SQL);
+    expect(sql).toContain('"bank_accounts"."is_main"');
+    expect(params).toEqual([7]);
+
+    state.inserts = [];
+    state.selectResults = [[{ id: "a-1", earTag: "V-01", sex: "male" }]];
+    await new StartSessionUseCase().run({
+      farmId: 7,
+      input: { date: "2026-09-25", kind: "weighing", earTags: ["V-01"], weighing: true },
+    });
+    expect(state.inserts[0][0].bankAccountId).toBeUndefined();
   });
 });
 

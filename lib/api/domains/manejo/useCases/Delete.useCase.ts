@@ -7,6 +7,7 @@ import {
   lots,
   manejoSessionAnimals,
   manejoSessions,
+  statementLines,
   treatments,
   weighings,
 } from "@/lib/db/schema";
@@ -254,6 +255,13 @@ export class DeleteSessionUseCase implements CurrUseCase {
       }
 
       await tx.update(manejoSessions).set({ deletedAt: stamp }).where(eq(manejoSessions.id, id));
+      if (row.kind === "sale" || row.kind === "entry") {
+        // The linha do extrato it confirmed goes back to pending (a trigger resets the status).
+        await tx
+          .update(statementLines)
+          .set({ movementId: null })
+          .where(and(eq(statementLines.farmId, farmId), eq(statementLines.movementId, id)));
+      }
 
       return {
         id,

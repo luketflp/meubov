@@ -66,7 +66,7 @@ const herd: HerdData = {
   invernadas: [],
   lotPlacements: [],
   movements: [
-    { id: "m-1", type: "sale", date: "2026-09-02", origin: "Fazenda", destination: "Frigorífico", amountBrl: 5300 },
+    { id: "m-1", type: "sale", date: "2026-09-02", origin: "Fazenda", destination: "Frigorífico", amountBrl: 5300, bankAccountId: "b-1" },
   ],
   breeds: [],
   protocols: [],
@@ -153,6 +153,11 @@ describe("redactManejoSession", () => {
   it("leaves a session without values unmarked", () => {
     expect(redactManejoSession(vaccination)).toEqual(vaccination);
   });
+
+  it("strips the conta bancária of a venda, priced or not", () => {
+    expect(redactManejoSession({ ...sale, bankAccountId: "b-1" })).not.toHaveProperty("bankAccountId");
+    expect(redactManejoSession({ ...vaccination, bankAccountId: "b-1" })).toEqual(vaccination);
+  });
 });
 
 describe("redactPass", () => {
@@ -183,10 +188,25 @@ describe("redactHerdMoney", () => {
     expect(redacted.expenses).toEqual([]);
     expect(redacted.treatments[0]).not.toHaveProperty("costBrl");
     expect(redacted.movements[0]).not.toHaveProperty("amountBrl");
+    expect(redacted.movements[0]).not.toHaveProperty("bankAccountId");
     expect(redacted.manejoSessions[0]).not.toHaveProperty("pricePerArroba");
     expect(redacted.semenBulls[0].purchases[0]).not.toHaveProperty("totalBrl");
     expect(redacted.semenBulls[0].purchases[0].doses).toBe(40);
     expect(redacted.farm).toEqual(herd.farm);
+  });
+
+  it("drops the contas bancárias, transferências and conciliação", () => {
+    const redacted = redactHerdMoney({
+      ...herd,
+      bankAccounts: [
+        { id: "b-1", kind: "checking", name: "Sicredi", openingBalanceBrl: 5000, openingDate: "2026-08-31", isMain: true, pendingLines: 0 },
+      ],
+      transfers: [{ id: "t-1", fromId: "b-1", toId: "b-2", date: "2026-09-02", amountBrl: 300 }],
+      reconciledIds: ["e-1"],
+    });
+    expect(redacted.bankAccounts).toEqual([]);
+    expect(redacted.transfers).toEqual([]);
+    expect(redacted.reconciledIds).toEqual([]);
   });
 
   it("keeps the plano de contas: names carry no money", () => {

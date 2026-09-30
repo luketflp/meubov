@@ -2,12 +2,13 @@ import Link from "next/link";
 import { periodSearch, type Period } from "@/lib/domain/period";
 import { cn } from "@/lib/utils";
 
-export type FinanceSection = "painel" | "extrato";
+export type FinanceSection = "painel" | "extrato" | "contas";
 
-/** The Financeiro pages; later cycles add Contas bancárias, Orçamento, Estoque, Patrimônio. */
+/** The Financeiro pages; later cycles add Orçamento, Estoque, Patrimônio. */
 const SECTIONS: readonly { key: FinanceSection; label: string; href: string }[] = [
   { key: "painel", label: "Painel", href: "/finance" },
   { key: "extrato", label: "Extrato", href: "/finance/extrato" },
+  { key: "contas", label: "Contas bancárias", href: "/finance/contas" },
 ];
 
 /**

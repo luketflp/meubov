@@ -8,8 +8,8 @@ import { effectiveDueDate } from "@/lib/domain/ledger";
 import { formatDate, todayISO } from "@/lib/domain/dates";
 import { formatCurrency } from "@/lib/domain/format";
 import { useHerdStore } from "@/lib/store/useHerdStore";
-import { useToast } from "@/components/providers/Toasts";
 import { LancarButton } from "@/components/finance/LancarButton";
+import { useMarkPaid } from "@/components/finance/contas/useMarkPaid";
 import { AttachmentCount, InstallmentChip, RecurrenceTag } from "@/components/finance/SeriesMarkers";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
@@ -29,8 +29,7 @@ interface BillsCardProps {
 export function BillsCard({ payables, receivables, canEdit }: BillsCardProps) {
   const accounts = useHerdStore((s) => s.accounts);
   const lots = useHerdStore((s) => s.lots);
-  const markExpensePaid = useHerdStore((s) => s.markExpensePaid);
-  const { addToast } = useToast();
+  const markPaid = useMarkPaid();
   const [tab, setTab] = useState<Tab>("payables");
   // Ids being marked; their checkbox stays disabled so a double tap can't fire twice.
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
@@ -48,10 +47,8 @@ export function BillsCard({ payables, receivables, canEdit }: BillsCardProps) {
     if (pending.has(entry.id)) return;
     setPending((ids) => new Set(ids).add(entry.id));
     try {
-      await markExpensePaid(entry.id, todayISO());
-      addToast({ messageType: "success", text: `Marcado como ${verb}` });
-    } catch {
-      // apiFail has shown the error toast.
+      // With two or more contas it opens "Pago por"; the hook marks and toasts.
+      await markPaid.request(entry);
     } finally {
       setPending((ids) => {
         const next = new Set(ids);
@@ -173,6 +170,7 @@ export function BillsCard({ payables, receivables, canEdit }: BillsCardProps) {
           </div>
         </>
       )}
+      {markPaid.dialog}
     </SectionCard>
   );
 }

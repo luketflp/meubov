@@ -147,6 +147,9 @@ describe("deleteSession", () => {
     expect(state.updates.some((u) => u.deletedAt instanceof Date)).toBe(true);
     expect(state.updates.some((u) => u.active === true && u.inactiveReason === null)).toBe(true);
     expect(state.deletes).toEqual([]);
+    // The linha do extrato that confirmed the venda loses it (the trigger sends it back to pending).
+    expect(state.writes).toContain("update statement_lines");
+    expect(state.updates).toContainEqual({ movementId: null });
   });
 
   it("refuses in one piece and writes nothing when an animal moved on", async () => {
