@@ -5,13 +5,15 @@
  * valor em aberto on `openingDate`), minus its purchases, plus the payments
  * into it; "A pagar no cartão" is `-accountBalance(card)`.
  *
- * What counts in a conta: the paid lançamentos and the vendas/compras whose
- * `bankAccountId` is it, and the transferências in and out, all dated after
- * `openingDate` (anything on or before it is already in the saldo inicial).
+ * What counts in a conta: the paid lançamentos of every kind (signed by their
+ * direction, `entryFlow`) and the vendas/compras whose `bankAccountId` is it,
+ * and the transferências in and out, all dated after `openingDate` (anything
+ * on or before it is already in the saldo inicial).
  */
-import type { BankAccount, EntryKind, Expense, Movement, Transfer } from "@/lib/types";
+import type { BankAccount, EntryFlow, EntryKind, Expense, Movement, Transfer } from "@/lib/types";
 import type { Period } from "@/lib/domain/period";
 import { addDays, lastDayOfMonth } from "@/lib/domain/dates";
+import { isInflow, mayPayFrom } from "@/lib/domain/entries";
 
 export interface BankInputs {
   expenses: Expense[];
@@ -19,7 +21,7 @@ export interface BankInputs {
   transfers: Transfer[];
 }
 
-export type BankMoveKind = "expense" | "revenue" | "sale" | "purchase" | "transferIn" | "transferOut";
+export type BankMoveKind = EntryKind | "sale" | "purchase" | "transferIn" | "transferOut";
 
 /** One line of a conta's movimentação. */
 export interface BankMove {
@@ -40,6 +42,7 @@ export const BANK_ACCOUNT_KIND_LABEL: Record<BankAccount["kind"], string> = {
   checking: "Conta corrente",
   cash: "Caixa",
   card: "Cartão",
+  investment: "Aplicação",
 };
 
 /** Money rounded to the centavo, so running sums never show 0,30000000004. */
@@ -53,12 +56,11 @@ function movesOf(account: BankAccount, inputs: BankInputs): Omit<BankMove, "bala
   const moves: Omit<BankMove, "balance">[] = [];
   for (const e of inputs.expenses) {
     if (e.bankAccountId !== account.id || e.paidAt === undefined || !after(e.paidAt)) continue;
-    const revenue = e.kind === "revenue";
     moves.push({
       id: e.id,
-      kind: revenue ? "revenue" : "expense",
+      kind: e.kind,
       date: e.paidAt,
-      amountBrl: revenue ? e.amountBrl : -e.amountBrl,
+      amountBrl: isInflow(e) ? e.amountBrl : -e.amountBrl,
       expense: e,
     });
   }
@@ -96,7 +98,7 @@ export function accountBalance(account: BankAccount, inputs: BankInputs, day: st
   return cents(balance);
 }
 
-/** "Saldo em contas": every conta corrente and caixa that is not archived. Cartões stay out. */
+/** "Saldo em contas": every conta corrente, caixa and aplicação that is not archived. Cartões stay out. */
 export function bankTotal(accounts: BankAccount[], inputs: BankInputs, day: string): number {
   return cents(
     accounts
@@ -156,12 +158,13 @@ export function faturaOf(card: Pick<BankAccount, "closingDay" | "dueDay">, date:
 }
 
 /**
- * The contas "Pago por" offers: not archived, the conta principal first; a
- * cartão only for a despesa.
+ * The contas "Pago por" offers: not archived, that may pay or receive this
+ * lançamento (`mayPayFrom`: a cartão only a despesa or the compra of an
+ * investimento, an aplicação only a rendimento), the conta principal first.
  */
-export function payingAccounts(accounts: BankAccount[], kind: EntryKind): BankAccount[] {
+export function payingAccounts(accounts: BankAccount[], kind: EntryKind, flow?: EntryFlow | null): BankAccount[] {
   return accounts
-    .filter((a) => a.archivedAt === undefined && (kind === "expense" || a.kind !== "card"))
+    .filter((a) => a.archivedAt === undefined && mayPayFrom(a.kind, kind, flow))
     .sort((a, b) => Number(b.isMain) - Number(a.isMain));
 }
 

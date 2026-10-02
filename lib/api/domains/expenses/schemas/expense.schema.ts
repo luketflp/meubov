@@ -1,4 +1,4 @@
-/** Request schemas for the farm's lançamentos (despesas and receitas typed by hand). */
+/** Request schemas for the farm's lançamentos (every kind typed by hand). */
 
 import { t } from "elysia";
 
@@ -14,16 +14,30 @@ export const ExpenseCategoryModel = t.Union([
   t.Literal("other"),
 ]);
 
-export const EntryKindModel = t.Union([t.Literal("expense"), t.Literal("revenue")]);
+/** Despesa, receita, the three kinds fora do resultado, and rendimento. */
+export const EntryKindModel = t.Union([
+  t.Literal("expense"),
+  t.Literal("revenue"),
+  t.Literal("investment"),
+  t.Literal("financing"),
+  t.Literal("partners"),
+  t.Literal("yield"),
+]);
+
+/** Movimento of an investimento, financiamento or sócios lançamento: entrada or saída. */
+export const EntryFlowModel = t.Union([t.Literal("in"), t.Literal("out")]);
 
 /** "Só esta" · "Esta e as próximas" · "Todas" (as não pagas). */
 export const SeriesScopeModel = t.Union([t.Literal("one"), t.Literal("following"), t.Literal("all")]);
 
+const Frequency = t.Union([t.Literal("monthly"), t.Literal("weekly")]);
+const InstallmentCount = t.Integer({ minimum: 2, maximum: 48 });
+
 /** How a new lançamento repeats: N parcelas, or the same bill every week or month. */
 export const RepeatModel = t.Object({
   mode: t.Union([t.Literal("installments"), t.Literal("recurring")]),
-  count: t.Optional(t.Integer({ minimum: 2, maximum: 48 })),
-  frequency: t.Union([t.Literal("monthly"), t.Literal("weekly")]),
+  count: t.Optional(InstallmentCount),
+  frequency: Frequency,
   dayOfMonth: t.Optional(t.Integer({ minimum: 1, maximum: 31 })),
   startsOn: DateString,
   endsOn: t.Optional(DateString),
@@ -33,9 +47,15 @@ const Counterparty = t.String({ maxLength: 120 });
 const Document = t.String({ maxLength: 120 });
 
 /**
- * Body of POST /expenses. A receita sends `kind: "revenue"` and `category: "other"`.
- * With `repeat` it creates the whole série; `amountBrl` is then the total of a
- * parcelamento or the value of each ocorrência of a recorrência.
+ * Body of POST /expenses.
+ *
+ * A receita and the kinds fora do resultado send `category: "other"`.
+ * investment, financing and partners send a conta of their group and `flow`
+ * (absent is a saída). A yield sends its aplicação as `bankAccountId` and no
+ * `repeat`.
+ *
+ * With `repeat` it creates the whole série; `amountBrl` is then the total of
+ * a parcelamento or the value of each ocorrência of a recorrência.
  */
 export const NewExpenseBody = t.Object({
   date: DateString,
@@ -43,13 +63,14 @@ export const NewExpenseBody = t.Object({
   amountBrl: t.Number({ exclusiveMinimum: 0 }),
   notes: t.Optional(t.String()),
   kind: t.Optional(EntryKindModel),
+  flow: t.Optional(EntryFlowModel),
   dueDate: t.Optional(DateString),
   paidAt: t.Optional(DateString),
   counterparty: t.Optional(Counterparty),
   document: t.Optional(Document),
   accountId: t.Optional(t.String()),
   lotId: t.Optional(t.String()),
-  /** "Pago por"; kept only with `paidAt`. */
+  /** "Pago por"; kept only with `paidAt` (a yield is paid on its `date`). */
   bankAccountId: t.Optional(t.String()),
   repeat: t.Optional(RepeatModel),
 });
@@ -63,6 +84,7 @@ export const UpdateExpenseBody = t.Object({
   category: t.Optional(ExpenseCategoryModel),
   amountBrl: t.Optional(t.Number({ exclusiveMinimum: 0 })),
   kind: t.Optional(EntryKindModel),
+  flow: t.Optional(EntryFlowModel),
   notes: t.Optional(t.Nullable(t.String())),
   dueDate: t.Optional(t.Nullable(DateString)),
   paidAt: t.Optional(t.Nullable(DateString)),
@@ -74,6 +96,14 @@ export const UpdateExpenseBody = t.Object({
   bankAccountId: t.Optional(t.Nullable(t.String())),
   /** For a row of a série; absent = "one". */
   scope: t.Optional(SeriesScopeModel),
+});
+
+/** Body of POST /expenses/:id/split ("Parcelar"): the lançamento's value is the total, split as a new parcelamento. */
+export const SplitExpenseBody = t.Object({
+  count: InstallmentCount,
+  frequency: Frequency,
+  /** Vencimento of the first parcela. */
+  startsOn: DateString,
 });
 
 /** Query of DELETE /expenses/:id; absent scope = "one". */

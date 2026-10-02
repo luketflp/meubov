@@ -75,6 +75,8 @@ describe("addSemenPurchase", () => {
       [{ id: "bull-1", name: "Tufão da Serra", central: "CRV Lagoa" }],
       // 2. the farm's active "Sêmen" conta in Reprodução
       [{ id: "acc-semen" }],
+      // 3. AddExpense checks that conta's group
+      [{ group: "breeding" }],
     ];
 
     const result = await new AddPurchaseUseCase().run({

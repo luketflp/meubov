@@ -30,6 +30,7 @@ import type {
   ScheduleTreatmentsInput,
   SemenBull,
   SemenPurchase,
+  SeriesFrequency,
   SeriesRepeat,
   SeriesScope,
   Sex,
@@ -183,7 +184,7 @@ export interface NewSemenBull {
 export type SemenBullPatch = Partial<Pick<SemenBull, "name" | "code" | "breed" | "central">>;
 
 /** Editable fields of a lançamento: only sent ones change; null clears an optional one. */
-export type ExpensePatch = Partial<Pick<Expense, "date" | "category" | "amountBrl">> & {
+export type ExpensePatch = Partial<Pick<Expense, "date" | "category" | "amountBrl" | "flow">> & {
   [K in "notes" | "dueDate" | "paidAt" | "counterparty" | "document" | "accountId" | "lotId" | "bankAccountId"]?:
     | string
     | null;
@@ -468,6 +469,15 @@ export interface HerdStore extends HerdData {
   /** Removes a lançamento; on a row of a série "following"/"all" remove the unpaid rows in scope. */
   removeExpense: (id: string, scope?: SeriesScope) => Promise<void>;
   /**
+   * "Parcelar": turns a pending lançamento outside any série into `count`
+   * parcelas, its value the total. Resolves every row, the original (now
+   * parcela 1, same id and anexos) first.
+   */
+  splitExpense: (
+    id: string,
+    input: { count: number; frequency: SeriesFrequency; startsOn: string }
+  ) => Promise<Expense[]>;
+  /**
    * Whether this environment stores anexos (a Blob token is configured); null
    * when the check itself failed (no signal), so the UI waits instead of
    * saying "indisponíveis".
@@ -485,10 +495,24 @@ export interface HerdStore extends HerdData {
     onProgress?: (percentage: number) => void
   ) => Promise<Attachment>;
   removeAttachment: (attachment: Attachment) => Promise<void>;
-  /** Creates a conta; null when its grupo already has that name (409). */
-  addAccount: (input: { group: AccountGroup; name: string }) => Promise<Account | null>;
-  /** Renames, archives or restores a conta; false when the name is taken (409). */
-  updateAccount: (id: string, patch: { name?: string; archived?: boolean }) => Promise<boolean>;
+  /**
+   * Creates a conta (a conta de financiamento with its saldo devedor inicial
+   * and its date, when given); null when its grupo already has that name (409).
+   */
+  addAccount: (input: {
+    group: AccountGroup;
+    name: string;
+    openingBalanceBrl?: number;
+    openingDate?: string;
+  }) => Promise<Account | null>;
+  /**
+   * Renames, archives or restores a conta, or sets (null clears) the saldo
+   * devedor inicial of a conta de financiamento; false when the name is taken (409).
+   */
+  updateAccount: (
+    id: string,
+    patch: { name?: string; archived?: boolean; openingBalanceBrl?: number | null; openingDate?: string | null }
+  ) => Promise<boolean>;
   /** Creates the standard contas the farm lacks; resolves how many were created. */
   seedDefaultAccounts: () => Promise<number>;
   /** "Nova conta"; one marked principal (or the farm's first) takes the place of the current one. */
@@ -609,11 +633,14 @@ export interface LotPatch {
  * (important actions only reach here). `action` is the pt-BR verb phrase shown
  * to the user, e.g. "cadastrar o animal".
  */
-/** Refusals of the contas bancárias the farmer can act on, whatever the action. */
+/** Refusals the farmer can act on, whatever the action: contas bancárias, plano de contas, lançamentos. */
 const BANK_REFUSALS: Record<string, string> = {
   same_account: "Escolha contas diferentes.",
   invalid_bank_account:
-    "Essa conta não serve aqui: um cartão só paga despesas e uma conta arquivada não recebe lançamentos.",
+    "Essa conta não serve aqui: um cartão só paga despesas e compras de bens, uma aplicação só recebe rendimentos e uma conta arquivada não recebe lançamentos.",
+  invalid_account: "Escolha uma conta do plano para esse lançamento.",
+  invalid_opening: "O saldo devedor inicial vai com a data dele, e só numa conta de financiamento.",
+  investment_cannot_be_main: "Uma aplicação não pode ser a conta principal.",
   amount_differs: "O valor do lançamento é diferente do banco. Ajuste o valor antes de conciliar.",
   card_days: "Informe o dia de fechamento e o de vencimento do cartão.",
   card_cannot_be_main: "Um cartão não pode ser a conta principal.",
@@ -643,6 +670,13 @@ function apiFail(action: string, error: { status: number; value?: unknown }): ne
   }
   throw new Error(`${action} failed (status ${error.status})`);
 }
+
+/** Refusals of "Parcelar" the farmer can act on. */
+const SPLIT_REFUSALS: Record<string, string> = {
+  not_splittable: "Só um lançamento pendente e fora de parcelamento pode ser parcelado.",
+  invalid_repeat: "O valor não dá um centavo para cada parcela.",
+  due_before_date: "A primeira parcela não pode vencer antes da data do lançamento.",
+};
 
 /** A scoped edit or removal was saved but the re-read of the other rows failed. */
 const SCOPED_RELOAD_FAILED = "Alteração salva. Recarregue para ver as outras parcelas.";
@@ -2105,8 +2139,8 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     // The PATCH answers the full row, série fields and anexo count included.
     const expense = data as Expense;
     set((s) => ({ expenses: s.expenses.map((e) => (e.id === id ? expense : e)) }));
-    // The server may have unpaired its linha do extrato (pago, conta, valor or tipo changed).
-    const unpairs = ["paidAt", "bankAccountId", "amountBrl", "kind"].some((key) => key in patch);
+    // The server may have unpaired its linha do extrato (pago, conta, valor, tipo or movimento changed).
+    const unpairs = ["paidAt", "bankAccountId", "amountBrl", "kind", "flow"].some((key) => key in patch);
     if (unpairs && isReconciled(get().reconciledIds, id)) await reloadHerd(set);
   },
 
@@ -2123,6 +2157,25 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     set((s) => ({ expenses: s.expenses.filter((e) => e.id !== id) }));
     // Its linha do extrato went back to pending: the conta's figures change.
     if (isReconciled(get().reconciledIds, id)) await reloadHerd(set);
+  },
+
+  splitExpense: async (id, input) => {
+    const { data, error } = await api.expenses({ id }).split.post(input);
+    if (error) {
+      const code = (error.value as { error?: string } | null)?.error ?? "";
+      const message = SPLIT_REFUSALS[code];
+      if (message) {
+        toast.error(message);
+        throw new Error(`parcelar o lançamento failed (${code})`);
+      }
+      apiFail("parcelar o lançamento", error);
+    }
+    // The original row is parcela 1 (same id); the others are new.
+    const rows = data as Expense[];
+    set((s) => ({
+      expenses: [...s.expenses.map((e) => (e.id === id ? rows[0] : e)), ...rows.slice(1)],
+    }));
+    return rows;
   },
 
   attachmentsEnabled: async () => {

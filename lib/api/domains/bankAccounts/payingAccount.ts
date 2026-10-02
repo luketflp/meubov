@@ -1,22 +1,26 @@
 import { and, eq } from "drizzle-orm";
 
 import { bankAccounts } from "@/lib/db/schema";
+import { mayPayFrom } from "@/lib/domain/entries";
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
-import type { EntryKind } from "@/lib/types";
+import type { EntryFlow, EntryKind } from "@/lib/types";
 
 /**
- * Whether a lançamento of `kind` may be paid from (or received into) the conta:
- * one of this farm, not archived (unless `allowArchived`: a row that already
- * holds it), and a cartão only for a despesa. A venda or compra passes
- * "revenue", which keeps cartões out.
+ * Whether a lançamento of `kind` (and movimento `flow`) may be paid from or
+ * received into the conta. The conta must be of this farm and not archived
+ * (unless `allowArchived`: a row that already holds it). Its kind must be one
+ * `mayPayFrom` takes: a cartão only pays a despesa or a compra of an
+ * investimento, and an aplicação only receives a rendimento. A venda or a
+ * compra of the manejos passes "revenue", which keeps cartões and aplicações out.
  */
 export async function isPayingAccount(
   repo: RepositoryType,
   farmId: number,
   bankAccountId: string,
   kind: EntryKind,
-  allowArchived = false
+  allowArchived = false,
+  flow: EntryFlow | null = null
 ): Promise<boolean> {
   const [account] = await repo
     .select({ kind: bankAccounts.kind, archivedAt: bankAccounts.archivedAt })
@@ -26,6 +30,6 @@ export async function isPayingAccount(
   return (
     account !== undefined &&
     (allowArchived || account.archivedAt === null) &&
-    (kind === "expense" || account.kind !== "card")
+    mayPayFrom(account.kind, kind, flow)
   );
 }

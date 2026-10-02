@@ -150,8 +150,18 @@ export const expenseCategoryEnum = pgEnum("expense_category", [
   "other",
 ]);
 
-/** Whether a lançamento is money out (despesa) or money in (receita). */
-export const entryKindEnum = pgEnum("entry_kind", ["expense", "revenue"]);
+/** What the money of a lançamento is (lib/types.ts EntryKind). */
+export const entryKindEnum = pgEnum("entry_kind", [
+  "expense",
+  "revenue",
+  "investment",
+  "financing",
+  "partners",
+  "yield",
+]);
+
+/** Movimento of an investment, financing or partners lançamento. */
+export const entryFlowEnum = pgEnum("entry_flow", ["in", "out"]);
 
 /** A parcelamento (N parcelas of one purchase) or a recorrência (the same bill again and again). */
 export const seriesModeEnum = pgEnum("series_mode", ["installments", "recurring"]);
@@ -159,8 +169,13 @@ export const seriesModeEnum = pgEnum("series_mode", ["installments", "recurring"
 /** Interval between two lançamentos of a série. */
 export const seriesFrequencyEnum = pgEnum("series_frequency", ["monthly", "weekly"]);
 
-/** Conta corrente, caixa or cartão de crédito. */
-export const bankAccountKindEnum = pgEnum("bank_account_kind", ["checking", "cash", "card"]);
+/** Conta corrente, caixa, cartão de crédito or aplicação. */
+export const bankAccountKindEnum = pgEnum("bank_account_kind", [
+  "checking",
+  "cash",
+  "card",
+  "investment",
+]);
 
 /** File format of an imported extrato. */
 export const statementFormatEnum = pgEnum("statement_format", ["ofx", "csv"]);
@@ -174,7 +189,7 @@ export const statementLineStatusEnum = pgEnum("statement_line_status", [
   "ignored",
 ]);
 
-/** Grupo of a conta: the seven expense categories plus receitas. */
+/** Grupo of a conta: the seven expense categories, receitas and the three outside the resultado. */
 export const accountGroupEnum = pgEnum("account_group", [
   "nutrition",
   "pasture",
@@ -184,6 +199,9 @@ export const accountGroupEnum = pgEnum("account_group", [
   "admin",
   "other",
   "revenue",
+  "investment",
+  "financing",
+  "partners",
 ]);
 
 /** Why an animal left the active herd. */
@@ -654,6 +672,9 @@ export const accounts = pgTable(
     group: accountGroupEnum("group").notNull(),
     name: text("name").notNull(),
     archivedAt: timestamp("archived_at"),
+    /** Financing only, both or neither: saldo devedor at the end of `openingDate`. */
+    openingBalanceBrl: numeric("opening_balance_brl", { mode: "number" }),
+    openingDate: date("opening_date"),
   },
   // Names are unique per grupo ignoring case: "sal mineral" and "Sal mineral" are one conta.
   (t) => [
@@ -687,6 +708,8 @@ export const expenseSeries = pgTable(
     count: integer("count"),
     generatedCount: integer("generated_count").notNull().default(0),
     kind: entryKindEnum("kind").notNull().default("expense"),
+    /** Investment, financing and partners only. */
+    flow: entryFlowEnum("flow"),
     category: expenseCategoryEnum("category").notNull(),
     amountBrl: numeric("amount_brl", { mode: "number" }).notNull(),
     accountId: text("account_id").references(() => accounts.id, { onDelete: "set null" }),
@@ -715,9 +738,11 @@ export const expenses = pgTable(
       .notNull()
       .references(() => farm.id, { onDelete: "cascade" }),
     kind: entryKindEnum("kind").notNull().default("expense"),
+    /** Investment, financing and partners only: "in" or "out". */
+    flow: entryFlowEnum("flow"),
     /** Competência. */
     date: date("date").notNull(),
-    /** Grupo; a receita writes "other" and nothing reads it. */
+    /** Grupo of a despesa; the other kinds write "other" and nothing reads it. */
     category: expenseCategoryEnum("category").notNull(),
     amountBrl: numeric("amount_brl", { mode: "number" }).notNull(),
     notes: text("notes"),

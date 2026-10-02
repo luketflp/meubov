@@ -93,6 +93,34 @@ describe("AddBankAccountUseCase", () => {
     expect(await new AddBankAccountUseCase().run({ ...card, closingDay: 1, dueDay: 10, paysFromId: "other-farm" })).toBe("invalid_pays_from");
     expect(state.inserts).toEqual([]);
   });
+
+  it("keeps an aplicação off the conta principal, even as the farm's first conta, with no card fields", async () => {
+    state.selectResults = [[]]; // no conta principal yet
+    state.returning = [[{ ...ROW, id: "cdb", kind: "investment", isMain: false }]];
+    await new AddBankAccountUseCase().run({
+      farmId: 7,
+      kind: "investment",
+      name: "CDB Sicredi",
+      openingDate: "2026-08-31",
+      openingBalanceBrl: 20000,
+      closingDay: 5,
+      dueDay: 10,
+      paysFromId: "sicredi",
+    });
+    expect(state.inserts[0]).toMatchObject({
+      kind: "investment",
+      isMain: false,
+      openingBalanceBrl: 20000,
+      closingDay: null,
+      dueDay: null,
+      paysFromId: null,
+    });
+    expect(state.updates).toEqual([]);
+
+    const marked = { farmId: 7, kind: "investment" as const, name: "CDB", openingDate: "2026-08-31", isMain: true };
+    expect(await new AddBankAccountUseCase().run(marked)).toBe("investment_cannot_be_main");
+    expect(state.inserts).toHaveLength(1);
+  });
 });
 
 describe("UpdateBankAccountUseCase", () => {
@@ -117,6 +145,24 @@ describe("UpdateBankAccountUseCase", () => {
     state.returning = [[{ ...ROW, id: "card", kind: "card", isMain: false, openingBalanceBrl: -300 }]];
     await new UpdateBankAccountUseCase().run({ farmId: 7, id: "card", patch: { openingBalanceBrl: -300 } });
     expect(state.updates).toEqual([{ openingBalanceBrl: -300 }]);
+  });
+
+  it("never marks an aplicação principal and ignores card fields on it", async () => {
+    const cdb = { ...ROW, id: "cdb", kind: "investment", isMain: false };
+    state.selectResults = [[cdb]];
+    expect(await new UpdateBankAccountUseCase().run({ farmId: 7, id: "cdb", patch: { isMain: true } })).toBe(
+      "investment_cannot_be_main"
+    );
+    expect(state.updates).toEqual([]);
+
+    state.selectResults = [[cdb]];
+    state.returning = [[{ ...cdb, openingBalanceBrl: 25000 }]];
+    await new UpdateBankAccountUseCase().run({
+      farmId: 7,
+      id: "cdb",
+      patch: { openingBalanceBrl: 25000, closingDay: 5 },
+    });
+    expect(state.updates).toEqual([{ openingBalanceBrl: 25000 }]);
   });
 
   it("moves the conta principal in one transaction", async () => {

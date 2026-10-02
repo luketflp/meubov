@@ -20,20 +20,20 @@ const STATUS: Record<LedgerStatus, { label: string; pill: string; dot: string }>
   overdue: { label: "vencida", pill: "bg-overdue-soft text-overdue", dot: "bg-overdue" },
 };
 
-/** The five newest Extrato rows of the window. */
+/** The five newest lançamentos of the window, the manejos' rows included. */
 export function RecentEntriesCard({ rows, period }: { rows: LedgerRow[]; period: Period }) {
   const recent = rows.slice(0, RECENT);
 
   return (
     <SectionCard
       title="Últimos lançamentos"
-      subtitle={`${rows.length} no período · despesas, receitas, vendas e compras`}
+      subtitle={`${rows.length} no período · mais recentes primeiro`}
       action={
         <Link
-          href={`/finance/extrato?${periodSearch(period)}`}
+          href={`/finance/lancamentos?${periodSearch(period)}`}
           className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand hover:underline md:min-h-0"
         >
-          Ver extrato
+          Ver lançamentos
           <ArrowRight className="size-4" aria-hidden />
         </Link>
       }
@@ -47,7 +47,7 @@ export function RecentEntriesCard({ rows, period }: { rows: LedgerRow[]; period:
       ) : (
         <ul>
           {recent.map((row, index) => {
-            const income = row.kind === "revenue" || row.kind === "sale";
+            const income = row.inflow;
             const status = STATUS[row.status];
             const title = row.account ? `${row.groupLabel} › ${row.account}` : row.groupLabel;
             const detail = [row.counterparty ?? row.notes, row.lotName].filter(Boolean).join(" · ");

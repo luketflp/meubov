@@ -35,6 +35,7 @@ type UpdateBankAccountUseCaseResponse =
   | BankAccount
   | "invalid_pays_from"
   | "card_cannot_be_main"
+  | "investment_cannot_be_main"
   | "main_required"
   | "archived"
   | null;
@@ -60,7 +61,9 @@ export class UpdateBankAccountUseCase implements CurrUseCase {
       const [current] = await tx.select().from(bankAccounts).where(scope).limit(1).for("update");
       if (!current) return null;
       const card = current.kind === "card";
-      if (card && patch.isMain) return "card_cannot_be_main";
+      // Only a conta corrente or a caixa receives the vendas and compras of the manejos.
+      const mainable = current.kind === "checking" || current.kind === "cash";
+      if (!mainable && patch.isMain) return card ? "card_cannot_be_main" : "investment_cannot_be_main";
       if (current.isMain && patch.isMain === false) return "main_required";
       if (patch.isMain && !current.isMain && current.archivedAt !== null) return "archived";
       if (card && patch.paysFromId && patch.paysFromId !== current.paysFromId) {

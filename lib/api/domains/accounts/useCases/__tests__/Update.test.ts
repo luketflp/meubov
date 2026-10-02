@@ -46,7 +46,15 @@ vi.mock("@/lib/db", () => ({ db: { select: selectBuilder, update: updateBuilder 
 
 import { UpdateAccountUseCase } from "../Update.useCase";
 
-const ACCOUNT = { id: "acc-1", farmId: 7, group: "nutrition", name: "Sal mineral", archivedAt: null };
+const ACCOUNT = {
+  id: "acc-1",
+  farmId: 7,
+  group: "nutrition",
+  name: "Sal mineral",
+  archivedAt: null,
+  openingBalanceBrl: null,
+  openingDate: null,
+};
 
 beforeEach(() => {
   state.selectResults = [];
@@ -116,6 +124,35 @@ describe("updateAccount", () => {
     });
 
     expect(result).toBeNull();
+    expect(state.updates).toEqual([]);
+  });
+});
+
+describe("updateAccount — saldo devedor inicial", () => {
+  const PRONAF = { ...ACCOUNT, id: "acc-2", group: "financing", name: "Pronaf" };
+  const run = (patch: Parameters<UpdateAccountUseCase["run"]>[0]["patch"]) =>
+    new UpdateAccountUseCase().run({ farmId: 7, id: "acc-2", patch });
+
+  it("sets and clears it on a conta de financiamento", async () => {
+    state.selectResults = [[PRONAF]];
+    state.updateResults = [[{ ...PRONAF, openingBalanceBrl: 180000, openingDate: "2026-06-30" }]];
+
+    const result = await run({ openingBalanceBrl: 180000, openingDate: "2026-06-30" });
+
+    expect(state.updates).toEqual([{ openingBalanceBrl: 180000, openingDate: "2026-06-30" }]);
+    expect(result).toMatchObject({ openingBalanceBrl: 180000, openingDate: "2026-06-30" });
+
+    state.selectResults = [[{ ...PRONAF, openingBalanceBrl: 180000, openingDate: "2026-06-30" }]];
+    state.updateResults = [[PRONAF]];
+    await run({ openingBalanceBrl: null, openingDate: null });
+    expect(state.updates[1]).toEqual({ openingBalanceBrl: null, openingDate: null });
+  });
+
+  it("refuses half of it, and any of it outside financiamento", async () => {
+    state.selectResults = [[{ ...PRONAF, openingBalanceBrl: 180000, openingDate: "2026-06-30" }]];
+    expect(await run({ openingDate: null })).toBe("invalid_opening");
+    state.selectResults = [[ACCOUNT]];
+    expect(await run({ openingBalanceBrl: 500, openingDate: "2026-06-30" })).toBe("invalid_opening");
     expect(state.updates).toEqual([]);
   });
 });

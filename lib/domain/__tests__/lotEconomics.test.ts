@@ -196,6 +196,19 @@ describe("lotEconomics", () => {
     expect(farm.marginPerArroba).toBeCloseTo(QUOTE - 3400 / 9, 6);
   });
 
+  it("leaves money outside the resultado out of every lote and of the rateio", () => {
+    // The API stores no lote on these; a stray one still adds nothing.
+    const outside: Expense[] = [
+      expense({ id: "x-inv", kind: "investment", flow: "out", category: "other", lotId: "lot-a", amountBrl: 50000 }),
+      expense({ id: "x-fin", kind: "financing", flow: "out", category: "other", lotId: "lot-a", amountBrl: 4000 }),
+      expense({ id: "x-ret", kind: "partners", flow: "out", category: "other", lotId: "lot-b", amountBrl: 6000 }),
+      expense({ id: "x-yield", kind: "yield", category: "other", amountBrl: 312.5, paidAt: "2026-02-01" }),
+    ];
+    expect(lotEconomics({ ...input, expenses: [...expenses, ...outside] }, P, QUOTE, TODAY)).toEqual(
+      lotEconomics(input, P, QUOTE, TODAY)
+    );
+  });
+
   it("leaves margin null without a quote and shares nothing without heads", () => {
     expect(lotEconomics(input, P, null, TODAY).farm.marginPerArroba).toBeNull();
     const noHerd = lotEconomics({ ...input, animals: [], treatments: [] }, P, QUOTE, TODAY);

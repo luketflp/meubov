@@ -2,9 +2,9 @@
 
 /**
  * Financeiro: the owner's cockpit for the window in the URL (?de&ate) — caixa,
- * the eight indicators against their references and the year before, receita
- * × custo, mercado, composição, contas, custo por lote and the newest
- * lançamentos. Every figure follows the window.
+ * capital, dívidas e sócios, the eight indicators against their references and
+ * the year before, receita × custo, mercado, composição, contas, custo por
+ * lote and the newest lançamentos. Every figure follows the window.
  */
 import { Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -22,10 +22,12 @@ import {
 } from "@/lib/domain/economics";
 import { cashSummary, ledgerRows, pendingBills } from "@/lib/domain/ledger";
 import { lotEconomics } from "@/lib/domain/lotEconomics";
+import { capitalSummary } from "@/lib/domain/planTree";
 import { RequireAccess } from "@/components/layout/RequireAccess";
 import { FinanceHeader } from "@/components/finance/FinanceHeader";
 import { FinanceSubnav } from "@/components/finance/FinanceSubnav";
 import { CashStrip } from "@/components/finance/CashStrip";
+import { CapitalStrip } from "@/components/finance/CapitalStrip";
 import { Placar } from "@/components/finance/Placar";
 import { RevenueCostChart } from "@/components/finance/RevenueCostChart";
 import { MarketPanel } from "@/components/finance/MarketPanel";
@@ -68,6 +70,8 @@ function FinanceContent() {
   const invernadas = useHerdStore((s) => s.invernadas);
   const lots = useHerdStore((s) => s.lots);
   const accounts = useHerdStore((s) => s.accounts);
+  const bankAccounts = useHerdStore((s) => s.bankAccounts);
+  const transfers = useHerdStore((s) => s.transfers);
   // Live arroba quote; null price = every @-figure shows "—".
   const quote = useArrobaQuote();
   const today = todayISO();
@@ -118,6 +122,10 @@ function FinanceContent() {
     [expenses, treatments, period]
   );
   const bills = useMemo(() => pendingBills(expenses, today), [expenses, today]);
+  const capital = useMemo(
+    () => capitalSummary({ ...inputs, accounts, bankAccounts, transfers }, period, today),
+    [inputs, accounts, bankAccounts, transfers, period, today]
+  );
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 md:px-8">
@@ -134,6 +142,8 @@ function FinanceContent() {
       <FinanceSubnav current="painel" period={period} />
 
       <CashStrip cash={cash} />
+
+      <CapitalStrip summary={capital} period={period} resultBrl={ind.result} />
 
       <Placar ind={ind} deltas={deltas} quote={quote.price} />
 

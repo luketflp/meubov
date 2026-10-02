@@ -6,7 +6,9 @@ import { ArrowRight, Wallet } from "lucide-react";
 import type { Account, Expense, ExpenseCategory, Treatment } from "@/lib/types";
 import type { CostBreakdownSlice } from "@/lib/domain/economics";
 import { accountName } from "@/lib/domain/accounts";
+import { isCost } from "@/lib/domain/entries";
 import { inPeriod, periodSearch, type Period } from "@/lib/domain/period";
+import { nodeParam } from "@/lib/domain/planTree";
 import { EXPENSE_CATEGORY_LABEL } from "@/lib/domain/labels";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -42,7 +44,7 @@ function accountTotals(
 ): { label: string; amount: number }[] {
   const totals = new Map<string, number>();
   for (const expense of expenses) {
-    if (expense.kind === "revenue" || expense.category !== category) continue;
+    if (!isCost(expense) || expense.category !== category) continue;
     if (!inPeriod(expense.date, period)) continue;
     const label = accountName(expense.accountId, accounts) ?? "Sem conta";
     totals.set(label, (totals.get(label) ?? 0) + expense.amountBrl);
@@ -84,7 +86,11 @@ export function CostBreakdownCard({
     ? accountTotals(openSlice.category, expenses, treatments, accounts, period)
     : [];
 
-  const extratoHref = `/finance/extrato?${periodSearch(period)}${open ? `&grupo=${open}` : ""}`;
+  // The open grupo's nó, or the whole COE ("despesas") when every grupo is closed.
+  const lancamentosHref = `/finance/lancamentos?${periodSearch(period)}&conta=${nodeParam({
+    type: "group",
+    group: open ?? "expenses",
+  })}`;
 
   return (
     <SectionCard
@@ -92,10 +98,10 @@ export function CostBreakdownCard({
       subtitle={`COE ${formatCurrency(total)} · toque num grupo para abrir as contas`}
       action={
         <Link
-          href={extratoHref}
+          href={lancamentosHref}
           className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand hover:underline md:min-h-0"
         >
-          Ver extrato
+          Ver lançamentos
           <ArrowRight className="size-4" aria-hidden />
         </Link>
       }

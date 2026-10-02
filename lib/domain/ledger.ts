@@ -1,12 +1,14 @@
 /**
- * The Extrato: every line of money of the farm in a window — the lançamentos
+ * The ledger: every line of money of the farm in a window — the lançamentos
  * typed by hand plus the rows derived from the manejos (vendas, compras) and
- * from the treatments with cost, which are locked. Pure.
+ * from the treatments with cost, which are locked — with the caixa and the
+ * pending bills. Pure.
  */
 import type {
   Account,
   AccountGroup,
   Animal,
+  EntryKind,
   Expense,
   Lot,
   ManejoSession,
@@ -19,18 +21,22 @@ import { ACCOUNT_GROUP_LABEL, accountName } from "@/lib/domain/accounts";
 import { saleSummary } from "@/lib/domain/movements";
 import { KG_PER_ARROBA } from "@/lib/domain/weights";
 import { formatArroba } from "@/lib/domain/format";
+import { ENTRY_KIND_LABEL, entryGroup, isInflow } from "@/lib/domain/entries";
 
-export type LedgerKind = "expense" | "revenue" | "sale" | "purchase" | "treatment";
+export type LedgerKind = EntryKind | "sale" | "purchase" | "treatment";
 export type LedgerStatus = "paid" | "received" | "payable" | "receivable" | "overdue";
 
 export interface LedgerRow {
   /** Expense id | movement id | `treatment:${date}:${name}`. */
   id: string;
   kind: LedgerKind;
+  /** Money in: receitas, vendas, rendimentos and capital rows that enter. */
+  inflow: boolean;
   date: string;
   dueDate: string;
   paidAt: string | null;
   status: LedgerStatus;
+  /** The grupo of the plano; "capital" for what has none: compras de gado and rendimentos. */
   group: AccountGroup | "capital";
   groupLabel: string;
   account: string | null;
@@ -64,8 +70,12 @@ const KIND_ORDER: Record<LedgerKind, number> = {
   revenue: 0,
   sale: 1,
   expense: 2,
-  purchase: 3,
-  treatment: 4,
+  investment: 3,
+  financing: 4,
+  partners: 5,
+  yield: 6,
+  purchase: 7,
+  treatment: 8,
 };
 
 /** Vencimento: the due date, or the date when none was typed. */
@@ -73,10 +83,12 @@ export function effectiveDueDate(e: Expense): string {
   return e.dueDate ?? e.date;
 }
 
+/** Settled or pending by direction; a pending one past its vencimento is overdue either way. */
 function entryStatus(e: Expense, todayIso: string): LedgerStatus {
-  if (e.paidAt !== undefined) return e.kind === "revenue" ? "received" : "paid";
+  const inflow = isInflow(e);
+  if (e.paidAt !== undefined) return inflow ? "received" : "paid";
   if (effectiveDueDate(e) < todayIso) return "overdue";
-  return e.kind === "revenue" ? "receivable" : "payable";
+  return inflow ? "receivable" : "payable";
 }
 
 /** Most frequent value, the first one seen winning a tie; null when empty. */
@@ -118,17 +130,19 @@ export function ledgerRows(input: LedgerInputs, period: Period, todayIso: string
 
   for (const e of input.expenses) {
     if (!inPeriod(e.date, period)) continue;
-    const group: AccountGroup = e.kind === "revenue" ? "revenue" : e.category;
+    const group = entryGroup(e);
     const lotId = e.lotId ?? null;
     rows.push({
       id: e.id,
       kind: e.kind,
+      inflow: isInflow(e),
       date: e.date,
       dueDate: effectiveDueDate(e),
       paidAt: e.paidAt ?? null,
       status: entryStatus(e, todayIso),
-      group,
-      groupLabel: ACCOUNT_GROUP_LABEL[group],
+      // A rendimento sits in no grupo of the plano.
+      group: group ?? "capital",
+      groupLabel: group === null ? ENTRY_KIND_LABEL.yield : ACCOUNT_GROUP_LABEL[group],
       account: accountName(e.accountId, input.accounts),
       bankAccountId: e.bankAccountId ?? null,
       counterparty: e.counterparty ?? null,
@@ -161,13 +175,15 @@ export function ledgerRows(input: LedgerInputs, period: Period, todayIso: string
     rows.push({
       id: m.id,
       kind: sale ? "sale" : "purchase",
+      inflow: sale,
       date: m.date,
       dueDate: m.date,
       paidAt: m.date,
       status: sale ? "received" : "paid",
+      // A compra de gado is an investimento the manejos write: no conta of the plano.
       group: sale ? "revenue" : "capital",
-      groupLabel: sale ? ACCOUNT_GROUP_LABEL.revenue : "Capital",
-      account: null,
+      groupLabel: sale ? ACCOUNT_GROUP_LABEL.revenue : ACCOUNT_GROUP_LABEL.investment,
+      account: sale ? "Venda de gado" : "Compra de gado",
       bankAccountId: m.bankAccountId ?? null,
       counterparty: session
         ? session.counterparty?.trim() || null
@@ -198,6 +214,7 @@ export function ledgerRows(input: LedgerInputs, period: Period, todayIso: string
     rows.push({
       id,
       kind: "treatment",
+      inflow: false,
       date: day.date,
       dueDate: day.date,
       paidAt: day.date,
@@ -225,67 +242,6 @@ export function ledgerRows(input: LedgerInputs, period: Period, todayIso: string
   });
 }
 
-export interface LedgerFilter {
-  kind: LedgerKind | "all";
-  group: AccountGroup | "capital" | "all";
-  accountId: string | "all";
-  /** "farm": the rows without a lote. */
-  lotId: string | "farm" | "all";
-  status: LedgerStatus | "all";
-  search: string;
-}
-
-export const EMPTY_FILTER: LedgerFilter = {
-  kind: "all",
-  group: "all",
-  accountId: "all",
-  lotId: "all",
-  status: "all",
-  search: "",
-};
-
-/** Lower case without accents, so "Agrovét" finds "agrovet". */
-function fold(text: string): string {
-  return text
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-}
-
-/** The rows that pass every filter; the search looks at conta, quem, documento, notes and grupo. */
-export function filterLedger(rows: LedgerRow[], filter: LedgerFilter): LedgerRow[] {
-  const term = fold(filter.search.trim());
-  return rows.filter(
-    (r) =>
-      (filter.kind === "all" || r.kind === filter.kind) &&
-      (filter.group === "all" || r.group === filter.group) &&
-      (filter.accountId === "all" || r.expense?.accountId === filter.accountId) &&
-      (filter.lotId === "all" ||
-        (filter.lotId === "farm" ? r.lotId === null : r.lotId === filter.lotId)) &&
-      (filter.status === "all" || r.status === filter.status) &&
-      (term === "" ||
-        [r.account, r.counterparty, r.document, r.notes, r.groupLabel].some(
-          (text) => text !== null && fold(text).includes(term)
-        ))
-  );
-}
-
-/**
- * The Extrato's status choice: "a pagar" and "a receber" include their own
- * vencidas (an unpaid despesa or receita past due is "overdue"), and
- * "settled" is paid or received.
- */
-export function matchesStatusChoice(
-  row: Pick<LedgerRow, "kind" | "status">,
-  choice: LedgerStatus | "settled" | "all"
-): boolean {
-  if (choice === "all") return true;
-  if (choice === "settled") return row.status === "paid" || row.status === "received";
-  if (row.status === "overdue" && choice === "payable") return row.kind === "expense";
-  if (row.status === "overdue" && choice === "receivable") return row.kind === "revenue";
-  return row.status === choice;
-}
-
 export interface CashSummary {
   received: number;
   receivable: number;
@@ -300,8 +256,10 @@ export interface CashSummary {
 /**
  * Caixa do período: received and paid by payment day inside the window (priced
  * vendas, compras de gado and treatment costs by their date); a receber / a
- * pagar are the pending lançamentos of any date. Compras count as pago here,
- * though they stay capital (outside the COE) in the rows and `ledgerSummary`.
+ * pagar are the pending lançamentos of any date. Every kind counts by its
+ * direction: a liberação or an aporte is received, a parcela or a retirada
+ * paid, a rendimento received. Compras count as pago here, though they stay
+ * capital (outside the COE) in the rows.
  */
 export function cashSummary(
   input: Pick<LedgerInputs, "expenses" | "movements" | "treatments">,
@@ -319,19 +277,19 @@ export function cashSummary(
     balance: 0,
   };
   for (const e of input.expenses) {
-    const revenue = e.kind === "revenue";
+    const inflow = isInflow(e);
     if (e.paidAt === undefined) {
-      if (revenue) {
+      if (inflow) {
         s.receivable += e.amountBrl;
         s.receivableCount += 1;
       } else {
         s.payable += e.amountBrl;
         s.payableCount += 1;
       }
-      // Vencidas are despesas only; a late receita shows "venceu dd/mm" in A receber.
-      if (!revenue && effectiveDueDate(e) < todayIso) s.overdueCount += 1;
+      // Vencidas are outflows only; a late entrada shows "venceu dd/mm" in A receber.
+      if (!inflow && effectiveDueDate(e) < todayIso) s.overdueCount += 1;
     } else if (inPeriod(e.paidAt, period)) {
-      if (revenue) s.received += e.amountBrl;
+      if (inflow) s.received += e.amountBrl;
       else s.paid += e.amountBrl;
     }
   }
@@ -349,32 +307,7 @@ export function cashSummary(
   return s;
 }
 
-export interface LedgerSummary {
-  /** Receitas plus vendas. */
-  revenue: number;
-  /** Despesas plus treatments. */
-  coe: number;
-  sales: number;
-  /** Compras de gado: capital, outside the COE. */
-  purchases: number;
-  /** revenue − coe. */
-  result: number;
-}
-
-/** Totals of the rows given (the Extrato's summary strip). */
-export function ledgerSummary(rows: LedgerRow[]): LedgerSummary {
-  const s: LedgerSummary = { revenue: 0, coe: 0, sales: 0, purchases: 0, result: 0 };
-  for (const r of rows) {
-    if (r.kind === "revenue" || r.kind === "sale") s.revenue += r.amountBrl;
-    if (r.kind === "sale") s.sales += r.amountBrl;
-    if (r.kind === "expense" || r.kind === "treatment") s.coe += r.amountBrl;
-    if (r.kind === "purchase") s.purchases += r.amountBrl;
-  }
-  s.result = s.revenue - s.coe;
-  return s;
-}
-
-/** Pending despesas and receitas, oldest vencimento first, then by date. */
+/** Pending lançamentos of every kind by direction, oldest vencimento first, then by date. */
 export function pendingBills(
   expenses: Expense[],
   todayIso: string // eslint-disable-line @typescript-eslint/no-unused-vars -- contract signature; the caller colours overdue with it
@@ -386,7 +319,7 @@ export function pendingBills(
         effectiveDueDate(a).localeCompare(effectiveDueDate(b)) || a.date.localeCompare(b.date)
     );
   return {
-    payables: pending.filter((e) => e.kind === "expense"),
-    receivables: pending.filter((e) => e.kind === "revenue"),
+    payables: pending.filter((e) => !isInflow(e)),
+    receivables: pending.filter((e) => isInflow(e)),
   };
 }

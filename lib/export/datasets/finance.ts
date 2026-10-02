@@ -1,15 +1,16 @@
 /**
- * The Financeiro as tables: every despesa, the Extrato's rows, the Placar's
- * indicators beside the prior window and their references, and the Por lote
- * table.
+ * The Financeiro as tables: every despesa, the rows of a nó of Lançamentos,
+ * the Placar's indicators beside the prior window and their references, and
+ * the Por lote table.
  */
-import type { BankAccount, Category, Expense } from "@/lib/types";
-import type { LedgerKind, LedgerRow, LedgerStatus } from "@/lib/domain/ledger";
+import type { Category, Expense } from "@/lib/types";
+import type { LedgerStatus } from "@/lib/domain/ledger";
 import type { Indicators } from "@/lib/domain/economics";
 import type { LotEconomics } from "@/lib/domain/lotEconomics";
 import { benchmark, type BenchmarkKey } from "@/lib/domain/benchmarks";
 import { formatNumber } from "@/lib/domain/format";
 import { EXPENSE_CATEGORY_LABEL, pluralCategory } from "@/lib/domain/labels";
+import type { PaneRow } from "@/lib/domain/planTree";
 import { buildTable, type ExportTable } from "@/lib/export/table";
 
 /** The despesas newest first, the order of the Despesas list. */
@@ -17,7 +18,7 @@ export function expensesNewestFirst(expenses: readonly Expense[]): Expense[] {
   return [...expenses].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
 
-/** Every despesa, newest first; receitas lançadas are left out. */
+/** Every despesa, newest first; receitas and the kinds outside the resultado are left out. */
 export function expensesExportTable(expenses: readonly Expense[], title = "Despesas"): ExportTable {
   return buildTable(
     title,
@@ -37,14 +38,6 @@ export function pluralCategoryLabel(category: Category): string {
   return plural.charAt(0).toUpperCase() + plural.slice(1);
 }
 
-const LEDGER_KIND_LABEL: Record<LedgerKind, string> = {
-  expense: "Despesa",
-  revenue: "Receita",
-  sale: "Venda de gado",
-  purchase: "Compra de gado",
-  treatment: "Tratamento",
-};
-
 const LEDGER_STATUS_LABEL: Record<LedgerStatus, string> = {
   paid: "Pago",
   received: "Recebido",
@@ -53,28 +46,21 @@ const LEDGER_STATUS_LABEL: Record<LedgerStatus, string> = {
   overdue: "Vencido",
 };
 
-/** The Extrato's rows as given (already filtered and ordered), each with its conta bancária. */
-export function ledgerExportTable(
-  rows: readonly LedgerRow[],
-  bankAccounts: readonly BankAccount[] = [],
-  title = "Extrato"
-): ExportTable {
-  const bankName = new Map(bankAccounts.map((a) => [a.id, a.name]));
+/** The rows of a nó of Lançamentos as shown (filtered, newest first): value signed, saldo after each line when the nó keeps one. */
+export function paneExportTable(rows: readonly PaneRow[], title: string): ExportTable {
   return buildTable(
     title,
     [
       { header: "Data", kind: "date", value: (r) => r.date },
-      { header: "Vencimento", kind: "date", value: (r) => r.dueDate },
-      { header: "Pagamento", kind: "date", value: (r) => r.paidAt },
-      { header: "Tipo", value: (r) => LEDGER_KIND_LABEL[r.kind] },
-      { header: "Grupo", value: (r) => r.groupLabel },
-      { header: "Conta do plano", value: (r) => r.account },
-      { header: "Conta bancária", value: (r) => (r.bankAccountId ? (bankName.get(r.bankAccountId) ?? null) : null) },
-      { header: "Pago para / Recebido de", value: (r) => r.counterparty },
-      { header: "Documento", value: (r) => r.document },
-      { header: "Lote", value: (r) => r.lotName ?? "Fazenda" },
+      { header: "Histórico", value: (r) => r.history },
+      { header: "Detalhe", value: (r) => r.detail },
+      { header: "Contra partida", value: (r) => r.contra },
+      { header: "Grupo", value: (r) => r.contraGroup },
+      { header: "Vencimento", kind: "date", value: (r) => r.ledger?.dueDate ?? null },
+      { header: "Lote", value: (r) => (r.ledger ? (r.ledger.lotName ?? "Fazenda") : null) },
       { header: "Valor (R$)", kind: "money", value: (r) => r.amountBrl },
-      { header: "Status", value: (r) => LEDGER_STATUS_LABEL[r.status] },
+      { header: "Saldo (R$)", kind: "money", value: (r) => r.balance },
+      { header: "Status", value: (r) => (r.ledger ? LEDGER_STATUS_LABEL[r.ledger.status] : null) },
     ],
     rows
   );

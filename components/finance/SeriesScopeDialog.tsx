@@ -8,6 +8,7 @@
 import { useState } from "react";
 import type { Expense, SeriesScope } from "@/lib/types";
 import { ACCOUNT_GROUP_LABEL, accountName } from "@/lib/domain/accounts";
+import { ENTRY_KIND_LABEL, entryGroup } from "@/lib/domain/entries";
 import { formatDate } from "@/lib/domain/dates";
 import { formatCurrency } from "@/lib/domain/format";
 import { effectiveDueDate } from "@/lib/domain/ledger";
@@ -56,8 +57,9 @@ export function SeriesScopeDialog({
   const unpaid = rows.filter((e) => !e.paidAt).length;
   const firstDue = rows.map(effectiveDueDate).sort()[0] ?? effectiveDueDate(expense);
   const due = effectiveDueDate(expense);
-  const group = expense.kind === "revenue" ? "revenue" : expense.category;
-  const name = [accountName(expense.accountId, accounts) ?? ACCOUNT_GROUP_LABEL[group], expense.counterparty]
+  const group = entryGroup(expense);
+  const groupLabel = group ? ACCOUNT_GROUP_LABEL[group] : ENTRY_KIND_LABEL.yield;
+  const name = [accountName(expense.accountId, accounts) ?? groupLabel, expense.counterparty]
     .filter(Boolean)
     .join(" · ");
   const items = recurring ? "contas" : "parcelas";

@@ -2,14 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   expensesExportTable,
   indicatorsExportTable,
-  ledgerExportTable,
   lotsEconomicsExportTable,
 } from "@/lib/export/datasets/finance";
 import { withoutMoney } from "@/lib/export/table";
 import type { Indicators } from "@/lib/domain/economics";
-import type { LedgerRow } from "@/lib/domain/ledger";
 import type { LotEconomics } from "@/lib/domain/lotEconomics";
-import type { BankAccount, Expense } from "@/lib/types";
+import type { Expense } from "@/lib/types";
 
 describe("expensesExportTable", () => {
   it("writes every despesa newest first, value as money", () => {
@@ -42,115 +40,14 @@ describe("expensesExportTable with receitas", () => {
   });
 });
 
-const baseRow: LedgerRow = {
-  id: "e1",
-  kind: "expense",
-  date: "2026-08-10",
-  dueDate: "2026-08-20",
-  paidAt: null,
-  status: "payable",
-  group: "health",
-  groupLabel: "Sanidade",
-  account: "Vacinas",
-  bankAccountId: null,
-  counterparty: "Agrovet Uberaba",
-  document: "NF 4.812",
-  lotId: "lot1",
-  lotName: "Recria 2",
-  amountBrl: 3240,
-  notes: null,
-  locked: false,
-  headCount: null,
-  expense: null,
-};
-
-describe("ledgerExportTable", () => {
-  it("writes the Extrato's columns with dates as ISO and Valor as money", () => {
-    const table = ledgerExportTable([baseRow]);
-    expect(table.title).toBe("Extrato");
-    expect(table.columns.map((c) => [c.header, c.kind])).toEqual([
-      ["Data", "date"],
-      ["Vencimento", "date"],
-      ["Pagamento", "date"],
-      ["Tipo", undefined],
-      ["Grupo", undefined],
-      ["Conta do plano", undefined],
-      ["Conta bancária", undefined],
-      ["Pago para / Recebido de", undefined],
-      ["Documento", undefined],
-      ["Lote", undefined],
-      ["Valor (R$)", "money"],
-      ["Status", undefined],
+describe("expensesExportTable with money outside the resultado", () => {
+  it("leaves investimentos and rendimentos out of the Despesas sheet", () => {
+    const table = expensesExportTable([
+      { id: "e1", kind: "expense", date: "2026-01-05", category: "nutrition", amountBrl: 100 },
+      { id: "i1", kind: "investment", flow: "out", date: "2026-02-05", category: "other", amountBrl: 50000 },
+      { id: "y1", kind: "yield", date: "2026-02-06", category: "other", amountBrl: 312.5, paidAt: "2026-02-06" },
     ]);
-    expect(table.rows).toEqual([
-      [
-        "2026-08-10",
-        "2026-08-20",
-        null,
-        "Despesa",
-        "Sanidade",
-        "Vacinas",
-        null,
-        "Agrovet Uberaba",
-        "NF 4.812",
-        "Recria 2",
-        3240,
-        "A pagar",
-      ],
-    ]);
-  });
-
-  it("keeps a receita's value positive and names it in Tipo and Status", () => {
-    const receita: LedgerRow = {
-      ...baseRow,
-      id: "e2",
-      kind: "revenue",
-      paidAt: "2026-08-12",
-      status: "received",
-      group: "revenue",
-      groupLabel: "Receitas",
-      account: "Aluguel de pasto",
-      lotId: null,
-      lotName: null,
-      amountBrl: 1800,
-    };
-    const [row] = ledgerExportTable([receita]).rows;
-    expect(row[2]).toBe("2026-08-12");
-    expect(row[3]).toBe("Receita");
-    expect(row[9]).toBe("Fazenda");
-    expect(row[10]).toBe(1800);
-    expect(row[11]).toBe("Recebido");
-  });
-
-  it("names a derived venda and an overdue despesa", () => {
-    const rows = ledgerExportTable([
-      { ...baseRow, id: "m1", kind: "sale", status: "received", group: "revenue", groupLabel: "Receitas", locked: true },
-      { ...baseRow, id: "e3", status: "overdue" },
-    ]).rows;
-    expect(rows.map((r) => [r[3], r[11]])).toEqual([
-      ["Venda de gado", "Recebido"],
-      ["Despesa", "Vencido"],
-    ]);
-  });
-
-  it("drops Valor when money is hidden", () => {
-    const table = withoutMoney(ledgerExportTable([baseRow]), false);
-    expect(table.columns.map((c) => c.header)).not.toContain("Valor (R$)");
-    expect(table.rows[0]).toHaveLength(11);
-  });
-
-  it("names the conta bancária a row went through", () => {
-    const sicredi: BankAccount = {
-      id: "b-1",
-      kind: "checking",
-      name: "Sicredi",
-      openingBalanceBrl: 0,
-      openingDate: "2026-08-31",
-      isMain: true,
-      pendingLines: 0,
-    };
-    const [row] = ledgerExportTable([{ ...baseRow, bankAccountId: "b-1" }], [sicredi]).rows;
-    expect(row[6]).toBe("Sicredi");
+    expect(table.rows).toEqual([["2026-01-05", "Nutrição", null, 100]]);
   });
 });
 

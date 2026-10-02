@@ -15,6 +15,7 @@ import { isUniqueViolation } from "@/lib/api/dbErrors";
 import { toExpense, toStatementLine, toTransfer } from "@/lib/api/mappers";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
 import { AddExpenseUseCase } from "@/lib/api/domains/expenses/useCases/Add.useCase";
+import { entryFlow } from "@/lib/domain/entries";
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
 import type { Expense, StatementLine, Transfer } from "@/lib/types";
@@ -59,8 +60,8 @@ export interface Resolved {
  * `same_account`: a transferência to the line's own conta; `card_from`: an
  * entrada from a cartão (a cartão only receives its fatura); `amount_differs`:
  * a paid lançamento, a venda/compra or a transferência worth another value
- * than the line; `due_before_date` and `invalid_bank_account`: the lançamento
- * "Criar lançamento" sent.
+ * than the line; `due_before_date`, `invalid_account` and
+ * `invalid_bank_account`: the lançamento "Criar lançamento" sent.
  */
 export type ResolveRefusal =
   | "not_found"
@@ -73,6 +74,7 @@ export type ResolveRefusal =
   | "card_from"
   | "amount_differs"
   | "due_before_date"
+  | "invalid_account"
   | "invalid_bank_account";
 
 interface ResolveLineUseCaseProps {
@@ -207,7 +209,7 @@ export async function resolve(
     const where = and(eq(expenses.farmId, farmId), eq(expenses.id, target.id));
     const [expense] = await tx.select().from(expenses).where(where).limit(1).for("update");
     if (!expense) throw new Refused("target_not_found");
-    if ((expense.kind === "expense") !== outflow) throw new Refused("wrong_side");
+    if ((entryFlow(expense) === "out") !== outflow) throw new Refused("wrong_side");
     if (expense.bankAccountId !== null && expense.bankAccountId !== line.bankAccountId) {
       throw new Refused("paid_by_other");
     }

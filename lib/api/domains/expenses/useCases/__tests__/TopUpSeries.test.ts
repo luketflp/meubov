@@ -86,6 +86,16 @@ describe("topUpSeries", () => {
     expect(state.updates).toEqual([]);
   });
 
+  it("writes the série's kind and movimento on each new row", async () => {
+    const pronaf = { ...SALARIO, kind: "financing", flow: "out", category: "other", accountId: "acc-pronaf" };
+    state.selectResults = [[pronaf], [pronaf]];
+
+    await new TopUpSeriesUseCase().run({ farmId: 7, todayIso: "2026-11-10" });
+
+    const rows = state.inserts[0] as Record<string, unknown>[];
+    expect(rows[0]).toMatchObject({ kind: "financing", flow: "out", category: "other", accountId: "acc-pronaf" });
+  });
+
   it("stops at até", async () => {
     state.selectResults = [[{ ...SALARIO, endsOn: "2027-09-30" }]];
 

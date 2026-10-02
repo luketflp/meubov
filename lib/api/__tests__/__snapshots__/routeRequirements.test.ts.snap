@@ -273,6 +273,11 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
       "finance",
     ],
   },
+  "POST /api/herd/expenses/:id/split": {
+    "edit": [
+      "finance",
+    ],
+  },
   "POST /api/herd/farm/invites": {
     "edit": [
       "team",

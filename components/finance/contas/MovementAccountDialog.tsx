@@ -39,6 +39,7 @@ export function MovementAccountDialog({
   const { addToast } = useToast();
   const [value, setValue] = useState(row.bankAccountId ?? NONE);
   const [busy, setBusy] = useState(false);
+  // A venda or compra de gado moves through a conta corrente or the caixa, as a receita does: never a cartão or an aplicação.
   const options = payingAccounts(bankAccounts, "revenue");
   const current = bankAccounts.find((a) => a.id === row.bankAccountId);
   const shown = current && !options.includes(current) ? [...options, current] : options;

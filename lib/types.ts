@@ -386,20 +386,32 @@ export type ExpenseCategory =
   | "admin"
   | "other";
 
-/** Whether a lançamento is money out (despesa) or money in (receita). */
-export type EntryKind = "expense" | "revenue";
+/**
+ * What the money of a lançamento is. Despesa and receita make the resultado;
+ * investimento, financiamento and sócios move money outside it, each with a
+ * `flow`; a rendimento is what an aplicação earned.
+ */
+export type EntryKind = "expense" | "revenue" | "investment" | "financing" | "partners" | "yield";
+
+/** Direction of a lançamento: money in or out of the conta bancária. */
+export type EntryFlow = "in" | "out";
+
+/** The three groups outside the resultado that hold contas do plano. */
+export type CapitalGroup = "investment" | "financing" | "partners";
 
 /**
- * One line of money the farm typed: a despesa or a receita ("lançamento").
- * The table stays `expenses`; vendas, compras and treatment costs are not
- * lançamentos, they derive from the manejos.
+ * One line of money the farm typed ("lançamento"): a despesa, a receita, or
+ * money outside the resultado. The table stays `expenses`; vendas, compras and
+ * treatment costs are not lançamentos, they derive from the manejos.
  */
 export interface Expense {
   id: string;
   kind: EntryKind;
+  /** Movimento of an investment, financing or partners row; absent on the others. */
+  flow?: EntryFlow;
   /** Competência. */
   date: string;
-  /** Grupo; a receita writes "other" and nothing reads it. */
+  /** Grupo of a despesa; the other kinds write "other" and nothing reads it. */
   category: ExpenseCategory;
   amountBrl: number;
   notes?: string;
@@ -468,8 +480,8 @@ export interface Attachment {
   createdAt: string;
 }
 
-/** Grupo of a conta: the seven expense categories plus receitas. */
-export type AccountGroup = ExpenseCategory | "revenue";
+/** Grupo of a conta: receitas, the seven expense categories and the three outside the resultado. */
+export type AccountGroup = ExpenseCategory | "revenue" | CapitalGroup;
 
 /** A farm-defined conta inside a grupo ("Sal mineral" in Nutrição). */
 export interface Account {
@@ -478,10 +490,13 @@ export interface Account {
   name: string;
   /** ISO timestamp; an archived conta leaves the form and keeps its history. */
   archivedAt?: string;
+  /** Financing only: saldo devedor at the end of `openingDate`. */
+  openingBalanceBrl?: number;
+  openingDate?: string;
 }
 
-/** Conta corrente (takes extratos), caixa (cash) or cartão de crédito. */
-export type BankAccountKind = "checking" | "cash" | "card";
+/** Conta corrente (takes extratos), caixa (cash), cartão de crédito or aplicação. */
+export type BankAccountKind = "checking" | "cash" | "card" | "investment";
 
 /** How the columns of a bank's CSV map to a linha do extrato; stored on the conta. */
 export interface CsvMapping {

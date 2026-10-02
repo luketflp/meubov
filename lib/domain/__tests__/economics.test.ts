@@ -317,6 +317,30 @@ describe("coe and periodRevenue", () => {
   });
 });
 
+/** Money outside the resultado, inside the window and inside the last 12 months. */
+const outsideResult: Expense[] = [
+  expense({ id: "x-trator", kind: "investment", flow: "out", category: "other", date: "2026-06-05", amountBrl: 50000, paidAt: "2026-06-05" }),
+  expense({ id: "x-parcela", kind: "financing", flow: "out", category: "other", date: "2026-06-10", amountBrl: 4000 }),
+  expense({ id: "x-retirada", kind: "partners", flow: "out", category: "other", date: "2026-06-12", amountBrl: 6000, paidAt: "2026-06-12" }),
+  expense({ id: "x-rendimento", kind: "yield", category: "other", date: "2026-06-30", amountBrl: 312.5, paidAt: "2026-06-30", bankAccountId: "aplic" }),
+];
+const withOutside = [...expenses, ...outsideResult];
+
+describe("money outside the resultado", () => {
+  it("changes neither the COE, the receita nor the Placar", () => {
+    expect(coe(withOutside, treatments, P)).toBe(4050);
+    expect(periodRevenue(withOutside, movements, P)).toEqual({ total: 9500, sales: 9000, other: 500 });
+    expect(indicators({ ...input, expenses: withOutside }, P, 300, TODAY)).toEqual(indicators(input, P, 300, TODAY));
+  });
+
+  it("changes neither the monthly series nor the composição", () => {
+    expect(monthlyRevenueCost(movements, treatments, withOutside, 6, REF)).toEqual(
+      monthlyRevenueCost(movements, treatments, expenses, 6, REF)
+    );
+    expect(costBreakdown(withOutside, treatments, 12, REF)).toEqual(costBreakdown(expenses, treatments, 12, REF));
+  });
+});
+
 describe("arrobasSold", () => {
   it("uses the chute weight, falls back to the last weighing and counts the unweighed", () => {
     // E: 480 kg × 50% ÷ 15 = 16 @; F: 420 kg × 50% ÷ 15 = 14 @; G: none; H was refugo.

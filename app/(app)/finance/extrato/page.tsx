@@ -1,16 +1,12 @@
-"use client";
+import { redirect } from "next/navigation";
+import { legacySearch } from "@/components/finance/lancamentos/legacySearch";
 
-import { Suspense } from "react";
-import { RequireAccess } from "@/components/layout/RequireAccess";
-import { ExtratoPage } from "@/components/finance/extrato/ExtratoPage";
-
-// The filters live in the URL query, which useSearchParams reads inside a Suspense boundary.
-export default function ExtratoRoute() {
-  return (
-    <RequireAccess area="finance" level="view">
-      <Suspense fallback={null}>
-        <ExtratoPage />
-      </Suspense>
-    </RequireAccess>
-  );
+/** The old Extrato: its links and bookmarks land on Lançamentos with the same window and filters. */
+export default async function ExtratoRedirect({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const query = legacySearch(await searchParams);
+  redirect(query ? `/finance/lancamentos?${query}` : "/finance/lancamentos");
 }

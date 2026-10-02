@@ -231,6 +231,7 @@ export function toExpense(
   return {
     id: row.id,
     kind: row.kind,
+    flow: orNothing(row.flow),
     date: row.date,
     category: row.category,
     amountBrl: row.amountBrl,
@@ -268,6 +269,8 @@ export function toAccount(row: FarmAccountRow): Account {
     group: row.group,
     name: row.name,
     archivedAt: row.archivedAt?.toISOString(),
+    openingBalanceBrl: orNothing(row.openingBalanceBrl),
+    openingDate: orNothing(row.openingDate),
   };
 }
 

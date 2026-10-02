@@ -18,7 +18,7 @@ import { formatKg } from "@/lib/domain/format";
 import { useToast } from "@/components/providers/Toasts";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { BOTTOM_SHEET } from "@/components/finance/extrato/ExtratoFilters";
+import { BOTTOM_SHEET } from "@/components/ui/bottom-sheet";
 import { clock, OpRow, opAction, PILL } from "@/components/offline/QueuedPassesList";
 import { cn } from "@/lib/utils";
 

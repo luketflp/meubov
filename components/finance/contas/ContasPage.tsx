@@ -1,13 +1,14 @@
 "use client";
 
 /**
- * /finance/contas: how much money the farm has in each conta today, what is
- * owed on each cartão, and the movimentação of the conta picked.
+ * /finance/contas: how much money the farm has in each conta and aplicação
+ * today, what is owed on each cartão, and the movimentação of the conta
+ * picked. An aplicação earns by "Lançar rendimento" and takes no extrato.
  * The window (?de&ate) follows the Financeiro sub-navigation.
  */
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeftRight, Landmark, Plus, Upload } from "lucide-react";
+import { ArrowLeftRight, Landmark, Plus, TrendingUp, Upload } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
 import { accountBalance, bankTotal, faturaOf } from "@/lib/domain/bankAccounts";
@@ -17,6 +18,7 @@ import { periodFromSearch, periodSearch, type Period } from "@/lib/domain/period
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
 import { FinanceSubnav } from "@/components/finance/FinanceSubnav";
+import { EntryDialog } from "@/components/finance/EntryDialog";
 import { AccountCard } from "@/components/finance/contas/AccountCard";
 import { AccountMovements } from "@/components/finance/contas/AccountMovements";
 import { BankAccountDialog } from "@/components/finance/contas/BankAccountDialog";
@@ -40,7 +42,7 @@ export function ContasPage() {
 
   const [showArchived, setShowArchived] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<"new" | "edit" | "transfer" | "import" | null>(null);
+  const [dialog, setDialog] = useState<"new" | "edit" | "transfer" | "import" | "yield" | null>(null);
 
   const inputs = useMemo(() => ({ expenses, movements, transfers }), [expenses, movements, transfers]);
   const active = bankAccounts.filter((a) => a.archivedAt === undefined);
@@ -50,7 +52,9 @@ export function ContasPage() {
   );
   const selected = shown.find((a) => a.id === selectedId) ?? shown[0];
   const total = bankTotal(bankAccounts, inputs, today);
-  const holding = active.filter((a) => a.kind !== "card").length;
+  // "Saldo em contas" (bankTotal) takes contas correntes, caixas and aplicações; cartões stay out.
+  const holding = active.filter((a) => a.kind === "checking" || a.kind === "cash").length;
+  const applications = active.filter((a) => a.kind === "investment").length;
 
   const header = (
     <PageHeader
@@ -86,7 +90,7 @@ export function ContasPage() {
           <EmptyState
             icon={Landmark}
             title="Cadastre a primeira conta"
-            description="A conta do banco, o caixa em dinheiro e o cartão: o saldo de cada uma aparece aqui e o extrato do banco confere os lançamentos."
+            description="A conta do banco, o caixa em dinheiro, o cartão e a aplicação: o saldo de cada uma aparece aqui e o extrato do banco confere os lançamentos."
             className="pb-4"
           />
           {canEdit ? (
@@ -105,7 +109,11 @@ export function ContasPage() {
                 <p className="mt-0.5 font-mono text-[22px] font-medium text-ink md:text-2xl">{formatCurrency(total)}</p>
               </div>
               <p className="text-xs text-ink-soft">
-                {formatNumber(holding)} {holding === 1 ? "conta" : "contas"} · a fatura do cartão fica fora do saldo até ser paga
+                {formatNumber(holding)} {holding === 1 ? "conta" : "contas"}
+                {applications > 0
+                  ? ` e ${formatNumber(applications)} ${applications === 1 ? "aplicação" : "aplicações"}`
+                  : null}{" "}
+                · a fatura do cartão fica fora do saldo até ser paga
               </p>
             </div>
             <div role="group" aria-label="Contas" className="grid grid-cols-1 gap-2 md:grid-cols-2 md:gap-3 lg:grid-cols-4">
@@ -140,7 +148,7 @@ export function ContasPage() {
               canEdit={canEdit}
               onEdit={() => setDialog("edit")}
               action={
-                canEdit && selected.kind === "checking" && selected.archivedAt === undefined ? (
+                !canEdit || selected.archivedAt !== undefined ? undefined : selected.kind === "checking" ? (
                   <Button
                     variant="outline"
                     size="sm"
@@ -151,6 +159,18 @@ export function ContasPage() {
                     <Upload aria-hidden />
                     {/* The phone keeps the card's title readable: the icon says it. */}
                     <span className="hidden sm:inline">Importar extrato (OFX/CSV)</span>
+                  </Button>
+                ) : selected.kind === "investment" ? (
+                  // An aplicação has no extrato: it earns by rendimento.
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-h-11 md:min-h-8"
+                    aria-label="Lançar rendimento"
+                    onClick={() => setDialog("yield")}
+                  >
+                    <TrendingUp aria-hidden />
+                    <span className="hidden sm:inline">Lançar rendimento</span>
                   </Button>
                 ) : undefined
               }
@@ -168,6 +188,9 @@ export function ContasPage() {
       ) : null}
       {dialog === "transfer" ? (
         <TransferDialog open onOpenChange={() => setDialog(null)} defaultFromId={selected?.id} />
+      ) : null}
+      {dialog === "yield" && selected ? (
+        <EntryDialog open onOpenChange={() => setDialog(null)} initial={{ kind: "yield", bankAccountId: selected.id }} />
       ) : null}
     </div>
   );

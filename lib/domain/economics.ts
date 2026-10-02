@@ -5,9 +5,10 @@
  *
  * Conventions:
  * - Windows are inclusive ISO dates. Competência uses `date`.
- * - Revenue = priced sale movements + receitas lançadas (`kind: "revenue"`).
+ * - Revenue = priced sale movements + receitas lançadas (`isRevenue`).
  *   Purchases are capital, never cost.
- * - COE = despesas (`kind: "expense"`, paid or not) + DONE treatments' `costBrl`.
+ * - COE = despesas (`isCost`, paid or not) + DONE treatments' `costBrl`.
+ * - Investimentos, financiamentos, sócios and rendimentos are neither.
  * - Arrobas sold are carcass arrobas (kg × rendimento ÷ 15); bought and herd
  *   arrobas are live (kg ÷ 30).
  * - Every indicator returns `number | null`; null means "insufficient data"
@@ -29,6 +30,7 @@ import { passYieldPct } from "@/lib/domain/movements";
 import { periodAdg } from "@/lib/domain/adg";
 import { herdValue, type Period } from "@/lib/domain/finance";
 import { annualise, inPeriod, periodDays } from "@/lib/domain/period";
+import { isCost, isRevenue } from "@/lib/domain/entries";
 import type { FarmSystem } from "@/lib/domain/benchmarks";
 import { activeAnimals, herdStockingRateAuPerHa } from "@/lib/store/selectors";
 
@@ -77,12 +79,10 @@ const isPricedSale = (m: Movement): m is Movement & { amountBrl: number } =>
 const isCostedTreatment = (t: Treatment): t is Treatment & { costBrl: number } =>
   t.status === "done" && t.costBrl !== undefined;
 
-const isRevenue = (e: Expense): boolean => e.kind === "revenue";
-
 /**
  * Consolidated revenue × cost of the last `months` calendar months ending at
- * refIso's month. Receitas lançadas add to revenue and never to cost. Months
- * without records stay at zero.
+ * refIso's month. Receitas lançadas add to revenue, despesas to cost, the
+ * kinds outside the resultado to neither. Months without records stay at zero.
  */
 export function monthlyRevenueCost(
   movements: Movement[],
@@ -114,7 +114,7 @@ export function monthlyRevenueCost(
     const bucket = buckets.get(e.date.slice(0, 7));
     if (!bucket) continue;
     if (isRevenue(e)) bucket.revenue += e.amountBrl;
-    else bucket.cost += e.amountBrl;
+    else if (isCost(e)) bucket.cost += e.amountBrl;
   }
   for (const t of treatments) {
     if (!isCostedTreatment(t)) continue;
@@ -125,8 +125,8 @@ export function monthlyRevenueCost(
 }
 
 /**
- * Cost split by category between two ISO dates (both inclusive). Done
- * treatments' costs land in the "health" bucket; receitas are skipped. Zero
+ * Cost split by category between two ISO dates (both inclusive): the
+ * despesas, and the done treatments' costs in the "health" bucket. Zero
  * slices are dropped; empty array when there is no cost at all.
  */
 export function costBreakdownBetween(
@@ -141,7 +141,7 @@ export function costBreakdownBetween(
   };
 
   for (const e of expenses) {
-    if (!isRevenue(e) && e.date >= startIso && e.date <= endIso) add(e.category, e.amountBrl);
+    if (isCost(e) && e.date >= startIso && e.date <= endIso) add(e.category, e.amountBrl);
   }
   for (const t of treatments) {
     if (isCostedTreatment(t) && t.date >= startIso && t.date <= endIso) {
@@ -175,7 +175,7 @@ export function costBreakdown(
 export function coe(expenses: Expense[], treatments: Treatment[], period: Period): number {
   let total = 0;
   for (const e of expenses) {
-    if (!isRevenue(e) && inPeriod(e.date, period)) total += e.amountBrl;
+    if (isCost(e) && inPeriod(e.date, period)) total += e.amountBrl;
   }
   for (const t of treatments) {
     if (isCostedTreatment(t) && inPeriod(t.date, period)) total += t.costBrl;

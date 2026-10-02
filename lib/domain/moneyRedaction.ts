@@ -6,6 +6,7 @@
  * `carcassYieldPct` is a percentage, not money, and stays.
  */
 import type {
+  Account,
   HerdData,
   ManejoKind,
   ManejoSession,
@@ -141,9 +142,15 @@ export function redactSemenBull(bull: SemenBull): SemenBull {
   return { ...bull, purchases: bull.purchases.map(redactSemenPurchase) };
 }
 
+/** A financiamento's saldo inicial and its date; the conta's name carries no money. */
+function redactAccount(account: Account): Account {
+  return without(without(account, "openingBalanceBrl"), "openingDate");
+}
+
 export function redactHerdMoney(data: HerdData): HerdData {
   return {
     ...data,
+    accounts: data.accounts.map(redactAccount),
     treatments: data.treatments.map(redactTreatment),
     manejoSessions: data.manejoSessions.map(redactManejoSession),
     movements: data.movements.map(redactMovement),

@@ -231,6 +231,10 @@ const SEED_ACCOUNTS: readonly Account[] = [
   { id: "acc-admin-manutencao", group: "admin", name: "Manutenção" },
   { id: "acc-admin-impostos-e-taxas", group: "admin", name: "Impostos e taxas" },
   { id: "acc-admin-contabilidade", group: "admin", name: "Contabilidade" },
+  { id: "acc-investment-benfeitorias", group: "investment", name: "Benfeitorias" },
+  { id: "acc-investment-maquinas-e-implementos", group: "investment", name: "Máquinas e implementos" },
+  { id: "acc-investment-equipamentos", group: "investment", name: "Equipamentos" },
+  { id: "acc-partners-distribuicao-de-lucro", group: "partners", name: "Distribuição de lucro" },
 ];
 
 /** A despesa paid on its own date: kind and paidAt are filled by buildExpenses. */

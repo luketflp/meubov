@@ -158,6 +158,24 @@ describe("suggestMatches", () => {
     ]);
   });
 
+  it("puts a lançamento on the side of its direction, whatever its kind", () => {
+    const capital = (id: string, patch: Partial<Expense>) =>
+      expense(id, { category: "other", dueDate: "2026-09-22", amountBrl: 80000, ...patch });
+    const list = candidates([
+      capital("liberacao", { kind: "financing", flow: "in" }),
+      capital("parcela", { kind: "financing", flow: "out" }),
+      capital("aporte", { kind: "partners", flow: "in" }),
+      // No flow: a compra.
+      capital("trator", { kind: "investment" }),
+    ]);
+    const map = suggestMatches(
+      [line("in", "2026-09-22", "TED RECEBIDA", 80000), line("out", "2026-09-22", "PAGTO", -80000)],
+      list
+    );
+    expect(map.get("in")?.map((s) => s.candidate.target.id)).toEqual(["liberacao", "aporte"]);
+    expect(map.get("out")?.map((s) => s.candidate.target.id)).toEqual(["parcela", "trator"]);
+  });
+
   it("pairs entradas with receitas, vendas and transferências in; skips resolved lines", () => {
     const list = candidates(
       [],

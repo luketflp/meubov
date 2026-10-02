@@ -247,7 +247,8 @@ export function RepeatSection({
   );
 }
 
-function InstallmentPreview({ repeat, amount }: { repeat: SeriesRepeat; amount: number }) {
+/** The parcelas with their vencimentos and values; Parcelar shows the same list. */
+export function InstallmentPreview({ repeat, amount }: { repeat: SeriesRepeat; amount: number }) {
   const count = repeat.count ?? 0;
   const typed = Number.isFinite(amount) && amount > 0;
   const total = typed ? amount : 0;

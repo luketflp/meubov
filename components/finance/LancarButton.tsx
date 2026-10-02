@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import type { EntryKind } from "@/lib/types";
+import type { EntryInitial } from "@/lib/domain/planTree";
 import { useCan } from "@/lib/store/usePermissions";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -14,11 +15,14 @@ export function LancarButton({
   className,
   defaultKind = "expense",
   variant = "default",
+  initial,
 }: {
   size?: "sm" | "default";
   className?: string;
   defaultKind?: EntryKind;
   variant?: "default" | "outline" | "ghost";
+  /** "Novo" on a picked nó of Lançamentos. */
+  initial?: EntryInitial;
 }) {
   const canEdit = useCan("finance", "edit");
   const [open, setOpen] = useState(false);
@@ -35,7 +39,7 @@ export function LancarButton({
         <Plus data-icon="inline-start" aria-hidden />
         Lançar
       </Button>
-      <EntryDialog open={open} onOpenChange={setOpen} defaultKind={defaultKind} />
+      <EntryDialog open={open} onOpenChange={setOpen} defaultKind={defaultKind} initial={initial} />
     </>
   );
 }

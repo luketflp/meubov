@@ -5,6 +5,7 @@ import { expenseSeries, expenses } from "@/lib/db/schema";
 import { toExpense } from "@/lib/api/mappers";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
 import { isPayingAccount } from "@/lib/api/domains/bankAccounts/payingAccount";
+import { normaliseEntry } from "@/lib/api/domains/expenses/entryRules";
 import { parseISODate } from "@/lib/domain/dates";
 import {
   addMonths,
@@ -17,12 +18,14 @@ import {
 } from "@/lib/domain/series";
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
-import type { EntryKind, Expense, ExpenseCategory, SeriesRepeat } from "@/lib/types";
+import type { EntryFlow, EntryKind, Expense, ExpenseCategory, SeriesRepeat } from "@/lib/types";
 
 interface AddSeriesUseCaseProps {
   farmId: number;
   todayIso: string;
   kind?: EntryKind;
+  /** Movimento of an investment, financing or partners série; absent = saída. */
+  flow?: EntryFlow;
   /** Competência of every parcela; a recorrência ignores it (each ocorrência is its own). */
   date: string;
   category: ExpenseCategory;
@@ -41,26 +44,31 @@ interface AddSeriesUseCaseProps {
 }
 
 /**
- * `due_before_date` when the first parcela falls before the purchase;
- * `invalid_repeat` when a parcelamento has no valid count (2–48, at least a
- * centavo each), a recorrência ends before it starts, or nothing falls in the
- * window; `starts_too_old` when a recorrência starts more than 12 months ago.
+ * - `due_before_date`: the first parcela falls before the purchase.
+ * - `invalid_repeat`: a parcelamento has no valid count (2–48, at least a
+ *   centavo each), a recorrência ends before it starts, nothing falls in the
+ *   window, or it is a rendimento.
+ * - `starts_too_old`: a recorrência starts more than 12 months ago.
+ * - `invalid_account` and `invalid_bank_account`: as for one lançamento
+ *   (normaliseEntry, isPayingAccount).
  */
 type AddSeriesUseCaseResponse =
   | Expense[]
   | "due_before_date"
   | "invalid_repeat"
   | "starts_too_old"
+  | "invalid_account"
   | "invalid_bank_account";
 
 type CurrUseCase = _UseCase<AddSeriesUseCaseProps, AddSeriesUseCaseResponse>;
 
 /**
- * Creates a série and its rows in one transaction. A parcelamento writes every
- * parcela with the purchase's `date` and stepped vencimentos, the last one
- * taking the centavos; a recorrência writes each ocorrência on its own
- * vencimento up to min(endsOn, today + 12 months), and the herd load tops up
- * the rest as time passes.
+ * Creates a série and its rows in one transaction.
+ *
+ * A parcelamento writes every parcela with the purchase's `date` and stepped
+ * vencimentos; the last one takes the centavos. A recorrência writes each
+ * ocorrência on its own vencimento up to min(endsOn, today + 12 months), and
+ * the herd load tops up the rest as time passes.
  */
 export class AddSeriesUseCase implements CurrUseCase {
   private repository: RepositoryType;
@@ -70,7 +78,9 @@ export class AddSeriesUseCase implements CurrUseCase {
     this.repository = repo;
   }
 
-  public run: CurrUseCase["run"] = async ({ farmId, todayIso, repeat, kind = "expense", ...entry }) => {
+  public run: CurrUseCase["run"] = async ({ farmId, todayIso, repeat, kind = "expense", flow, ...entry }) => {
+    // A rendimento is what one day earned: it never repeats.
+    if (kind === "yield") return "invalid_repeat";
     const installments = repeat.mode === "installments";
     const count = repeat.count ?? 0;
     if (installments && (!Number.isInteger(count) || count < MIN_INSTALLMENTS || count > MAX_INSTALLMENTS)) {
@@ -101,19 +111,25 @@ export class AddSeriesUseCase implements CurrUseCase {
           seriesHorizon(todayIso)
         ).map(({ index, date }) => ({ index, date, dueDate: date, amountBrl: entry.amountBrl }));
     if (lines.length === 0) return "invalid_repeat";
+    const shape = await normaliseEntry(this.repository, farmId, { ...entry, kind, flow });
+    if (typeof shape === "string") return shape;
     const firstAccountId = entry.paidAt === undefined ? null : (entry.bankAccountId ?? null);
-    if (firstAccountId !== null && !(await isPayingAccount(this.repository, farmId, firstAccountId, kind))) {
+    if (
+      firstAccountId !== null &&
+      !(await isPayingAccount(this.repository, farmId, firstAccountId, kind, false, shape.flow))
+    ) {
       return "invalid_bank_account";
     }
 
     const template = {
       kind,
-      category: entry.category,
+      flow: shape.flow,
+      category: shape.category,
       notes: entry.notes ?? null,
       counterparty: entry.counterparty ?? null,
       document: entry.document ?? null,
-      accountId: entry.accountId ?? null,
-      lotId: entry.lotId ?? null,
+      accountId: shape.accountId,
+      lotId: shape.lotId,
     };
 
     return this.repository.transaction(async (tx) => {

@@ -6,17 +6,17 @@ const LABEL = "text-[11px] font-medium tracking-wide text-ink-soft uppercase";
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** "Caixa do período": what came in and went out by payment date, and what is still open. */
+/** "Caixa do período": what came in and went out by payment date, of every kind, and what is still open. */
 export function CashStrip({ cash }: { cash: CashSummary }) {
   const cells = [
-    { label: "Recebido", value: cash.received, sub: "vendas e outras receitas", ink: "text-ink" },
+    { label: "Recebido", value: cash.received, sub: "tudo o que entrou", ink: "text-ink" },
     {
       label: "A receber",
       value: cash.receivable,
       sub: plural(cash.receivableCount, "lançamento", "lançamentos"),
       ink: "text-scheduled",
     },
-    { label: "Pago", value: cash.paid, sub: "despesas, tratamentos e compras", ink: "text-ink" },
+    { label: "Pago", value: cash.paid, sub: "tudo o que saiu", ink: "text-ink" },
     {
       label: "A pagar",
       value: cash.payable,

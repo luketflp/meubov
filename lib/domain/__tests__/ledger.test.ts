@@ -1,14 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   cashSummary,
-  EMPTY_FILTER,
   effectiveDueDate,
-  filterLedger,
   ledgerRows,
-  ledgerSummary,
-  matchesStatusChoice,
   pendingBills,
-  type LedgerFilter,
   type LedgerInputs,
   type LedgerRow,
 } from "@/lib/domain/ledger";
@@ -169,7 +164,6 @@ const row = (id: string): LedgerRow => {
   return found;
 };
 const ids = (list: LedgerRow[]) => list.map((r) => r.id);
-const filtered = (filter: Partial<LedgerFilter>) => ids(filterLedger(rows, { ...EMPTY_FILTER, ...filter }));
 
 describe("ledgerRows", () => {
   it("lists the window's lançamentos, vendas, compras and treatment days, newest first", () => {
@@ -213,6 +207,7 @@ describe("ledgerRows", () => {
     expect(row("e-paid-lot")).toEqual({
       id: "e-paid-lot",
       kind: "expense",
+      inflow: false,
       date: "2026-09-10",
       dueDate: "2026-09-10",
       paidAt: "2026-09-10",
@@ -261,13 +256,14 @@ describe("ledgerRows", () => {
     expect(row("s-sale")).toEqual({
       id: "s-sale",
       kind: "sale",
+      inflow: true,
       date: "2026-09-05",
       dueDate: "2026-09-05",
       paidAt: "2026-09-05",
       status: "received",
       group: "revenue",
       groupLabel: "Receitas",
-      account: null,
+      account: "Venda de gado",
       bankAccountId: null,
       counterparty: "Frigorífico Boi Bom",
       document: "manejo · 2 animais · 32,9 @",
@@ -281,12 +277,14 @@ describe("ledgerRows", () => {
     });
   });
 
-  it("builds a compra as capital, with the live arrobas and a deleted lote's name", () => {
+  it("builds a compra as capital under Investimentos, with the live arrobas and a deleted lote's name", () => {
     expect(row("s-entry")).toMatchObject({
       kind: "purchase",
+      inflow: false,
       status: "paid",
       group: "capital",
-      groupLabel: "Capital",
+      groupLabel: "Investimentos",
+      account: "Compra de gado",
       counterparty: "Fazenda Santa Rita",
       document: "manejo · 2 animais · 15,0 @",
       lotId: "lot-2",
@@ -338,6 +336,7 @@ describe("ledgerRows", () => {
     expect(row(TREATMENT_ID)).toEqual({
       id: TREATMENT_ID,
       kind: "treatment",
+      inflow: false,
       date: "2026-09-08",
       dueDate: "2026-09-08",
       paidAt: "2026-09-08",
@@ -356,66 +355,6 @@ describe("ledgerRows", () => {
       headCount: 3,
       expense: null,
     });
-  });
-});
-
-describe("filterLedger", () => {
-  it("returns every row with the empty filter", () => {
-    expect(filterLedger(rows, EMPTY_FILTER)).toEqual(rows);
-  });
-
-  it("filters by tipo", () => {
-    expect(filtered({ kind: "sale" })).toEqual(["s-sale", "mov-legacy"]);
-    expect(filtered({ kind: "treatment" })).toEqual([TREATMENT_ID]);
-  });
-
-  it("filters by grupo", () => {
-    expect(filtered({ group: "revenue" })).toEqual(["r-pending", "r-received", "s-sale", "mov-legacy"]);
-    expect(filtered({ group: "capital" })).toEqual(["s-entry"]);
-    expect(filtered({ group: "health" })).toEqual([TREATMENT_ID]);
-  });
-
-  it("filters by conta", () => {
-    expect(filtered({ accountId: "acc-sal" })).toEqual(["e-paid-lot"]);
-  });
-
-  it("filters by lote, and by the farm's own rows", () => {
-    expect(filtered({ lotId: "lot-1" })).toEqual(["e-paid-lot", "s-sale"]);
-    expect(filtered({ lotId: "lot-2" })).toEqual(["s-entry"]);
-    expect(filtered({ lotId: "farm" })).toEqual([
-      "e-future",
-      "r-pending",
-      "r-received",
-      TREATMENT_ID,
-      "e-overdue",
-      "e-paid",
-      "mov-legacy",
-    ]);
-  });
-
-  it("filters by status", () => {
-    expect(filtered({ status: "overdue" })).toEqual(["e-overdue"]);
-    expect(filtered({ status: "payable" })).toEqual(["e-future"]);
-    expect(filtered({ status: "receivable" })).toEqual(["r-pending"]);
-    expect(filtered({ status: "received" })).toEqual(["r-received", "s-sale", "mov-legacy"]);
-  });
-
-  it("searches ignoring case and accents", () => {
-    expect(filtered({ search: "agrovet" })).toEqual(["e-paid-lot"]);
-    expect(filtered({ search: "Agrovét" })).toEqual(["e-paid-lot"]);
-    expect(filtered({ search: "  AGROVET " })).toEqual(["e-paid-lot"]);
-  });
-
-  it("searches conta, documento, notes and grupo", () => {
-    expect(filtered({ search: "aluguel" })).toEqual(["r-received"]);
-    expect(filtered({ search: "nf 4.812" })).toEqual(["e-paid-lot"]);
-    expect(filtered({ search: "salario" })).toEqual(["e-paid"]);
-    expect(filtered({ search: "manejo" })).toEqual(["s-sale", "s-entry"]);
-    expect(filtered({ search: "sanidade" })).toEqual([TREATMENT_ID]);
-  });
-
-  it("combines filters", () => {
-    expect(filtered({ kind: "expense", status: "paid" })).toEqual(["e-paid-lot", "e-paid"]);
   });
 });
 
@@ -466,19 +405,6 @@ describe("cashSummary", () => {
   });
 });
 
-describe("ledgerSummary", () => {
-  it("adds up the rows given", () => {
-    expect(ledgerSummary(rows)).toEqual({
-      revenue: 18580, // receitas 2.700 + vendas 15.880
-      coe: 5515, // despesas 5.500 + treatments 15
-      sales: 15880,
-      purchases: 8000,
-      result: 13065,
-    });
-    expect(ledgerSummary([])).toEqual({ revenue: 0, coe: 0, sales: 0, purchases: 0, result: 0 });
-  });
-});
-
 describe("pendingBills", () => {
   it("splits pending lançamentos, oldest vencimento first", () => {
     const { payables, receivables } = pendingBills(expenses, TODAY);
@@ -494,16 +420,85 @@ describe("effectiveDueDate", () => {
   });
 });
 
-describe("matchesStatusChoice", () => {
-  it("counts the vencidas under a pagar and a receber by kind", () => {
-    const lateBill = { kind: "expense", status: "overdue" } as const;
-    const lateReceita = { kind: "revenue", status: "overdue" } as const;
-    expect(matchesStatusChoice(lateBill, "payable")).toBe(true);
-    expect(matchesStatusChoice(lateBill, "receivable")).toBe(false);
-    expect(matchesStatusChoice(lateReceita, "receivable")).toBe(true);
-    expect(matchesStatusChoice(lateReceita, "payable")).toBe(false);
-    expect(matchesStatusChoice(lateReceita, "overdue")).toBe(true);
-    expect(matchesStatusChoice({ kind: "expense", status: "payable" }, "overdue")).toBe(false);
-    expect(matchesStatusChoice({ kind: "revenue", status: "received" }, "settled")).toBe(true);
+describe("money outside the resultado", () => {
+  const capitalAccounts: Account[] = [
+    ...accounts,
+    { id: "acc-maq", group: "investment", name: "Máquinas e implementos" },
+    { id: "acc-pronaf", group: "financing", name: "Pronaf custeio" },
+    { id: "acc-lucro", group: "partners", name: "Distribuição de lucro" },
+  ];
+  const capital: Expense[] = [
+    expense({ id: "c-trator", kind: "investment", flow: "out", date: "2026-09-10", amountBrl: 50000, paidAt: "2026-09-10", accountId: "acc-maq" }),
+    expense({ id: "c-sucata", kind: "investment", flow: "in", date: "2026-09-11", amountBrl: 2000, paidAt: "2026-09-11", accountId: "acc-maq" }),
+    // Pending, due after today: a receber.
+    expense({ id: "c-liberacao", kind: "financing", flow: "in", date: "2026-09-20", dueDate: "2026-10-05", amountBrl: 80000, accountId: "acc-pronaf" }),
+    // Pending, past due: vencida.
+    expense({ id: "c-parcela", kind: "financing", flow: "out", date: "2026-09-05", dueDate: "2026-09-15", amountBrl: 4000, accountId: "acc-pronaf" }),
+    expense({ id: "c-retirada", kind: "partners", flow: "out", date: "2026-09-12", amountBrl: 6000, paidAt: "2026-09-12", accountId: "acc-lucro" }),
+    expense({ id: "c-aporte", kind: "partners", flow: "in", date: "2026-09-13", amountBrl: 10000, paidAt: "2026-09-13", accountId: "acc-lucro" }),
+    // No flow: a compra (money out), pending and past its date.
+    expense({ id: "c-sem-flow", kind: "investment", date: "2026-09-14", amountBrl: 700, accountId: "acc-maq" }),
+    expense({ id: "c-rendimento", kind: "yield", date: "2026-09-22", amountBrl: 312.5, paidAt: "2026-09-22", bankAccountId: "aplic" }),
+  ];
+  const capitalInput: LedgerInputs = { ...input, expenses: capital, accounts: capitalAccounts, movements: [], treatments: [] };
+  const capitalRows = ledgerRows(capitalInput, PERIOD, TODAY);
+
+  it("gives each row its grupo, its conta, its direction and a status by direction", () => {
+    expect(capitalRows.map((r) => [r.id, r.kind, r.inflow, r.group, r.groupLabel, r.account, r.status])).toEqual([
+      ["c-rendimento", "yield", true, "capital", "Rendimento", null, "received"],
+      ["c-liberacao", "financing", true, "financing", "Financiamentos", "Pronaf custeio", "receivable"],
+      ["c-sem-flow", "investment", false, "investment", "Investimentos", "Máquinas e implementos", "overdue"],
+      ["c-aporte", "partners", true, "partners", "Sócios", "Distribuição de lucro", "received"],
+      ["c-retirada", "partners", false, "partners", "Sócios", "Distribuição de lucro", "paid"],
+      ["c-sucata", "investment", true, "investment", "Investimentos", "Máquinas e implementos", "received"],
+      ["c-trator", "investment", false, "investment", "Investimentos", "Máquinas e implementos", "paid"],
+      ["c-parcela", "financing", false, "financing", "Financiamentos", "Pronaf custeio", "overdue"],
+    ]);
+  });
+
+  it("orders the new kinds after the despesas on the same day", () => {
+    const day = "2026-09-10";
+    const sameDay = ledgerRows(
+      {
+        ...capitalInput,
+        expenses: [
+          expense({ id: "a-yield", kind: "yield", date: day, paidAt: day }),
+          expense({ id: "b-partners", kind: "partners", flow: "out", date: day }),
+          expense({ id: "c-financing", kind: "financing", flow: "out", date: day }),
+          expense({ id: "d-investment", kind: "investment", flow: "out", date: day }),
+          expense({ id: "e-expense", date: day }),
+          expense({ id: "f-revenue", kind: "revenue", date: day }),
+        ],
+        movements: [{ id: "g-purchase", type: "purchase", date: day, origin: "A", destination: "B", amountBrl: 10 }],
+      },
+      PERIOD,
+      TODAY
+    );
+    expect(ids(sameDay)).toEqual(["f-revenue", "e-expense", "d-investment", "c-financing", "b-partners", "a-yield", "g-purchase"]);
+  });
+
+  it("takes every kind in the caixa and in a pagar / a receber by direction", () => {
+    expect(cashSummary(capitalInput, PERIOD, TODAY)).toEqual({
+      received: 12312.5, // venda do bem 2.000 + aporte 10.000 + rendimento 312,50
+      receivable: 80000, // liberação pendente
+      receivableCount: 1,
+      paid: 56000, // trator 50.000 + retirada 6.000
+      payable: 4700, // parcela 4.000 + compra sem movimento 700
+      payableCount: 2,
+      overdueCount: 2,
+      balance: -43687.5,
+    });
+  });
+
+  it("splits the pending ones into payables and receivables, oldest vencimento first", () => {
+    const { payables, receivables } = pendingBills(capital, TODAY);
+    expect(payables.map((e) => e.id)).toEqual(["c-sem-flow", "c-parcela"]);
+    expect(receivables.map((e) => e.id)).toEqual(["c-liberacao"]);
+  });
+
+  it("changes none of the resultado's rows", () => {
+    const together = ledgerRows({ ...input, expenses: [...expenses, ...capital], accounts: capitalAccounts }, PERIOD, TODAY);
+    expect(together).toHaveLength(rows.length + capital.length);
+    expect(together.filter((r) => !r.id.startsWith("c-"))).toEqual(rows);
   });
 });

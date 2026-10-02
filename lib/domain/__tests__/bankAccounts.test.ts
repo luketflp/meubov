@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { BankAccount, Expense, Movement, Transfer } from "@/lib/types";
+import type { BankAccount, EntryFlow, EntryKind, Expense, Movement, Transfer } from "@/lib/types";
 import {
   accountBalance,
   accountMovements,
@@ -30,6 +30,7 @@ const CARD: BankAccount = {
   dueDay: 10,
   paysFromId: "sicredi",
 };
+const APLICACAO: BankAccount = { ...SICREDI, id: "aplic", kind: "investment", name: "CDB Sicredi", openingBalanceBrl: 20000, isMain: false };
 
 const expense = (id: string, patch: Partial<Expense>): Expense => ({
   id,
@@ -101,6 +102,38 @@ describe("accountMovements", () => {
   });
 });
 
+describe("money outside the resultado", () => {
+  const capital = (id: string, patch: Partial<Expense>) =>
+    expense(id, { category: "other", paidAt: "2026-09-10", bankAccountId: "sicredi", ...patch });
+  const inputs: BankInputs = {
+    ...EMPTY,
+    expenses: [
+      capital("liberacao", { kind: "financing", flow: "in", amountBrl: 80000 }),
+      capital("parcela", { kind: "financing", flow: "out", amountBrl: 4000 }),
+      capital("retirada", { kind: "partners", flow: "out", amountBrl: 6000 }),
+      // No flow: a compra.
+      capital("trator", { kind: "investment", amountBrl: 50000 }),
+      capital("rendimento", { kind: "yield", bankAccountId: "aplic", amountBrl: 312.5 }),
+    ],
+  };
+
+  it("signs a liberação, a pagamento, a retirada and a rendimento by their direction", () => {
+    expect(accountBalance(SICREDI, inputs, "2026-09-30")).toBe(10000 + 80000 - 4000 - 6000 - 50000);
+    expect(accountBalance(APLICACAO, inputs, "2026-09-30")).toBe(20312.5);
+    const rows = accountMovements(SICREDI, inputs, { start: "2026-09-01", end: "2026-09-30" });
+    expect(rows.map((r) => [r.id, r.kind, r.amountBrl, r.balance])).toEqual([
+      ["trator", "investment", -50000, 30000],
+      ["retirada", "partners", -6000, 80000],
+      ["parcela", "financing", -4000, 86000],
+      ["liberacao", "financing", 80000, 90000],
+    ]);
+  });
+
+  it("counts an aplicação in the saldo em contas, never a cartão", () => {
+    expect(bankTotal([SICREDI, APLICACAO, CARD], inputs, "2026-09-30")).toBe(30000 + 20312.5);
+  });
+});
+
 describe("faturaOf", () => {
   it("closes on day 31 at the end of each month, February included", () => {
     expect(faturaOf(CARD, "2026-09-15")).toEqual({ opensAfter: "2026-08-31", closing: "2026-09-30", due: "2026-10-10" });
@@ -150,8 +183,21 @@ describe("a cartão's saldo", () => {
 describe("payingAccounts", () => {
   it("offers the conta principal first, cartões for despesas only, no archived conta", () => {
     const archived = { ...CAIXA, id: "old", archivedAt: "2026-09-01T00:00:00.000Z" };
-    const list = [CARD, CAIXA, archived, SICREDI];
+    const list = [CARD, CAIXA, APLICACAO, archived, SICREDI];
     expect(payingAccounts(list, "expense").map((a) => a.id)).toEqual(["sicredi", "card", "caixa"]);
     expect(payingAccounts(list, "revenue").map((a) => a.id)).toEqual(["sicredi", "caixa"]);
+  });
+
+  it("offers a cartão to a compra of an investimento and an aplicação only to a rendimento", () => {
+    const list = [CARD, CAIXA, APLICACAO, SICREDI];
+    const offered = (kind: EntryKind, flow?: EntryFlow) => payingAccounts(list, kind, flow).map((a) => a.id);
+    expect(offered("investment", "out")).toEqual(["sicredi", "card", "caixa"]);
+    // No flow: a compra.
+    expect(offered("investment")).toEqual(["sicredi", "card", "caixa"]);
+    expect(offered("investment", "in")).toEqual(["sicredi", "caixa"]);
+    expect(offered("financing", "out")).toEqual(["sicredi", "caixa"]);
+    expect(offered("financing", "in")).toEqual(["sicredi", "caixa"]);
+    expect(offered("partners", "out")).toEqual(["sicredi", "caixa"]);
+    expect(offered("yield")).toEqual(["aplic"]);
   });
 });

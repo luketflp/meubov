@@ -1,16 +1,18 @@
 /**
  * toExpense: the série a row belongs to decides its markers ("2/3", "todo dia 20").
+ * toAccount: a financiamento carries its saldo inicial.
  * toBankAccount: "conciliado até" and the pending count come from its linhas.
  */
 import { describe, expect, it } from "vitest";
 
-import { toBankAccount, toExpense } from "@/lib/api/mappers";
-import type { BankAccountRow, ExpenseRow, ExpenseSeriesRow } from "@/lib/db/schema";
+import { toAccount, toBankAccount, toExpense } from "@/lib/api/mappers";
+import type { BankAccountRow, ExpenseRow, ExpenseSeriesRow, FarmAccountRow } from "@/lib/db/schema";
 
 const ROW: ExpenseRow = {
   id: "e-1",
   farmId: 7,
   kind: "expense",
+  flow: null,
   date: "2026-09-27",
   category: "nutrition",
   amountBrl: 4000,
@@ -37,6 +39,7 @@ const SERIES: ExpenseSeriesRow = {
   count: 3,
   generatedCount: 3,
   kind: "expense",
+  flow: null,
   category: "nutrition",
   amountBrl: 12000,
   accountId: null,
@@ -65,6 +68,30 @@ describe("toExpense", () => {
     expect(expense.seriesId).toBeUndefined();
     expect(expense.seriesIndex).toBeUndefined();
     expect(expense.attachmentCount).toBe(0);
+  });
+
+  it("carries the movimento of a capital row and leaves it out elsewhere", () => {
+    expect(toExpense({ ...ROW, kind: "financing", flow: "in" })).toMatchObject({ kind: "financing", flow: "in" });
+    expect(toExpense(ROW).flow).toBeUndefined();
+  });
+});
+
+const ACCOUNT: FarmAccountRow = {
+  id: "acc-1",
+  farmId: 7,
+  group: "financing",
+  name: "Pronaf Sicredi",
+  archivedAt: null,
+  openingBalanceBrl: 120000,
+  openingDate: "2026-06-30",
+};
+
+describe("toAccount", () => {
+  it("carries the saldo inicial of a financiamento, and nothing when there is none", () => {
+    expect(toAccount(ACCOUNT)).toMatchObject({ openingBalanceBrl: 120000, openingDate: "2026-06-30" });
+    const plain = toAccount({ ...ACCOUNT, group: "nutrition", openingBalanceBrl: null, openingDate: null });
+    expect(plain.openingBalanceBrl).toBeUndefined();
+    expect(plain.openingDate).toBeUndefined();
   });
 });
 

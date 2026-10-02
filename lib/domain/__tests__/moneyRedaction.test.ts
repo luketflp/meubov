@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { HerdData, ManejoSession, SemenBull, Treatment } from "@/lib/types";
+import type { Account, HerdData, ManejoSession, SemenBull, Treatment } from "@/lib/types";
 import { FULL_PERMISSIONS, PRESETS } from "@/lib/domain/permissions";
 import {
   canDeleteManejo,
@@ -213,6 +213,21 @@ describe("redactHerdMoney", () => {
     const redacted = redactHerdMoney(herd);
     expect(redacted.accounts).toEqual(herd.accounts);
     expect(redacted.expenses).toEqual([]);
+  });
+
+  it("strips a financiamento's saldo inicial and its date, and keeps the conta", () => {
+    const pronaf: Account = {
+      id: "acc-2",
+      group: "financing",
+      name: "Pronaf custeio",
+      openingBalanceBrl: 120000,
+      openingDate: "2026-01-31",
+    };
+    const redacted = redactHerdMoney({ ...herd, accounts: [...herd.accounts, pronaf] });
+    expect(redacted.accounts).toEqual([...herd.accounts, { id: "acc-2", group: "financing", name: "Pronaf custeio" }]);
+    expect(redacted.accounts[1]).not.toHaveProperty("openingBalanceBrl");
+    expect(redacted.accounts[1]).not.toHaveProperty("openingDate");
+    expect(pronaf.openingBalanceBrl).toBe(120000);
   });
 
   it("does not mutate its input", () => {

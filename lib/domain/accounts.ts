@@ -1,21 +1,25 @@
 /**
- * Plano de contas: the fixed grupos (Receitas plus the seven cost categories)
- * and the farm's contas inside them. Pure.
+ * Plano de contas: the fixed grupos (Receitas, the seven cost categories and
+ * the three outside the resultado) and the farm's contas inside them. Pure.
  */
 import type { Account, AccountGroup, Expense, ExpenseCategory } from "@/lib/types";
 import { EXPENSE_CATEGORY_LABEL } from "@/lib/domain/labels";
+import { CAPITAL_GROUPS } from "@/lib/domain/entries";
 
-/** Label of each grupo: "Receitas" plus the cost categories' labels. */
+/** The seven grupos of custo (the COE), in screen order. */
+export const EXPENSE_GROUPS: readonly ExpenseCategory[] = Object.keys(EXPENSE_CATEGORY_LABEL) as ExpenseCategory[];
+
+/** Label of each grupo: "Receitas", the cost categories' labels and the three outside the resultado. */
 export const ACCOUNT_GROUP_LABEL: Record<AccountGroup, string> = {
   revenue: "Receitas",
   ...EXPENSE_CATEGORY_LABEL,
+  investment: "Investimentos",
+  financing: "Financiamentos",
+  partners: "Sócios",
 };
 
-/** Grupos in screen order: Receitas, then the cost categories. */
-export const ACCOUNT_GROUPS: readonly AccountGroup[] = [
-  "revenue",
-  ...(Object.keys(EXPENSE_CATEGORY_LABEL) as ExpenseCategory[]),
-];
+/** Grupos in screen order: Receitas, the cost categories, then the three outside the resultado. */
+export const ACCOUNT_GROUPS: readonly AccountGroup[] = ["revenue", ...EXPENSE_GROUPS, ...CAPITAL_GROUPS];
 
 /** What "Sugerir contas padrão" creates. */
 export const DEFAULT_ACCOUNTS: readonly { group: AccountGroup; name: string }[] = [
@@ -44,6 +48,10 @@ export const DEFAULT_ACCOUNTS: readonly { group: AccountGroup; name: string }[] 
   { group: "admin", name: "Manutenção" },
   { group: "admin", name: "Impostos e taxas" },
   { group: "admin", name: "Contabilidade" },
+  { group: "investment", name: "Benfeitorias" },
+  { group: "investment", name: "Máquinas e implementos" },
+  { group: "investment", name: "Equipamentos" },
+  { group: "partners", name: "Distribuição de lucro" },
 ];
 
 /** Contas per grupo, every grupo present, sorted by name; archived ones only when asked. */

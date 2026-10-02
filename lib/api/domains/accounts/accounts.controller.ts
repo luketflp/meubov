@@ -1,6 +1,10 @@
 /**
- * Plano de contas — farm-named contas inside the seven fixed despesa grupos
- * and Receitas. A conta is archived, never deleted, so its lançamentos keep it.
+ * Plano de contas: farm-named contas inside the fixed grupos — Receitas, the
+ * seven despesa grupos, and the three fora do resultado (investimentos,
+ * financiamentos, sócios).
+ *
+ * A conta is archived, never deleted, so its lançamentos keep it. A conta de
+ * financiamento may carry its saldo devedor inicial.
  */
 import { Elysia } from "elysia";
 
@@ -18,6 +22,7 @@ export const accountsController = new Elysia({ prefix: "/accounts" })
     async ({ farmId, body, status }) => {
       const result = await new AddAccountUseCase().run({ farmId, ...body });
       if (result === "duplicate") return status(409, { error: "duplicate_name" });
+      if (result === "invalid_opening") return status(400, { error: result });
       return result;
     },
     { farm: true, body: NewAccountBody }
@@ -32,6 +37,7 @@ export const accountsController = new Elysia({ prefix: "/accounts" })
       });
       if (result === null) return status(404, { error: "not_found" });
       if (result === "duplicate") return status(409, { error: "duplicate_name" });
+      if (result === "invalid_opening") return status(400, { error: result });
       return result;
     },
     { farm: true, body: UpdateAccountBody }

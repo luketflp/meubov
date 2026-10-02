@@ -60,6 +60,7 @@ const ROW = {
   id: "e-1",
   farmId: 7,
   kind: "expense",
+  flow: null,
   date: "2026-09-10",
   category: "nutrition",
   amountBrl: 500,
@@ -70,6 +71,7 @@ const ROW = {
   document: "NF 4.812",
   accountId: "acc-1",
   lotId: null,
+  bankAccountId: null,
 };
 
 beforeEach(() => {
@@ -162,5 +164,69 @@ describe("updateExpense", () => {
 
     expect(result).toBeNull();
     expect(state.updates).toEqual([]);
+  });
+});
+
+describe("updateExpense — what the kind needs", () => {
+  const run = (patch: ExpensePatchInput) => new UpdateExpenseUseCase().run({ farmId: 7, id: "e-1", patch });
+
+  it("refuses a new kind while the conta still belongs to the old group", async () => {
+    state.selectResults = [[ROW], [{ group: "nutrition" }]];
+    expect(await run({ kind: "investment" })).toBe("invalid_account");
+
+    const benfeitoria = { ...ROW, kind: "investment", flow: "out", category: "other", accountId: "acc-benf" };
+    state.selectResults = [[benfeitoria], [{ group: "investment" }]];
+    expect(await run({ kind: "expense" })).toBe("invalid_account");
+    expect(state.updates).toEqual([]);
+  });
+
+  it("turns a despesa into an investimento: the conta's group, no grupo, no lote, a saída", async () => {
+    state.selectResults = [[{ ...ROW, lotId: "lot-1" }], [{ group: "investment" }]];
+    state.updateResults = [[{ ...ROW, kind: "investment", flow: "out", category: "other", accountId: "acc-benf" }]];
+
+    const result = await run({ kind: "investment", accountId: "acc-benf", category: "nutrition", lotId: "lot-1" });
+
+    expect(state.updates[0]).toMatchObject({
+      kind: "investment",
+      flow: "out",
+      category: "other",
+      lotId: null,
+      accountId: "acc-benf",
+    });
+    expect(result).toMatchObject({ kind: "investment", flow: "out" });
+  });
+
+  it("checks Pago por against a new movimento: an aporte never enters a cartão", async () => {
+    const retirada = {
+      ...ROW,
+      kind: "partners",
+      flow: "out",
+      category: "other",
+      accountId: "acc-socios",
+      paidAt: "2026-09-12",
+      bankAccountId: "cartao",
+    };
+    state.selectResults = [[retirada], [{ group: "partners" }], [{ kind: "card", archivedAt: null }]];
+
+    expect(await run({ flow: "in" })).toBe("invalid_bank_account");
+    expect(state.updates).toEqual([]);
+  });
+
+  it("keeps a rendimento paid on its data", async () => {
+    const rendimento = {
+      ...ROW,
+      kind: "yield",
+      category: "other",
+      dueDate: null,
+      paidAt: "2026-09-10",
+      accountId: null,
+      bankAccountId: "cdb",
+    };
+    state.selectResults = [[rendimento]];
+    state.updateResults = [[{ ...rendimento, date: "2026-09-30", paidAt: "2026-09-30" }]];
+
+    await run({ date: "2026-09-30", paidAt: null });
+
+    expect(state.updates[0]).toMatchObject({ date: "2026-09-30", paidAt: "2026-09-30", dueDate: null });
   });
 });

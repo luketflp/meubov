@@ -18,26 +18,38 @@ interface UpdateSeriesUseCaseProps {
 }
 
 /** Null when the lançamento is not on this farm. */
-type UpdateSeriesUseCaseResponse = Expense | "due_before_date" | "invalid_bank_account" | null;
+type UpdateSeriesUseCaseResponse =
+  | Expense
+  | "due_before_date"
+  | "invalid_account"
+  | "invalid_bank_account"
+  | null;
 
 type CurrUseCase = _UseCase<UpdateSeriesUseCaseProps, UpdateSeriesUseCaseResponse>;
 
-type SharedFields = Pick<
-  ExpensePatchInput,
-  "category" | "accountId" | "lotId" | "counterparty" | "document" | "notes" | "amountBrl"
+type SharedFields = Partial<
+  Pick<
+    typeof expenses.$inferInsert,
+    "category" | "flow" | "accountId" | "lotId" | "counterparty" | "document" | "notes" | "amountBrl"
+  >
 >;
 
-/** What an edit carries to the série's other rows: only the fields it sent. */
-function sharedFields(patch: ExpensePatchInput, recurring: boolean): SharedFields {
-  const { category, accountId, lotId, counterparty, document, notes, amountBrl } = patch;
-  // A parcela's value is edited per parcela: the total is never re-split.
+/**
+ * What an edit carries to the série's other rows: only the fields it sent.
+ * Grupo, movimento and lote go as the edited row stored them, since its kind
+ * may have overruled the form.
+ */
+function sharedFields(patch: ExpensePatchInput, recurring: boolean, row: Expense): SharedFields {
+  const { category, flow, accountId, lotId, counterparty, document, notes, amountBrl } = patch;
   const fields: SharedFields = {
-    category,
+    category: category === undefined ? undefined : row.category,
+    flow: flow === undefined ? undefined : (row.flow ?? null),
     accountId,
-    lotId,
+    lotId: lotId === undefined ? undefined : (row.lotId ?? null),
     counterparty,
     document,
     notes,
+    // A parcela's value is edited per parcela: the total is never re-split.
     amountBrl: recurring ? amountBrl : undefined,
   };
   return Object.fromEntries(
@@ -48,8 +60,9 @@ function sharedFields(patch: ExpensePatchInput, recurring: boolean): SharedField
 /**
  * "Esta e as próximas" / "Todas" on a row of a série. The row itself takes the
  * whole patch; the série's template and every UNPAID row in scope take the
- * shared fields (conta, lote, pago para, documento, observação, and the valor
- * of a recorrência). Moving an ocorrência's vencimento moves the rule: its day
+ * shared fields (grupo, conta, movimento, lote, pago para, documento,
+ * observação, and the valor of a recorrência). Moving an ocorrência's
+ * vencimento moves the rule: its day
  * becomes the série's day and every unpaid row in scope is re-dated by its
  * position, in place (ids and anexos survive). Paid rows never change.
  */
@@ -61,8 +74,11 @@ export class UpdateSeriesUseCase implements CurrUseCase {
     this.repository = repo;
   }
 
-  public run: CurrUseCase["run"] = async ({ farmId, id, patch, scope }) =>
+  public run: CurrUseCase["run"] = async ({ farmId, id, patch: sent, scope }) =>
     this.repository.transaction(async (tx) => {
+      // A série keeps its kind: one row of another kind would leave its siblings with a conta of the wrong group.
+      const patch = { ...sent };
+      delete patch.kind;
       const [current] = await tx
         .select()
         .from(expenses)
@@ -90,7 +106,7 @@ export class UpdateSeriesUseCase implements CurrUseCase {
       });
       if (updated === null || typeof updated === "string") return updated;
 
-      const shared = sharedFields(patch, recurring);
+      const shared = sharedFields(patch, recurring, updated);
       const rule = moved ? ruleFromOccurrence(series.frequency, current.seriesIndex, dueDate) : null;
       if (Object.keys(shared).length === 0 && rule === null) return updated;
 

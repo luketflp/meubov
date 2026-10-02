@@ -107,4 +107,42 @@ describe("addAccount", () => {
 
     expect(result).toBe("duplicate");
   });
+
+  it("takes the saldo devedor inicial of a conta de financiamento", async () => {
+    state.selectResults = [[]];
+
+    const result = await new AddAccountUseCase().run({
+      farmId: 7,
+      group: "financing",
+      name: "Pronaf Investimento",
+      openingBalanceBrl: 180000,
+      openingDate: "2026-06-30",
+    });
+
+    expect(state.inserts[0]).toMatchObject({
+      group: "financing",
+      openingBalanceBrl: 180000,
+      openingDate: "2026-06-30",
+    });
+    expect(result).toMatchObject({ group: "financing", openingBalanceBrl: 180000, openingDate: "2026-06-30" });
+  });
+
+  it("refuses a saldo inicial without its date, a date alone, or one outside financiamento", async () => {
+    const conta = { farmId: 7, name: "Pronaf" };
+    expect(await new AddAccountUseCase().run({ ...conta, group: "financing", openingBalanceBrl: 1000 })).toBe(
+      "invalid_opening"
+    );
+    expect(await new AddAccountUseCase().run({ ...conta, group: "financing", openingDate: "2026-06-30" })).toBe(
+      "invalid_opening"
+    );
+    expect(
+      await new AddAccountUseCase().run({
+        ...conta,
+        group: "partners",
+        openingBalanceBrl: 1000,
+        openingDate: "2026-06-30",
+      })
+    ).toBe("invalid_opening");
+    expect(state.inserts).toEqual([]);
+  });
 });

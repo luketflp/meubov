@@ -3,12 +3,15 @@
 /**
  * "Marcar como pago / recebido" with the conta. With one conta (or none) the
  * lançamento is marked at once from it; with two or more, a small dialog asks
- * "Pago por" and the day first. The hook toasts either way.
+ * "Pago por" (or "Recebido em") and the day first. The words follow the
+ * lançamento's direction, the contas offered its kind and movimento. The
+ * hook toasts either way.
  */
 import { useState, type FormEvent, type ReactNode } from "react";
 import type { Expense } from "@/lib/types";
 import { payingAccounts } from "@/lib/domain/bankAccounts";
 import { todayISO } from "@/lib/domain/dates";
+import { isInflow } from "@/lib/domain/entries";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
 import { PaidByField, defaultPaidBy } from "@/components/finance/contas/PaidByField";
@@ -37,12 +40,12 @@ export function useMarkPaid(onDone?: () => void): {
 
   const mark = async (expense: Expense, paidAt: string, bankAccountId: string | null) => {
     await markExpensePaid(expense.id, paidAt, bankAccountId);
-    addToast({ messageType: "success", text: expense.kind === "revenue" ? "Marcado como recebido" : "Marcado como pago" });
+    addToast({ messageType: "success", text: isInflow(expense) ? "Marcado como recebido" : "Marcado como pago" });
     onDone?.();
   };
 
   const request = async (expense: Expense) => {
-    const options = payingAccounts(bankAccounts, expense.kind);
+    const options = payingAccounts(bankAccounts, expense.kind, expense.flow);
     if (options.length >= 2) {
       setTarget(expense);
       return;
@@ -74,9 +77,11 @@ function MarkPaidDialog({
   onConfirm(paidAt: string, bankAccountId: string): Promise<void>;
 }) {
   const bankAccounts = useHerdStore((s) => s.bankAccounts);
-  const revenue = expense.kind === "revenue";
+  const inflow = isInflow(expense);
   const [paidAt, setPaidAt] = useState(todayISO());
-  const [bankAccountId, setBankAccountId] = useState(() => defaultPaidBy(bankAccounts, expense.kind));
+  const [bankAccountId, setBankAccountId] = useState(() =>
+    defaultPaidBy(bankAccounts, expense.kind, expense.flow)
+  );
   const [busy, setBusy] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -102,19 +107,20 @@ function MarkPaidDialog({
     >
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>{revenue ? "Marcar como recebido" : "Marcar como pago"}</DialogTitle>
-          <DialogDescription>{revenue ? "Em que conta o dinheiro entrou?" : "De que conta o dinheiro saiu?"}</DialogDescription>
+          <DialogTitle>{inflow ? "Marcar como recebido" : "Marcar como pago"}</DialogTitle>
+          <DialogDescription>{inflow ? "Em que conta o dinheiro entrou?" : "De que conta o dinheiro saiu?"}</DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} noValidate className="grid gap-4">
           <PaidByField
             id="mark-paid-account"
             accounts={bankAccounts}
             kind={expense.kind}
+            flow={expense.flow}
             value={bankAccountId}
             onChange={setBankAccountId}
           />
           <div className="grid gap-1.5">
-            <Label htmlFor="mark-paid-date">{revenue ? "Recebido em" : "Pago em"}</Label>
+            <Label htmlFor="mark-paid-date">{inflow ? "Recebido em" : "Pago em"}</Label>
             <Input
               id="mark-paid-date"
               type="date"
@@ -130,7 +136,7 @@ function MarkPaidDialog({
               </Button>
             </DialogClose>
             <Button type="submit" className="min-h-11 md:min-h-9" disabled={busy || paidAt === ""}>
-              {revenue ? "Marcar recebido" : "Marcar pago"}
+              {inflow ? "Marcar recebido" : "Marcar pago"}
             </Button>
           </DialogFooter>
         </form>

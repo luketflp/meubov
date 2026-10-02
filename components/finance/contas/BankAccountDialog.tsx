@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * "Nova conta" / "Editar conta": a conta corrente, the farm's caixa or a
- * cartão. A cartão takes its fechamento and vencimento days and the conta
- * that pays it; the others take a saldo inicial on a date. Editing adds
- * Arquivar and Excluir (only a conta nothing points at).
+ * "Nova conta" / "Editar conta": a conta corrente, the farm's caixa, a
+ * cartão or an aplicação. A cartão takes its fechamento and vencimento days
+ * and the conta that pays it; the others take a saldo inicial on a date. An
+ * aplicação is never the conta principal. Editing adds Arquivar and Excluir
+ * (only a conta nothing points at).
  */
 import { useState, type FormEvent } from "react";
 import type { BankAccount, BankAccountKind } from "@/lib/types";
@@ -28,7 +29,19 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-const KINDS: readonly BankAccountKind[] = ["checking", "cash", "card"];
+const KINDS: readonly BankAccountKind[] = ["checking", "cash", "card", "investment"];
+
+const NAME_PLACEHOLDER: Record<BankAccountKind, string> = {
+  checking: "Sicredi",
+  cash: "Caixa da fazenda",
+  card: "Cartão Sicredi",
+  investment: "Aplicação Sicredi",
+};
+
+/** "Pago por" starts on the conta principal: a conta corrente or the caixa, never a cartão or an aplicação. */
+function mayBeMain(kind: BankAccountKind): boolean {
+  return kind === "checking" || kind === "cash";
+}
 
 /** Select value for "Nenhuma": Radix refuses "". */
 const NONE = "none";
@@ -84,7 +97,7 @@ export function BankAccountDialog({
         <DialogHeader>
           <DialogTitle>{account ? "Editar conta" : "Nova conta"}</DialogTitle>
           <DialogDescription>
-            Onde o dinheiro da fazenda fica: conta no banco, caixa em dinheiro ou cartão de crédito.
+            Onde o dinheiro da fazenda fica: conta no banco, caixa em dinheiro, cartão de crédito ou aplicação.
           </DialogDescription>
         </DialogHeader>
         <BankAccountForm account={account} onDone={() => onOpenChange(false)} />
@@ -100,7 +113,7 @@ function BankAccountForm({ account, onDone }: { account?: BankAccount; onDone():
   const archiveBankAccount = useHerdStore((s) => s.archiveBankAccount);
   const removeBankAccount = useHerdStore((s) => s.removeBankAccount);
   const { addToast } = useToast();
-  const first = !accounts.some((a) => a.kind !== "card");
+  const first = !accounts.some((a) => mayBeMain(a.kind));
   const [fields, setFields] = useState<Fields>(() => initialFields(account, first));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -140,7 +153,7 @@ function BankAccountForm({ account, onDone }: { account?: BankAccount; onDone():
       openingBalanceBrl: opening,
       openingDate: fields.openingDate || addDays(todayISO(), -1),
       ...(card ? { closingDay: closingDay!, dueDay: dueDay! } : {}),
-      ...(!card && fields.isMain ? { isMain: true } : {}),
+      ...(mayBeMain(fields.kind) && fields.isMain ? { isMain: true } : {}),
     };
     await run(async () => {
       if (account) {
@@ -193,7 +206,7 @@ function BankAccountForm({ account, onDone }: { account?: BankAccount; onDone():
 
   return (
     <form onSubmit={onSubmit} noValidate className="grid gap-4">
-      <div role="radiogroup" aria-label="Tipo" className="flex items-center gap-0.5 rounded-lg border border-hairline bg-surface p-0.5">
+      <div role="radiogroup" aria-label="Tipo" className="flex items-center gap-0.5 overflow-x-auto rounded-lg border border-hairline bg-surface p-0.5">
         {KINDS.map((kind) => {
           const selected = fields.kind === kind;
           return (
@@ -203,9 +216,9 @@ function BankAccountForm({ account, onDone }: { account?: BankAccount; onDone():
               role="radio"
               aria-checked={selected}
               disabled={account !== undefined && !selected}
-              onClick={() => set({ kind, isMain: kind === "card" ? false : fields.isMain || first })}
+              onClick={() => set({ kind, isMain: mayBeMain(kind) && (fields.isMain || first) })}
               className={cn(
-                "flex min-h-11 flex-1 items-center justify-center rounded-md px-3 text-[13px] transition-colors disabled:opacity-50 md:min-h-8",
+                "flex min-h-11 shrink-0 grow items-center justify-center rounded-md px-3 text-[13px] whitespace-nowrap transition-colors disabled:opacity-50 md:min-h-8",
                 selected
                   ? "bg-panel font-medium text-ink shadow-[0_0_0_1px_var(--color-hairline)]"
                   : "text-ink-soft hover:text-ink"
@@ -223,7 +236,7 @@ function BankAccountForm({ account, onDone }: { account?: BankAccount; onDone():
           <Input
             id="bank-name"
             value={fields.name}
-            placeholder={card ? "Cartão Sicredi" : fields.kind === "cash" ? "Caixa da fazenda" : "Sicredi"}
+            placeholder={NAME_PLACEHOLDER[fields.kind]}
             onChange={(e) => set({ name: e.target.value })}
             className="min-h-11 md:min-h-0"
           />
@@ -311,7 +324,7 @@ function BankAccountForm({ account, onDone }: { account?: BankAccount; onDone():
             </Select>
           </div>
         </>
-      ) : (
+      ) : mayBeMain(fields.kind) ? (
         <>
           <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-ink md:min-h-0">
             <input
@@ -325,7 +338,7 @@ function BankAccountForm({ account, onDone }: { account?: BankAccount; onDone():
             <span className="text-xs text-ink-soft">· “Pago por” começa nela</span>
           </label>
         </>
-      )}
+      ) : null}
 
       {error ? (
         <p role="alert" className="text-xs text-overdue">

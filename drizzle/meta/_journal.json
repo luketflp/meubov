@@ -169,6 +169,13 @@
       "when": 1790725133112,
       "tag": "0023_financeiro-contas-bancarias",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790910265834,
+      "tag": "0024_financeiro-investimentos",
+      "breakpoints": true
     }
   ]
 }

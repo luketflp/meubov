@@ -6,11 +6,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { state } = vi.hoisted(() => ({
-  state: { inserts: [] as Record<string, unknown>[][] },
+  state: {
+    /** Rows each `select()` resolves to, in call order: the conta do plano, then "Pago por". */
+    selectResults: [] as Record<string, unknown>[][],
+    inserts: [] as Record<string, unknown>[][],
+  },
 }));
 
 vi.mock("@/lib/db", () => {
   const db = {
+    select: () => {
+      const rows = state.selectResults.shift() ?? [];
+      const builder = {
+        from: () => builder,
+        where: () => builder,
+        limit: () => builder,
+        then: (resolve: (value: Record<string, unknown>[]) => unknown) => resolve(rows),
+      };
+      return builder;
+    },
     insert: () => ({
       values: (values: Record<string, unknown> | Record<string, unknown>[]) => {
         const rows = Array.isArray(values) ? values : [values];
@@ -35,6 +49,7 @@ const ENTRY = {
 };
 
 beforeEach(() => {
+  state.selectResults = [];
   state.inserts = [];
 });
 
@@ -154,5 +169,53 @@ describe("addSeries — recorrente", () => {
       });
     expect(await run("2025-09-27")).toBe("starts_too_old");
     expect(await run("2025-09-28")).not.toBe("starts_too_old");
+  });
+});
+
+describe("addSeries — fora do resultado", () => {
+  it("writes a financiamento's movimento on the série and every parcela, without grupo or lote", async () => {
+    state.selectResults = [[{ group: "financing" }]];
+
+    await new AddSeriesUseCase().run({
+      ...ENTRY,
+      kind: "financing",
+      accountId: "acc-pronaf",
+      lotId: "lot-1",
+      amountBrl: 1200,
+      repeat: { mode: "installments", count: 3, frequency: "monthly", startsOn: "2026-10-10" },
+    });
+
+    const [[series], rows] = state.inserts;
+    expect(series).toMatchObject({
+      kind: "financing",
+      flow: "out",
+      category: "other",
+      accountId: "acc-pronaf",
+      lotId: null,
+    });
+    expect(rows.every((row) => row.flow === "out" && row.category === "other" && row.lotId === null)).toBe(true);
+  });
+
+  it("refuses a série of sócios without a conta of its group", async () => {
+    const result = await new AddSeriesUseCase().run({
+      ...ENTRY,
+      kind: "partners",
+      amountBrl: 5000,
+      repeat: { mode: "recurring", frequency: "monthly", startsOn: "2026-10-05" },
+    });
+    expect(result).toBe("invalid_account");
+    expect(state.inserts).toEqual([]);
+  });
+
+  it("never repeats a rendimento", async () => {
+    const result = await new AddSeriesUseCase().run({
+      ...ENTRY,
+      kind: "yield",
+      amountBrl: 50,
+      bankAccountId: "cdb",
+      repeat: { mode: "recurring", frequency: "monthly", startsOn: "2026-10-05" },
+    });
+    expect(result).toBe("invalid_repeat");
+    expect(state.inserts).toEqual([]);
   });
 });

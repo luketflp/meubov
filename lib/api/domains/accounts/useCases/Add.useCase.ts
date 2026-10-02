@@ -14,12 +14,24 @@ interface AddAccountUseCaseProps {
   farmId: number;
   group: AccountGroup;
   name: string;
+  /** Financing only: saldo devedor at the end of `openingDate`; both or neither. */
+  openingBalanceBrl?: number;
+  openingDate?: string;
 }
 
-/** `duplicate` when the grupo already has the name, archived contas included. */
-type AddAccountUseCaseResponse = Account | "duplicate";
+/**
+ * - `duplicate`: the grupo already has the name, archived contas included.
+ * - `invalid_opening`: a saldo inicial comes without its date (or the
+ *   reverse), or on a grupo that is not financiamento.
+ */
+type AddAccountUseCaseResponse = Account | "duplicate" | "invalid_opening";
 
 type CurrUseCase = _UseCase<AddAccountUseCaseProps, AddAccountUseCaseResponse>;
+
+/** A saldo inicial comes with its date, and only on a conta de financiamento. */
+export function validOpening(group: AccountGroup, balance: number | null, date: string | null): boolean {
+  return balance === null ? date === null : date !== null && group === "financing";
+}
 
 /**
  * Creates a conta in a grupo. The name is compared without case first; the
@@ -33,7 +45,8 @@ export class AddAccountUseCase implements CurrUseCase {
     this.repository = repo;
   }
 
-  public run: CurrUseCase["run"] = async ({ farmId, group, name }) => {
+  public run: CurrUseCase["run"] = async ({ farmId, group, name, openingBalanceBrl = null, openingDate = null }) => {
+    if (!validOpening(group, openingBalanceBrl, openingDate)) return "invalid_opening";
     const trimmed = name.trim();
     const [clash] = await this.repository
       .select({ id: accounts.id })
@@ -51,7 +64,7 @@ export class AddAccountUseCase implements CurrUseCase {
     try {
       const [row] = await this.repository
         .insert(accounts)
-        .values({ id: randomUUID(), farmId, group, name: trimmed })
+        .values({ id: randomUUID(), farmId, group, name: trimmed, openingBalanceBrl, openingDate })
         .returning();
       return toAccount(row);
     } catch (error) {

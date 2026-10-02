@@ -6,6 +6,7 @@ import {
   accountsByGroup,
   counterpartySuggestions,
   DEFAULT_ACCOUNTS,
+  EXPENSE_GROUPS,
   missingDefaults,
 } from "@/lib/domain/accounts";
 import type { Account, Expense } from "@/lib/types";
@@ -27,7 +28,7 @@ const expense = (overrides: Partial<Expense>): Expense => ({
 });
 
 describe("ACCOUNT_GROUPS and ACCOUNT_GROUP_LABEL", () => {
-  it("lists Receitas first, then the seven grupos of custo", () => {
+  it("lists Receitas first, then the seven grupos of custo, then the three outside the resultado", () => {
     expect(ACCOUNT_GROUPS).toEqual([
       "revenue",
       "nutrition",
@@ -37,6 +38,9 @@ describe("ACCOUNT_GROUPS and ACCOUNT_GROUP_LABEL", () => {
       "breeding",
       "admin",
       "other",
+      "investment",
+      "financing",
+      "partners",
     ]);
     expect(ACCOUNT_GROUPS.map((g) => ACCOUNT_GROUP_LABEL[g])).toEqual([
       "Receitas",
@@ -47,7 +51,16 @@ describe("ACCOUNT_GROUPS and ACCOUNT_GROUP_LABEL", () => {
       "Reprodução",
       "Administrativo",
       "Outros",
+      "Investimentos",
+      "Financiamentos",
+      "Sócios",
     ]);
+  });
+});
+
+describe("EXPENSE_GROUPS", () => {
+  it("is the seven grupos of custo in screen order", () => {
+    expect(EXPENSE_GROUPS).toEqual(["nutrition", "pasture", "labor", "health", "breeding", "admin", "other"]);
   });
 });
 
@@ -69,7 +82,10 @@ describe("DEFAULT_ACCOUNTS", () => {
       "Contabilidade",
     ]);
     expect(names("other")).toEqual([]);
-    expect(DEFAULT_ACCOUNTS).toHaveLength(25);
+    expect(names("investment")).toEqual(["Benfeitorias", "Máquinas e implementos", "Equipamentos"]);
+    expect(names("financing")).toEqual([]);
+    expect(names("partners")).toEqual(["Distribuição de lucro"]);
+    expect(DEFAULT_ACCOUNTS).toHaveLength(29);
   });
 });
 
@@ -92,6 +108,7 @@ describe("accountsByGroup", () => {
     const byGroup = accountsByGroup(accounts);
     expect(Object.keys(byGroup).sort()).toEqual([...ACCOUNT_GROUPS].sort());
     expect(byGroup.labor).toEqual([]);
+    expect(byGroup.financing).toEqual([]);
   });
 
   it("includes archived contas when asked", () => {
@@ -111,7 +128,7 @@ describe("missingDefaults", () => {
       account({ id: "a-2", group: "breeding", name: "SÊMEN", archivedAt: "2026-01-01T00:00:00.000Z" }),
       account({ id: "a-3", group: "other", name: "Adubo" }),
     ]);
-    expect(missing).toHaveLength(23);
+    expect(missing).toHaveLength(27);
     expect(missing).not.toContainEqual({ group: "nutrition", name: "Sal mineral" });
     expect(missing).not.toContainEqual({ group: "breeding", name: "Sêmen" });
     expect(missing).toContainEqual({ group: "pasture", name: "Adubo" });

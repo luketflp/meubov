@@ -16,6 +16,9 @@ const { state, getSession, HERD } = vi.hoisted(() => ({
       { id: "t-1", animalEarTag: "BR-1", type: "vaccine", name: "Aftosa", date: "2026-09-01", status: "done", withdrawalDays: 0, costBrl: 4.5 },
     ],
     lots: [],
+    accounts: [
+      { id: "acc-1", group: "financing", name: "Pronaf", openingBalanceBrl: 120000, openingDate: "2026-06-30" },
+    ],
     invernadas: [],
     lotPlacements: [],
     movements: [],
@@ -146,6 +149,7 @@ describe("permissions on the mounted API", () => {
     const data = await response.json();
     expect(data.expenses).toEqual([]);
     expect(data.treatments[0]).not.toHaveProperty("costBrl");
+    expect(data.accounts).toEqual([{ id: "acc-1", group: "financing", name: "Pronaf" }]);
   });
 
   it("keeps money for a member who sees Financeiro", async () => {

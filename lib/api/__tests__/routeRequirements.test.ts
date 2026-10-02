@@ -71,6 +71,7 @@ describe("ROUTE_REQUIREMENTS", () => {
   it("keeps lançamentos and the plano de contas behind Financeiro edit", () => {
     for (const key of [
       "PATCH /api/herd/expenses/:id",
+      "POST /api/herd/expenses/:id/split",
       "POST /api/herd/accounts",
       "PATCH /api/herd/accounts/:id",
       "POST /api/herd/accounts/defaults",

@@ -1,13 +1,15 @@
 /**
  * Conciliação suggestions: which MeuBov record a linha do extrato confirms.
- * Same side (saída ↔ despesa, compra, transferência out; entrada ↔ receita,
- * venda, transferência in), value equal to the centavo, not yet paired, of
- * this conta or of none, within ±5 days. Pure.
+ * Same side (saída ↔ a lançamento going out, compra, transferência out;
+ * entrada ↔ a lançamento coming in, venda, transferência in), value equal to
+ * the centavo, not yet paired, of this conta or of none, within ±5 days. Pure.
  */
 import type { BankAccount, Expense, Movement, StatementLine, Transfer } from "@/lib/types";
 import { daysBetween } from "@/lib/domain/dates";
 import { effectiveDueDate } from "@/lib/domain/ledger";
+import { isInflow } from "@/lib/domain/entries";
 
+/** For a lançamento, "expense" goes out and "revenue" comes in (`entryFlow`), whatever its kind. */
 export type CandidateKind = "expense" | "revenue" | "sale" | "purchase" | "transferOut" | "transferIn";
 
 /** What POST /statement-lines/:id/match pairs a line with. */
@@ -107,7 +109,7 @@ export function candidatesFor(
     if (e.bankAccountId === undefined && e.paidAt && openingDate && e.paidAt <= openingDate) continue;
     out.push({
       target: { kind: "expense", id: e.id },
-      kind: e.kind === "revenue" ? "revenue" : "expense",
+      kind: isInflow(e) ? "revenue" : "expense",
       date: e.paidAt ?? effectiveDueDate(e),
       amountBrl: e.amountBrl,
       name: e.counterparty ?? null,

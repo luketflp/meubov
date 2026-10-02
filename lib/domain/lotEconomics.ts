@@ -6,6 +6,7 @@
 import type { Animal, ManejoSession } from "@/lib/types";
 import type { Period } from "@/lib/domain/finance";
 import { inPeriod, periodDays } from "@/lib/domain/period";
+import { isCost } from "@/lib/domain/entries";
 import { periodAdg } from "@/lib/domain/adg";
 import {
   arrobasProduced,
@@ -20,7 +21,7 @@ export interface LotEconomics {
   name: string;
   /** Active animals in the lote today. */
   heads: number;
-  /** Lançamentos with the lote + treatments of its animals. */
+  /** Despesas with the lote + treatments of its animals. */
   directBrl: number;
   /** The lote's share, by heads, of the COE no lote carries. */
   sharedBrl: number;
@@ -52,7 +53,7 @@ export function lotEconomics(
     if (lotId !== undefined) direct.set(lotId, (direct.get(lotId) ?? 0) + amount);
   };
   for (const e of expenses) {
-    if (e.kind !== "revenue" && inPeriod(e.date, period)) addDirect(e.lotId, e.amountBrl);
+    if (isCost(e) && inPeriod(e.date, period)) addDirect(e.lotId, e.amountBrl);
   }
   const lotOf = new Map(animals.map((a) => [a.earTag, a.lotId]));
   for (const t of treatments) {

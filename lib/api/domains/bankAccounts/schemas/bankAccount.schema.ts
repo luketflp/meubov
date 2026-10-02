@@ -8,9 +8,18 @@ const Day = t.Integer({ minimum: 1, maximum: 31 });
 const Name = t.String({ minLength: 1, maxLength: 60, pattern: "\\S" });
 const Label = t.String({ maxLength: 60 });
 
-export const BankAccountKindModel = t.Union([t.Literal("checking"), t.Literal("cash"), t.Literal("card")]);
+/** Conta corrente, caixa, cartão, aplicação. */
+export const BankAccountKindModel = t.Union([
+  t.Literal("checking"),
+  t.Literal("cash"),
+  t.Literal("card"),
+  t.Literal("investment"),
+]);
 
-/** Body of POST /bank-accounts. A cartão takes closingDay and dueDay, and may name the conta that pays it. */
+/**
+ * Body of POST /bank-accounts. A cartão takes closingDay and dueDay, and may
+ * name the conta that pays it. Only a conta corrente or a caixa may be principal.
+ */
 export const NewBankAccountBody = t.Object({
   kind: BankAccountKindModel,
   name: Name,

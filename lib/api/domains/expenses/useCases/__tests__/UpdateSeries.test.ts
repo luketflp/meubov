@@ -137,6 +137,43 @@ describe("updateSeries", () => {
     expect(state.updates[1]).toEqual({ amountBrl: 1300 });
   });
 
+  it("carries a new movimento to the série and its unpaid rows", async () => {
+    const aporte = (r: ReturnType<typeof row>) => ({
+      ...r,
+      kind: "partners",
+      flow: "out",
+      category: "other",
+      accountId: "acc-socios",
+      bankAccountId: null,
+    });
+    const rows = ROWS.map(aporte);
+    // The row, the série, the row again (its own update), its conta do plano, its linhas (none), the siblings.
+    state.selectResults = [[rows[1]], [SERIES], [rows[1]], [{ group: "partners" }], [], rows];
+    state.returning = [[{ ...rows[1], flow: "in" }]];
+
+    await new UpdateSeriesUseCase().run({ farmId: 7, id: "e-2", patch: { flow: "in" }, scope: "all" });
+
+    expect(state.updates[0]).toMatchObject({ kind: "partners", flow: "in", category: "other" });
+    // The série template, then row 4 (rows 1 and 3 are paid).
+    expect(state.updates.slice(1)).toEqual([{ flow: "in" }, { flow: "in" }]);
+  });
+
+  it("never changes the kind of a série: the edit is judged as the kind the rows have", async () => {
+    // The row, the série, the row again (its own update), the conta do plano sent: an investimento's.
+    state.selectResults = [[ROWS[1]], [SERIES], [ROWS[1]], [{ group: "investment" }]];
+
+    const result = await new UpdateSeriesUseCase().run({
+      farmId: 7,
+      id: "e-2",
+      patch: { kind: "investment", accountId: "acc-maquinas" },
+      scope: "all",
+    });
+
+    // A despesa with a conta of Investimentos is refused, so no sibling takes that conta into the COE.
+    expect(result).toBe("invalid_account");
+    expect(state.updates).toEqual([]);
+  });
+
   it("never re-splits a parcelamento's value", async () => {
     const parcela = { ...ROWS[1], amountBrl: 4000 };
     state.selectResults = [[parcela], [{ ...SERIES, mode: "installments", count: 4 }], [parcela], [], ROWS];

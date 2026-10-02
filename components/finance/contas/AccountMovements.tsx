@@ -10,6 +10,7 @@ import { ChevronLeft, ChevronRight, CircleCheck, Pencil } from "lucide-react";
 import type { BankAccount, Expense } from "@/lib/types";
 import { accountMovements, type BankMove } from "@/lib/domain/bankAccounts";
 import { ACCOUNT_GROUP_LABEL, accountName } from "@/lib/domain/accounts";
+import { ENTRY_KIND_LABEL, entryGroup } from "@/lib/domain/entries";
 import { formatDate } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
 import type { Period } from "@/lib/domain/period";
@@ -54,7 +55,8 @@ export function AccountMovements({ account, period, onPeriodChange, canEdit, onE
     return accountMovements(account, { expenses, movements, transfers }, period).map((move) => {
       if (move.expense) {
         const e = move.expense;
-        const group = ACCOUNT_GROUP_LABEL[e.kind === "revenue" ? "revenue" : e.category];
+        const groupKey = entryGroup(e);
+        const group = groupKey ? ACCOUNT_GROUP_LABEL[groupKey] : ENTRY_KIND_LABEL.yield;
         return { ...move, description: e.counterparty ?? e.notes ?? group, plan: planOf(e) ?? group, group: planOf(e) ? group : null };
       }
       if (move.movement) {
@@ -64,7 +66,7 @@ export function AccountMovements({ account, period, onPeriodChange, canEdit, onE
           ...move,
           description: `${sale ? "Venda" : "Compra"} · ${sale ? m.destination : m.origin}`,
           plan: sale ? "Venda de gado" : "Compra de gado",
-          group: sale ? ACCOUNT_GROUP_LABEL.revenue : "Capital",
+          group: ACCOUNT_GROUP_LABEL[sale ? "revenue" : "investment"],
         };
       }
       const t = move.transfer!;

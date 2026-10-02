@@ -58,6 +58,7 @@ export class TopUpSeriesUseCase implements CurrUseCase {
               id: randomUUID(),
               farmId,
               kind: series.kind,
+              flow: series.flow,
               date,
               dueDate: date,
               category: series.category,

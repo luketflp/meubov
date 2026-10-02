@@ -9,11 +9,16 @@ import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
 import type { Account } from "@/lib/types";
 
-/** Absent leaves a field as it is. */
+import { validOpening } from "./Add.useCase";
+
+/** Absent leaves a field as it is; null clears it. */
 export interface AccountPatchInput {
   name?: string;
   /** True archives the conta, false restores it. */
   archived?: boolean;
+  /** Saldo devedor inicial of a conta de financiamento and its date: both or neither. */
+  openingBalanceBrl?: number | null;
+  openingDate?: string | null;
 }
 
 interface UpdateAccountUseCaseProps {
@@ -22,14 +27,19 @@ interface UpdateAccountUseCaseProps {
   patch: AccountPatchInput;
 }
 
-/** Null when the conta is not on this farm. */
-type UpdateAccountUseCaseResponse = Account | "duplicate" | null;
+/**
+ * - null: the conta is not on this farm.
+ * - `invalid_opening`: as in AddAccount, checked on the conta as it will be
+ *   after the patch.
+ */
+type UpdateAccountUseCaseResponse = Account | "duplicate" | "invalid_opening" | null;
 
 type CurrUseCase = _UseCase<UpdateAccountUseCaseProps, UpdateAccountUseCaseResponse>;
 
 /**
- * Renames a conta (the history follows, since lançamentos point at its id) or
- * archives and restores it. A conta is never deleted.
+ * Renames a conta (the history follows, since lançamentos point at its id),
+ * archives and restores it, or sets the saldo devedor inicial of a conta de
+ * financiamento. A conta is never deleted and never changes grupo.
  */
 export class UpdateAccountUseCase implements CurrUseCase {
   private repository: RepositoryType;
@@ -43,6 +53,9 @@ export class UpdateAccountUseCase implements CurrUseCase {
     const scope = and(eq(accounts.farmId, farmId), eq(accounts.id, id));
     const [current] = await this.repository.select().from(accounts).where(scope).limit(1);
     if (!current) return null;
+    const balance = patch.openingBalanceBrl === undefined ? current.openingBalanceBrl : patch.openingBalanceBrl;
+    const date = patch.openingDate === undefined ? current.openingDate : patch.openingDate;
+    if (!validOpening(current.group, balance, date)) return "invalid_opening";
 
     const set: Partial<typeof accounts.$inferInsert> = {};
     if (patch.name !== undefined) {
@@ -63,6 +76,8 @@ export class UpdateAccountUseCase implements CurrUseCase {
       set.name = name;
     }
     if (patch.archived !== undefined) set.archivedAt = patch.archived ? new Date() : null;
+    if (patch.openingBalanceBrl !== undefined) set.openingBalanceBrl = patch.openingBalanceBrl;
+    if (patch.openingDate !== undefined) set.openingDate = patch.openingDate;
     if (Object.keys(set).length === 0) return toAccount(current);
 
     try {

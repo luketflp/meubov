@@ -238,6 +238,23 @@ describe("ResolveLineUseCase", () => {
     expect(state.updates).toEqual([]);
   });
 
+  it("reads the side of a lançamento fora do resultado from its movimento", async () => {
+    const entrada = { ...LINE, amountBrl: 4850 };
+    const liberacao = { ...EXPENSE, kind: "financing", flow: "in", category: "other", accountId: "acc-pronaf" };
+    state.selectResults = [[entrada], [liberacao]];
+    state.returning = [
+      [{ ...liberacao, paidAt: "2026-09-18", bankAccountId: "sicredi" }],
+      [{ ...entrada, status: "matched", expenseId: "e-1" }],
+    ];
+    expect(await resolveRun({ type: "match", target: { kind: "expense", id: "e-1" } })).toMatchObject({
+      line: { status: "matched" },
+    });
+
+    // A pagamento (saída) never confirms an entrada.
+    state.selectResults = [[entrada], [{ ...liberacao, flow: "out" }]];
+    expect(await resolveRun({ type: "match", target: { kind: "expense", id: "e-1" } })).toBe("wrong_side");
+  });
+
   it("gives a venda without conta the line's conta", async () => {
     const receipt = { ...LINE, amountBrl: 148320 };
     state.selectResults = [[receipt], [{ kind: "sale", bankAccountId: null, totalAmountBrl: 148320 }]];

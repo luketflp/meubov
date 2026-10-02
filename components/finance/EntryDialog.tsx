@@ -1,24 +1,32 @@
 "use client";
 
 /**
- * "Novo lançamento": a despesa or a receita with vencimento, pagamento and
- * the conta bancária it was paid by ("Pago por"), conta do plano, pago para,
- * documento, lote (centro de custo), Repetir (uma vez, parcelado, recorrente)
- * and anexos. With `fromLine` it is "Criar lançamento" of the conciliação: the
- * linha do extrato fixes the kind, the value and the payment (on its date, by
- * its conta) and the lançamento is saved paired with it. With `expense` it edits that lançamento: the
- * Despesa | Receita switch and Repetir are hidden, a row of a série says which
- * ("Parcela 2/3", "Recorrente · todo dia 20") and saving asks where the change
- * applies. Vendas and compras de gado come from the manejos, never from here.
+ * "Novo lançamento": a despesa, a receita or money that stays out of the
+ * resultado (investimento, financiamento, sócios), with vencimento, pagamento
+ * and the conta bancária it was paid by ("Pago por"), conta do plano, pago
+ * para, documento, lote (centro de custo), Repetir (uma vez, parcelado,
+ * recorrente) and anexos. A capital kind needs a conta of its grupo and a
+ * Movimento (Compra / Venda do bem, Pagamento / Liberação, Retirada / Aporte)
+ * and takes no grupo or lote; the words about paying follow the direction.
+ * `initial` starts it on the nó picked in Lançamentos; `template` fills it
+ * from a lançamento (Duplicar: today, pending, no anexos, no repetition).
+ * With `fromLine` it is "Criar lançamento" of the conciliação: the linha do
+ * extrato fixes the kind (despesa or receita), the value and the payment (on
+ * its date, by its conta) and the lançamento is saved paired with it. With
+ * `expense` it edits that lançamento: the type switch and Repetir are hidden,
+ * a row of a série says which ("Parcela 2/3", "Recorrente · todo dia 20") and
+ * saving asks where the change applies. A rendimento opens the YieldDialog
+ * instead. Vendas and compras de gado come from the manejos, never from here.
  */
 import { useState, type FormEvent } from "react";
-import { Repeat } from "lucide-react";
+import { Info, Repeat } from "lucide-react";
 import { useHerdStore, type ExpensePatch } from "@/lib/store/useHerdStore";
 import { activeAnimals, activeLots } from "@/lib/store/selectors";
 import { useToast } from "@/components/providers/Toasts";
 import type {
   AccountGroup,
-  BankAccount,
+  CapitalGroup,
+  EntryFlow,
   EntryKind,
   Expense,
   ExpenseCategory,
@@ -27,11 +35,21 @@ import type {
 } from "@/lib/types";
 import type { Resolved } from "@/lib/api/domains/statements/useCases/ResolveLine.useCase";
 import { accountsByGroup, counterpartySuggestions } from "@/lib/domain/accounts";
+import { CAPITAL_GROUPS, ENTRY_KIND_LABEL, FLOW_LABEL, isCapitalKind, isInflow } from "@/lib/domain/entries";
+import type { EntryInitial } from "@/lib/domain/planTree";
 import { todayISO } from "@/lib/domain/dates";
 import { EXPENSE_CATEGORY_LABEL } from "@/lib/domain/labels";
 import { MAX_INSTALLMENTS, MIN_INSTALLMENTS, installmentLabel, recurrenceLabel } from "@/lib/domain/series";
 import { cn } from "@/lib/utils";
 import { parseAmount } from "@/components/finance/parseAmount";
+import {
+  NONE,
+  entryValues,
+  initialFields,
+  withKind,
+  type EntryFields,
+  type EntrySource,
+} from "@/components/finance/entryFields";
 import {
   RepeatSection,
   initialRepeat,
@@ -39,8 +57,9 @@ import {
   type RepeatFields,
 } from "@/components/finance/RepeatSection";
 import { SeriesScopeDialog } from "@/components/finance/SeriesScopeDialog";
+import { YieldDialog } from "@/components/finance/YieldDialog";
 import { AttachmentsField, type PendingFile } from "@/components/finance/attachments/AttachmentsField";
-import { PaidByField, defaultPaidBy, paidByOptions } from "@/components/finance/contas/PaidByField";
+import { PaidByField, paidByOptions } from "@/components/finance/contas/PaidByField";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -64,93 +83,39 @@ import { Textarea } from "@/components/ui/textarea";
 
 const CATEGORY_LIST = Object.keys(EXPENSE_CATEGORY_LABEL) as ExpenseCategory[];
 
-/** Select value for "Sem conta" and "Fazenda toda": Radix refuses "". */
-const NONE = "none";
+/** The type switch: despesa, receita, then the three kinds outside the resultado. */
+const KINDS: readonly EntryKind[] = ["expense", "revenue", ...CAPITAL_GROUPS];
 
-const KINDS: readonly { kind: EntryKind; label: string }[] = [
-  { kind: "expense", label: "Despesa" },
-  { kind: "revenue", label: "Receita" },
-];
+/** Movimento, the saída first. */
+const FLOWS: readonly EntryFlow[] = ["out", "in"];
 
-interface EntryFields {
-  kind: EntryKind;
-  date: string;
-  amount: string;
-  category: ExpenseCategory;
-  accountId: string;
-  dueDate: string;
-  /** The user changed Vencimento; until then it follows Data. */
-  dueTouched: boolean;
-  paid: boolean;
-  paidAt: string;
-  /** "Pago por": a conta bancária id, "" when the farm has none. */
-  bankAccountId: string;
-  counterparty: string;
-  document: string;
-  lotId: string;
-  notes: string;
-}
+/** The line under the type switch of a kind outside the resultado. */
+const CAPITAL_NOTICE: Record<CapitalGroup, string> = {
+  investment:
+    "Investimento é capital: fica fora do custo (COE) e do resultado do período. Sai do caixa quando é pago.",
+  financing:
+    "Financiamento é dívida: fica fora do custo (COE) e do resultado do período. A liberação aumenta o saldo devedor; cada pagamento o baixa.",
+  partners:
+    "Sócios é dinheiro dos donos: fica fora do custo (COE) e do resultado do período. A retirada sai do caixa; o aporte entra.",
+};
 
-function initialFields(
-  expense: Expense | undefined,
-  defaultKind: EntryKind,
-  bankAccounts: BankAccount[],
-  fromLine?: StatementLine
-): EntryFields {
-  const today = todayISO();
-  if (fromLine) {
-    return {
-      kind: fromLine.amountBrl < 0 ? "expense" : "revenue",
-      date: fromLine.date,
-      amount: String(Math.abs(fromLine.amountBrl)).replace(".", ","),
-      category: "nutrition",
-      accountId: NONE,
-      dueDate: fromLine.date,
-      dueTouched: false,
-      paid: true,
-      paidAt: fromLine.date,
-      bankAccountId: fromLine.bankAccountId,
-      counterparty: "",
-      document: "",
-      lotId: NONE,
-      notes: fromLine.description,
-    };
-  }
-  if (!expense) {
-    return {
-      kind: defaultKind,
-      date: today,
-      amount: "",
-      category: "nutrition",
-      accountId: NONE,
-      dueDate: today,
-      dueTouched: false,
-      paid: true,
-      paidAt: today,
-      bankAccountId: defaultPaidBy(bankAccounts, defaultKind),
-      counterparty: "",
-      document: "",
-      lotId: NONE,
-      notes: "",
-    };
-  }
-  return {
-    kind: expense.kind,
-    date: expense.date,
-    amount: String(expense.amountBrl).replace(".", ","),
-    category: expense.category,
-    accountId: expense.accountId ?? NONE,
-    dueDate: expense.dueDate ?? expense.date,
-    dueTouched: expense.dueDate !== undefined && expense.dueDate !== expense.date,
-    paid: expense.paidAt !== undefined,
-    paidAt: expense.paidAt ?? today,
-    // A row paid before the contas existed stays without one until the farmer picks it.
-    bankAccountId: expense.bankAccountId ?? (expense.paidAt ? "" : defaultPaidBy(bankAccounts, expense.kind)),
-    counterparty: expense.counterparty ?? "",
-    document: expense.document ?? "",
-    lotId: expense.lotId ?? NONE,
-    notes: expense.notes ?? "",
-  };
+/** Toast after one lançamento was created; parcelas and recorrências say so instead. */
+const CREATED_TOAST: Record<EntryKind, string> = {
+  expense: "Despesa lançada",
+  revenue: "Receita lançada",
+  investment: "Investimento lançado",
+  financing: "Financiamento lançado",
+  partners: "Lançamento de sócios salvo",
+  yield: "Rendimento lançado",
+};
+
+/** One segment of the type and Movimento switches. */
+function segmentClass(selected: boolean, className: string) {
+  return cn(
+    "flex min-h-11 items-center justify-center rounded-md px-3 text-[13px] whitespace-nowrap transition-colors md:min-h-8",
+    selected ? "bg-panel font-medium text-ink shadow-[0_0_0_1px_var(--color-hairline)]" : "text-ink-soft hover:text-ink",
+    className
+  );
 }
 
 /** Whether "Parcelas" holds a count the server takes (2–48). */
@@ -166,6 +131,8 @@ export function EntryDialog({
   defaultKind = "expense",
   fromLine,
   onResolved,
+  initial,
+  template,
 }: {
   open: boolean;
   onOpenChange(open: boolean): void;
@@ -175,9 +142,25 @@ export function EntryDialog({
   fromLine?: StatementLine;
   /** After the lançamento was created and paired with `fromLine`. */
   onResolved?(resolved: Resolved): void;
+  /** "Novo" on a picked nó: kind, movimento, grupo, conta and conta bancária start from it. */
+  initial?: EntryInitial;
+  /** Duplicar: a new lançamento filled from this one. */
+  template?: Expense;
 }) {
   // While saving (and uploading) the dialog stays: Esc, outside click and Cancelar wait.
   const [busy, setBusy] = useState(false);
+  // A rendimento has its own small form, on the aplicação of whichever started it.
+  const rendimento = [expense, template, initial].find((source) => source?.kind === "yield");
+  if (rendimento) {
+    return (
+      <YieldDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        bankAccountId={rendimento.bankAccountId ?? ""}
+        expense={expense?.kind === "yield" ? expense : undefined}
+      />
+    );
+  }
   return (
     <Dialog
       open={open}
@@ -191,13 +174,13 @@ export function EntryDialog({
           <DialogDescription>
             {fromLine
               ? "Preenchido pela linha do banco · confira a conta do plano."
-              : "Despesas e receitas da fazenda. Vendas e compras de gado entram sozinhas pelos manejos."}
+              : initial?.kind || initial?.bankAccountId
+                ? "Começa na conta escolhida no plano de contas. Vendas e compras de gado entram sozinhas pelos manejos."
+                : "Despesas, receitas, investimentos, financiamentos e sócios. Vendas e compras de gado entram sozinhas pelos manejos."}
           </DialogDescription>
         </DialogHeader>
         <EntryForm
-          expense={expense}
-          defaultKind={defaultKind}
-          fromLine={fromLine}
+          source={{ expense, template, initial, fromLine, defaultKind }}
           onResolved={onResolved}
           onBusyChange={setBusy}
           onDone={() => onOpenChange(false)}
@@ -208,20 +191,17 @@ export function EntryDialog({
 }
 
 function EntryForm({
-  expense,
-  defaultKind,
-  fromLine,
+  source,
   onResolved,
   onBusyChange,
   onDone,
 }: {
-  expense?: Expense;
-  defaultKind: EntryKind;
-  fromLine?: StatementLine;
+  source: EntrySource;
   onResolved?(resolved: Resolved): void;
   onBusyChange(busy: boolean): void;
   onDone(): void;
 }) {
+  const { expense, fromLine } = source;
   const accounts = useHerdStore((s) => s.accounts);
   const bankAccounts = useHerdStore((s) => s.bankAccounts);
   const expenses = useHerdStore((s) => s.expenses);
@@ -236,9 +216,7 @@ function EntryForm({
   /** The linha do extrato fixes the kind, the value and the payment. */
   const fixed = fromLine !== undefined;
 
-  const [fields, setFields] = useState<EntryFields>(() =>
-    initialFields(expense, defaultKind, bankAccounts, fromLine)
-  );
+  const [fields, setFields] = useState<EntryFields>(() => initialFields(source, bankAccounts, todayISO()));
   const [repeatFields, setRepeatFields] = useState<RepeatFields>(() => initialRepeat(todayISO()));
   const [pending, setPending] = useState<PendingFile[]>([]);
   /** The edit waiting for "Só esta" · "Esta e as próximas" · "Todas". */
@@ -254,8 +232,10 @@ function EntryForm({
 
   const set = (patch: Partial<EntryFields>) => setFields((f) => ({ ...f, ...patch }));
 
-  const revenue = fields.kind === "revenue";
-  const group: AccountGroup = revenue ? "revenue" : fields.category;
+  /** Investimento, financiamento or sócios: conta required, Movimento, no grupo or lote. */
+  const capitalKind = isCapitalKind(fields.kind) ? fields.kind : null;
+  const inflow = isInflow(fields);
+  const group: AccountGroup = capitalKind ?? (fields.kind === "revenue" ? "revenue" : fields.category);
   const groupAccounts = accountsByGroup(accounts)[group];
   const currentAccount = accounts.find((a) => a.id === fields.accountId);
   const accountOptions =
@@ -330,6 +310,7 @@ function EntryForm({
     setCreatingAccount(true);
     let created;
     try {
+      // A financiamento created here has no saldo inicial: Configurações › Plano de contas sets it.
       created = await addAccount({ group, name });
     } catch {
       return; // apiFail already toasted
@@ -346,13 +327,9 @@ function EntryForm({
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (fields.date === "") {
-      setError("Informe a data do lançamento.");
-      return;
-    }
-    const amountBrl = parseAmount(fields.amount);
-    if (!Number.isFinite(amountBrl) || amountBrl <= 0) {
-      setError("Informe o valor (maior que zero).");
+    const values = entryValues(fields, repeating);
+    if (typeof values === "string") {
+      setError(values);
       return;
     }
     const repeat = expense || fixed ? null : repeatFromFields(repeatFields, fields.date);
@@ -360,43 +337,11 @@ function EntryForm({
       setError(repeat);
       return;
     }
-    if (!repeat && fields.dueDate === "") {
-      setError("Informe o vencimento.");
-      return;
-    }
-    if (!repeat && fields.dueDate < fields.date) {
-      setError("O vencimento não pode ser antes da data");
-      return;
-    }
-    if (fields.paid && fields.paidAt === "") {
-      setError(revenue ? "Informe a data do recebimento." : "Informe a data do pagamento.");
-      return;
-    }
     setError(null);
 
-    const category: ExpenseCategory = revenue ? "other" : fields.category;
-    const paidAt = fields.paid ? fields.paidAt : null;
-    const counterparty = fields.counterparty.trim() || null;
-    const docNumber = fields.document.trim() || null;
-    const accountId = fields.accountId === NONE ? null : fields.accountId;
-    const bankAccountId = fields.paid && fields.bankAccountId !== "" ? fields.bankAccountId : null;
-    const lotId = fields.lotId === NONE ? null : fields.lotId;
-    const notes = fields.notes.trim() || null;
-
     if (expense) {
-      const patch: ExpensePatch = {
-        date: fields.date,
-        category,
-        amountBrl,
-        dueDate: fields.dueDate,
-        paidAt,
-        counterparty,
-        document: docNumber,
-        accountId,
-        bankAccountId,
-        lotId,
-        notes,
-      };
+      // Every field, null clearing; a capital row also sends its Movimento.
+      const patch: ExpensePatch = values;
       // A row of a série asks where the change applies before saving.
       if (expense.seriesId) setScopePatch(patch);
       else await saveEdit(expense, patch, "one");
@@ -408,15 +353,15 @@ function EntryForm({
       const resolved = await resolveStatementLine(fromLine, {
         type: "create",
         entry: {
-          date: fields.date,
-          category,
-          amountBrl,
-          dueDate: fields.dueDate,
-          counterparty: counterparty ?? undefined,
-          document: docNumber ?? undefined,
-          accountId: accountId ?? undefined,
-          lotId: lotId ?? undefined,
-          notes: notes ?? undefined,
+          date: values.date,
+          category: values.category,
+          amountBrl: values.amountBrl,
+          dueDate: values.dueDate,
+          counterparty: values.counterparty ?? undefined,
+          document: values.document ?? undefined,
+          accountId: values.accountId ?? undefined,
+          lotId: values.lotId ?? undefined,
+          notes: values.notes ?? undefined,
         },
       }).catch(() => null); // apiFail already toasted
       if (!resolved?.expense) {
@@ -441,17 +386,18 @@ function EntryForm({
       created = await addExpense(
         {
           kind: fields.kind,
-          date: fields.date,
-          category,
-          amountBrl,
-          dueDate: fields.dueDate,
-          paidAt: paidAt ?? undefined,
-          counterparty: counterparty ?? undefined,
-          document: docNumber ?? undefined,
-          accountId: accountId ?? undefined,
-          bankAccountId: bankAccountId ?? undefined,
-          lotId: lotId ?? undefined,
-          notes: notes ?? undefined,
+          flow: values.flow,
+          date: values.date,
+          category: values.category,
+          amountBrl: values.amountBrl,
+          dueDate: values.dueDate,
+          paidAt: values.paidAt ?? undefined,
+          counterparty: values.counterparty ?? undefined,
+          document: values.document ?? undefined,
+          accountId: values.accountId ?? undefined,
+          bankAccountId: values.bankAccountId ?? undefined,
+          lotId: values.lotId ?? undefined,
+          notes: values.notes ?? undefined,
         },
         repeat ?? undefined
       );
@@ -472,9 +418,7 @@ function EntryForm({
           ? repeatFields.choice === "recurring"
             ? "Recorrência lançada"
             : "Parcelas lançadas"
-          : revenue
-            ? "Receita lançada"
-            : "Despesa lançada";
+          : CREATED_TOAST[fields.kind];
       addToast({ messageType: "success", text });
     }
     setSaving(false);
@@ -484,12 +428,13 @@ function EntryForm({
   return (
     <form onSubmit={onSubmit} noValidate className="grid gap-4">
       {expense || fixed ? null : (
+        // Five segments: on the phone the row scrolls sideways instead of wrapping.
         <div
           role="radiogroup"
           aria-label="Tipo de lançamento"
-          className="flex items-center gap-0.5 rounded-lg border border-hairline bg-surface p-0.5"
+          className="flex items-center gap-0.5 overflow-x-auto rounded-lg border border-hairline bg-surface p-0.5"
         >
-          {KINDS.map(({ kind, label }) => {
+          {KINDS.map((kind) => {
             const selected = fields.kind === kind;
             return (
               <button
@@ -498,29 +443,24 @@ function EntryForm({
                 role="radio"
                 aria-checked={selected}
                 onClick={() => {
-                  // A receita never goes into a cartão; a despesa with no conta starts on the principal.
-                  const card = bankAccounts.find((a) => a.id === fields.bankAccountId)?.kind === "card";
-                  const redefault = (kind === "revenue" && card) || (kind === "expense" && fields.bankAccountId === "");
-                  set({
-                    kind,
-                    accountId: NONE,
-                    ...(redefault ? { bankAccountId: defaultPaidBy(bankAccounts, kind) } : {}),
-                  });
+                  setFields((f) => withKind(f, kind, f.flow, bankAccounts));
                   setNewAccountName(null);
                 }}
-                className={cn(
-                  "flex min-h-11 flex-1 items-center justify-center rounded-md px-3 text-[13px] transition-colors md:min-h-8",
-                  selected
-                    ? "bg-panel font-medium text-ink shadow-[0_0_0_1px_var(--color-hairline)]"
-                    : "text-ink-soft hover:text-ink"
-                )}
+                className={segmentClass(selected, "shrink-0 grow")}
               >
-                {label}
+                {ENTRY_KIND_LABEL[kind]}
               </button>
             );
           })}
         </div>
       )}
+
+      {capitalKind ? (
+        <p className="flex items-start gap-2.5 rounded-lg bg-scheduled-soft px-3 py-2.5 text-[13px] leading-[18px] text-scheduled">
+          <Info className="mt-px size-4 shrink-0" aria-hidden />
+          {CAPITAL_NOTICE[capitalKind]}
+        </p>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-1.5">
@@ -549,48 +489,54 @@ function EntryForm({
           />
         </div>
 
-        <div className="grid gap-1.5">
-          {revenue ? (
-            <>
-              <span className="text-sm leading-none font-medium">Grupo</span>
-              <p className="flex min-h-11 items-center rounded-lg border border-input bg-surface px-2.5 text-sm text-ink-soft">
-                Receitas
-              </p>
-            </>
-          ) : (
-            <>
-              <Label htmlFor="entry-category">Grupo</Label>
-              <Select
-                value={fields.category}
-                onValueChange={(category) => {
-                  set({ category: category as ExpenseCategory, accountId: NONE });
-                  setNewAccountName(null);
-                }}
-              >
-                <SelectTrigger id="entry-category" className="min-h-11 w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORY_LIST.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {EXPENSE_CATEGORY_LABEL[category]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </>
-          )}
-        </div>
+        {capitalKind ? null : (
+          <div className="grid gap-1.5">
+            {fields.kind === "revenue" ? (
+              <>
+                <span className="text-sm leading-none font-medium">Grupo</span>
+                <p className="flex min-h-11 items-center rounded-lg border border-input bg-surface px-2.5 text-sm text-ink-soft">
+                  Receitas
+                </p>
+              </>
+            ) : (
+              <>
+                <Label htmlFor="entry-category">Grupo</Label>
+                <Select
+                  value={fields.category}
+                  onValueChange={(category) => {
+                    set({ category: category as ExpenseCategory, accountId: NONE });
+                    setNewAccountName(null);
+                  }}
+                >
+                  <SelectTrigger id="entry-category" className="min-h-11 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORY_LIST.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {EXPENSE_CATEGORY_LABEL[category]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
+          </div>
+        )}
         <div className="grid gap-1.5">
           <Label htmlFor="entry-account">Conta do plano</Label>
           {newAccountName === null ? (
             <>
-              <Select value={fields.accountId} onValueChange={(accountId) => set({ accountId })}>
-                <SelectTrigger id="entry-account" className="min-h-11 w-full">
-                  <SelectValue />
+              {/* A capital kind has no "Sem conta": "" shows the placeholder until one is picked. */}
+              <Select
+                value={capitalKind && fields.accountId === NONE ? "" : fields.accountId}
+                onValueChange={(accountId) => set({ accountId })}
+              >
+                <SelectTrigger id="entry-account" className="min-h-11 w-full" aria-required={capitalKind ? true : undefined}>
+                  <SelectValue placeholder="Escolha a conta" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE}>Sem conta</SelectItem>
+                  {capitalKind ? null : <SelectItem value={NONE}>Sem conta</SelectItem>}
                   {accountOptions.map((account) => (
                     <SelectItem key={account.id} value={account.id}>
                       {account.name}
@@ -633,6 +579,34 @@ function EntryForm({
             </div>
           )}
         </div>
+        {capitalKind ? (
+          <div className="grid content-start gap-1.5">
+            <span id="entry-flow" className="text-sm leading-none font-medium">
+              Movimento
+            </span>
+            <div
+              role="radiogroup"
+              aria-labelledby="entry-flow"
+              className="flex items-center gap-0.5 rounded-lg border border-hairline bg-surface p-0.5"
+            >
+              {FLOWS.map((flow) => {
+                const selected = fields.flow === flow;
+                return (
+                  <button
+                    key={flow}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setFields((f) => withKind(f, f.kind, flow, bankAccounts))}
+                    className={segmentClass(selected, "flex-1")}
+                  >
+                    {FLOW_LABEL[capitalKind][flow]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
 
         <div className="grid gap-1.5">
           <Label htmlFor="entry-due">Vencimento</Label>
@@ -653,9 +627,7 @@ function EntryForm({
           ) : null}
         </div>
         <div className="grid gap-1.5">
-          <span className="text-sm leading-none font-medium">
-            {revenue ? "Recebimento" : "Pagamento"}
-          </span>
+          <span className="text-sm leading-none font-medium">{inflow ? "Recebimento" : "Pagamento"}</span>
           <div className="flex min-h-11 items-center gap-2">
             <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-ink">
               <input
@@ -665,13 +637,13 @@ function EntryForm({
                 onChange={(e) => set({ paid: e.target.checked })}
                 className="size-4 shrink-0 accent-brand"
               />
-              {revenue ? "Já recebido" : "Já pago"}
+              {inflow ? "Já recebido" : "Já pago"}
               {fields.paid ? " em" : ""}
             </label>
             {fields.paid ? (
               <Input
                 type="date"
-                aria-label={revenue ? "Data do recebimento" : "Data do pagamento"}
+                aria-label={inflow ? "Data do recebimento" : "Data do pagamento"}
                 value={fields.paidAt}
                 disabled={fixed}
                 onChange={(e) => set({ paidAt: e.target.value })}
@@ -685,12 +657,13 @@ function EntryForm({
             </p>
           ) : null}
         </div>
-        {fields.paid && paidByOptions(bankAccounts, fields.kind, fields.bankAccountId).length > 0 ? (
+        {fields.paid && paidByOptions(bankAccounts, fields.kind, fields.bankAccountId, fields.flow).length > 0 ? (
           <div className="sm:col-start-2">
             <PaidByField
               id="entry-paid-by"
               accounts={bankAccounts}
               kind={fields.kind}
+              flow={fields.flow}
               value={fields.bankAccountId}
               disabled={fixed}
               onChange={(bankAccountId) => set({ bankAccountId })}
@@ -724,27 +697,27 @@ function EntryForm({
         />
       )}
 
-      <div className="grid gap-1.5">
-        <Label htmlFor="entry-counterparty">{revenue ? "Recebido de" : "Pago para"}</Label>
-        <Input
-          id="entry-counterparty"
-          list="entry-counterparty-list"
-          value={fields.counterparty}
-          onChange={(e) => set({ counterparty: e.target.value })}
-          className="min-h-11"
-        />
-        <datalist id="entry-counterparty-list">
-          {suggestions.map((name) => (
-            <option key={name} value={name} />
-          ))}
-        </datalist>
-        {suggestions.length > 0 ? (
-          <p className="text-xs text-ink-soft">sugestões dos lançamentos anteriores</p>
-        ) : null}
-      </div>
-
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-1.5">
+        {/* Without Lote, Pago para and Documento share the row. */}
+        <div className={cn("grid gap-1.5", capitalKind ? null : "sm:col-span-2")}>
+          <Label htmlFor="entry-counterparty">{inflow ? "Recebido de" : "Pago para"}</Label>
+          <Input
+            id="entry-counterparty"
+            list="entry-counterparty-list"
+            value={fields.counterparty}
+            onChange={(e) => set({ counterparty: e.target.value })}
+            className="min-h-11"
+          />
+          <datalist id="entry-counterparty-list">
+            {suggestions.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+          {suggestions.length > 0 ? (
+            <p className="text-xs text-ink-soft">sugestões dos lançamentos anteriores</p>
+          ) : null}
+        </div>
+        <div className="grid content-start gap-1.5">
           <Label htmlFor="entry-document">Documento</Label>
           <Input
             id="entry-document"
@@ -754,23 +727,25 @@ function EntryForm({
             className="min-h-11 font-mono md:min-h-0"
           />
         </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="entry-lot">Lote (centro de custo)</Label>
-          <Select value={fields.lotId} onValueChange={(lotId) => set({ lotId })}>
-            <SelectTrigger id="entry-lot" className="min-h-11 w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE}>Fazenda toda (rateio por cabeça)</SelectItem>
-              {lotOptions.map((lot) => (
-                <SelectItem key={lot.id} value={lot.id}>
-                  {lot.name} · {heads.filter((a) => a.lotId === lot.id).length} cab
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-ink-soft">Sem lote = fazenda toda, rateado por cabeça</p>
-        </div>
+        {capitalKind ? null : (
+          <div className="grid gap-1.5">
+            <Label htmlFor="entry-lot">Lote (centro de custo)</Label>
+            <Select value={fields.lotId} onValueChange={(lotId) => set({ lotId })}>
+              <SelectTrigger id="entry-lot" className="min-h-11 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>Fazenda toda (rateio por cabeça)</SelectItem>
+                {lotOptions.map((lot) => (
+                  <SelectItem key={lot.id} value={lot.id}>
+                    {lot.name} · {heads.filter((a) => a.lotId === lot.id).length} cab
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-ink-soft">Sem lote = fazenda toda, rateado por cabeça</p>
+          </div>
+        )}
       </div>
 
       <AttachmentsField

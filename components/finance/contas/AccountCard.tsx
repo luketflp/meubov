@@ -6,14 +6,14 @@
  * card picks the conta whose movimentação shows below.
  */
 import Link from "next/link";
-import { CalendarDays, CircleCheck, CreditCard, Landmark, Wallet } from "lucide-react";
+import { CalendarDays, CircleCheck, CreditCard, Landmark, PiggyBank, Wallet } from "lucide-react";
 import type { BankAccount } from "@/lib/types";
 import { formatDate } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
 import { cn } from "@/lib/utils";
 
-const ICON = { checking: Landmark, cash: Wallet, card: CreditCard } as const;
-const DEFAULT_LABEL = { checking: "conta corrente", cash: "dinheiro", card: "crédito" } as const;
+const ICON = { checking: Landmark, cash: Wallet, card: CreditCard, investment: PiggyBank } as const;
+const DEFAULT_LABEL = { checking: "conta corrente", cash: "dinheiro", card: "crédito", investment: "aplicação" } as const;
 
 const PILL = "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium whitespace-nowrap";
 
@@ -80,7 +80,7 @@ export function AccountCard({ account, value, due, selected, onSelect }: Account
               </span>
             ) : null}
           </>
-        ) : account.kind === "cash" ? (
+        ) : account.kind === "cash" || account.kind === "investment" ? (
           <span>sem extrato</span>
         ) : account.pendingLines > 0 ? (
           <>

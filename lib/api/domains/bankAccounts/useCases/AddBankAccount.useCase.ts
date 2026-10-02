@@ -25,9 +25,15 @@ interface AddBankAccountUseCaseProps {
 /**
  * `card_days` when a cartão lacks its fechamento or vencimento day;
  * `invalid_pays_from` when "Paga pela conta" is not an active conta corrente
- * of the farm; `card_cannot_be_main` for a cartão marked principal.
+ * of the farm; `card_cannot_be_main` for a cartão marked principal and
+ * `investment_cannot_be_main` for an aplicação marked principal.
  */
-type AddBankAccountUseCaseResponse = BankAccount | "card_days" | "invalid_pays_from" | "card_cannot_be_main";
+type AddBankAccountUseCaseResponse =
+  | BankAccount
+  | "card_days"
+  | "invalid_pays_from"
+  | "card_cannot_be_main"
+  | "investment_cannot_be_main";
 
 type CurrUseCase = _UseCase<AddBankAccountUseCaseProps, AddBankAccountUseCaseResponse>;
 
@@ -45,8 +51,10 @@ export class AddBankAccountUseCase implements CurrUseCase {
 
   public run: CurrUseCase["run"] = async ({ farmId, kind, ...input }) => {
     const card = kind === "card";
+    // Only a conta corrente or a caixa receives the vendas and compras of the manejos.
+    const mainable = kind === "checking" || kind === "cash";
     if (card && (input.closingDay === undefined || input.dueDay === undefined)) return "card_days";
-    if (card && input.isMain) return "card_cannot_be_main";
+    if (!mainable && input.isMain) return card ? "card_cannot_be_main" : "investment_cannot_be_main";
 
     return this.repository.transaction(async (tx) => {
       if (card && input.paysFromId !== undefined) {
@@ -70,7 +78,7 @@ export class AddBankAccountUseCase implements CurrUseCase {
         .where(and(eq(bankAccounts.farmId, farmId), eq(bankAccounts.isMain, true)))
         .limit(1)
         .for("update");
-      const isMain = !card && (input.isMain === true || !main);
+      const isMain = mainable && (input.isMain === true || !main);
       if (isMain && main) {
         await tx.update(bankAccounts).set({ isMain: false }).where(eq(bankAccounts.id, main.id));
       }

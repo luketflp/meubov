@@ -15,6 +15,7 @@ import type { Resolved } from "@/lib/api/domains/statements/useCases/ResolveLine
 import type { ImportView } from "@/lib/api/domains/statements/useCases/GetImport.useCase";
 import type { StatementLine } from "@/lib/types";
 import { ACCOUNT_GROUP_LABEL, accountName } from "@/lib/domain/accounts";
+import { ENTRY_KIND_LABEL, entryGroup } from "@/lib/domain/entries";
 import { accountBalance, bankAccountLabel } from "@/lib/domain/bankAccounts";
 import { addDays, formatDate } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
@@ -123,7 +124,8 @@ export function ConciliarPage({ accountId, importId }: { accountId: string; impo
     const when = `${c.pending ? "venc. " : ""}${formatDate(c.date).slice(0, 5)}`;
     if (c.expense) {
       const e = c.expense;
-      const group = ACCOUNT_GROUP_LABEL[e.kind === "revenue" ? "revenue" : e.category];
+      const groupKey = entryGroup(e);
+      const group = groupKey ? ACCOUNT_GROUP_LABEL[groupKey] : ENTRY_KIND_LABEL.yield;
       const plan = accountName(e.accountId, accounts);
       return {
         title: plan ? `${group} › ${plan}` : group,

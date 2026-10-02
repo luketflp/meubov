@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CircleCheck } from "lucide-react";
 import type { Expense } from "@/lib/types";
 import { ACCOUNT_GROUP_LABEL, accountName } from "@/lib/domain/accounts";
+import { ENTRY_KIND_LABEL, entryGroup } from "@/lib/domain/entries";
 import { effectiveDueDate } from "@/lib/domain/ledger";
 import { formatDate, todayISO } from "@/lib/domain/dates";
 import { formatCurrency } from "@/lib/domain/format";
@@ -18,9 +19,9 @@ import { cn } from "@/lib/utils";
 type Tab = "payables" | "receivables";
 
 interface BillsCardProps {
-  /** Pending despesas, oldest vencimento first. */
+  /** Pending lançamentos that take money out, oldest vencimento first. */
   payables: Expense[];
-  /** Pending receitas, oldest vencimento first. */
+  /** Pending lançamentos that bring money in, oldest vencimento first. */
   receivables: Expense[];
   canEdit: boolean;
 }
@@ -95,8 +96,8 @@ export function BillsCard({ payables, receivables, canEdit }: BillsCardProps) {
           title="Nada em aberto"
           description={
             tab === "payables"
-              ? "Nenhuma despesa esperando pagamento."
-              : "Nenhuma receita esperando recebimento."
+              ? "Nenhum pagamento pendente."
+              : "Nenhum recebimento pendente."
           }
         />
       ) : (
@@ -105,11 +106,10 @@ export function BillsCard({ payables, receivables, canEdit }: BillsCardProps) {
             {list.map((entry, index) => {
               const due = effectiveDueDate(entry);
               const late = due < today;
-              const group = entry.kind === "revenue" ? "revenue" : entry.category;
+              const group = entryGroup(entry);
+              const groupLabel = group ? ACCOUNT_GROUP_LABEL[group] : ENTRY_KIND_LABEL.yield;
               const conta = accountName(entry.accountId, accounts);
-              const title = conta
-                ? `${ACCOUNT_GROUP_LABEL[group]} › ${conta}`
-                : ACCOUNT_GROUP_LABEL[group];
+              const title = conta ? `${groupLabel} › ${conta}` : groupLabel;
               const lotName = entry.lotId
                 ? lots.find((lot) => lot.id === entry.lotId)?.name
                 : undefined;
