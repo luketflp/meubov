@@ -2,11 +2,20 @@
  * toExpense: the série a row belongs to decides its markers ("2/3", "todo dia 20").
  * toAccount: a financiamento carries its saldo inicial.
  * toBankAccount: "conciliado até" and the pending count come from its linhas.
+ * toBudget: a month of a grupo's or a conta's line, without the farm and audit columns.
+ * toFarmData: the início da safra travels with the farm.
  */
 import { describe, expect, it } from "vitest";
 
-import { toAccount, toBankAccount, toExpense } from "@/lib/api/mappers";
-import type { BankAccountRow, ExpenseRow, ExpenseSeriesRow, FarmAccountRow } from "@/lib/db/schema";
+import { toAccount, toBankAccount, toBudget, toExpense, toFarmData } from "@/lib/api/mappers";
+import type {
+  BankAccountRow,
+  BudgetRow,
+  ExpenseRow,
+  ExpenseSeriesRow,
+  FarmAccountRow,
+  FarmRow,
+} from "@/lib/db/schema";
 
 const ROW: ExpenseRow = {
   id: "e-1",
@@ -146,5 +155,53 @@ describe("toBankAccount", () => {
     expect(toBankAccount(BANK, { ...LINES, pending: 3, firstPendingDate: "2026-09-01" }).reconciledUntil).toBeUndefined();
     expect(toBankAccount(BANK)).toMatchObject({ pendingLines: 0 });
     expect(toBankAccount(BANK).reconciledUntil).toBeUndefined();
+  });
+});
+
+const BUDGET: BudgetRow = {
+  id: "bud-1",
+  farmId: 7,
+  category: "nutrition",
+  accountId: "acc-1",
+  month: "2025-10-01",
+  amountBrl: 8333.33,
+  distribution: "equal",
+  updatedAt: new Date("2026-10-02T12:00:00Z"),
+  updatedBy: "u-lucas",
+};
+
+describe("toBudget", () => {
+  it("carries a conta's month and leaves the farm and audit columns behind", () => {
+    expect(toBudget(BUDGET)).toEqual({
+      id: "bud-1",
+      category: "nutrition",
+      accountId: "acc-1",
+      month: "2025-10-01",
+      amountBrl: 8333.33,
+      distribution: "equal",
+    });
+  });
+
+  it("gives a grupo's own line no conta", () => {
+    expect(toBudget({ ...BUDGET, accountId: null }).accountId).toBeUndefined();
+  });
+});
+
+const FARM: FarmRow = {
+  id: 7,
+  name: "Fazenda Boa Vista",
+  municipality: "Uberaba - MG",
+  stateRegistration: "",
+  manager: "Lucas",
+  headquartersLat: null,
+  headquartersLng: null,
+  headquartersZoom: null,
+  deletedAt: null,
+  safraStartMonth: 7,
+};
+
+describe("toFarmData", () => {
+  it("carries the início da safra", () => {
+    expect(toFarmData(FARM)).toMatchObject({ name: "Fazenda Boa Vista", safraStartMonth: 7 });
   });
 });

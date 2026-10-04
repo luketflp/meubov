@@ -12,10 +12,13 @@ import type {
   BankAccount,
   BankAccountKind,
   Breeding,
+  Budget,
+  BudgetDistribution,
   Calving,
   CsvMapping,
   CustomCategory,
   Expense,
+  ExpenseCategory,
   FarmData,
   InactiveReason,
   HerdData,
@@ -324,6 +327,11 @@ export interface HerdStore extends HerdData {
   outboxCount: number;
   /** The fila itself, in the order it goes, for the runner's list and the Sincronização sheet. */
   ops: OutboxOp[];
+  /**
+   * Budgets by safra, loaded on demand; absent = not loaded yet. Never in the
+   * herd load nor in the phone's snapshot; a farm switch empties it.
+   */
+  budgets: Record<number, Budget[]>;
   load: () => Promise<void>;
   /** Persists the choice and rehydrates the whole store from the new farm. */
   switchFarm: (farmId: number) => Promise<void>;
@@ -442,8 +450,14 @@ export interface HerdStore extends HerdData {
   updateInvernada: (id: string, patch: InvernadaPatch) => Promise<void>;
   /** Removes an unused invernada; false when current/history references it. */
   removeInvernada: (id: string) => Promise<boolean>;
-  /** Saves the registration fields; the sede is left as it is. */
-  saveFarm: (d: Omit<FarmData, "headquarters">) => Promise<void>;
+  /**
+   * Saves the registration fields and, when sent, the início da safra; the sede
+   * is left as it is. A new início empties `budgets`: the saved months fall into
+   * other safras.
+   */
+  saveFarm: (
+    d: Omit<FarmData, "headquarters" | "safraStartMonth"> & Partial<Pick<FarmData, "safraStartMonth">>
+  ) => Promise<void>;
   /** Saves where and how close the farm map opens. */
   saveHeadquarters: (
     view: NonNullable<FarmData["headquarters"]>
@@ -549,6 +563,33 @@ export interface HerdStore extends HerdData {
     importId: string,
     pairs: ({ lineId: string } & MatchTarget)[]
   ) => Promise<{ resolved: Resolved[]; refused: number }>;
+  /**
+   * Reads one safra's orçamento into `budgets` and resolves its rows. Without
+   * signal it rejects with no toast: the page and the band say so themselves.
+   */
+  loadBudgets: (safra: number) => Promise<Budget[]>;
+  /**
+   * Saves one line whole — a grupo's own (no `accountId`) or a conta's — with
+   * its twelve months by safra month, the first month of the safra first. The
+   * budget writes send the farm's início as the store knows it; when another
+   * session moved it they reload the herd, empty `budgets` and reject.
+   */
+  saveBudgetLine: (input: {
+    safra: number;
+    category: ExpenseCategory;
+    accountId?: string;
+    months: number[];
+    distribution: BudgetDistribution;
+  }) => Promise<void>;
+  /** Removes one line; a grupo's own line goes alone, its contas' lines stay. */
+  removeBudgetLine: (input: { safra: number; category: ExpenseCategory; accountId?: string }) => Promise<void>;
+  /** "Copiar": fills the lines `to` lacks from `from`'s orçado or realizado; resolves the counts. */
+  copyBudgets: (input: {
+    from: number;
+    to: number;
+    source: "budgeted" | "realized";
+    adjustPct: number;
+  }) => Promise<{ copied: number; skipped: number }>;
   /** Creates a custom category; false when the name is already in use. */
   addCustomCategory: (c: Omit<CustomCategory, "id">) => Promise<boolean>;
   /** Removes a custom category; false when an active animal still uses it. */
@@ -872,6 +913,39 @@ function keepLines(current: BankAccount, saved: BankAccount): BankAccount {
     pendingImportId: current.pendingImportId,
     lastImportId: current.lastImportId,
   };
+}
+
+/**
+ * One line's rows swapped in a loaded safra (none: the line removed). A safra
+ * not loaded yet stays absent, so its first load still reads it whole.
+ */
+function withBudgetLine(
+  budgets: Record<number, Budget[]>,
+  line: { safra: number; category: ExpenseCategory; accountId?: string },
+  rows: Budget[]
+): Record<number, Budget[]> {
+  const cached = budgets[line.safra];
+  if (!cached) return budgets;
+  const others = cached.filter((b) => b.category !== line.category || b.accountId !== line.accountId);
+  return { ...budgets, [line.safra]: [...others, ...rows] };
+}
+
+/**
+ * A refused budget write. `start_month_changed`: another session moved the
+ * início da safra, so the safras on screen are other months now — the herd
+ * brings the new início and the pages read their safras again from an empty
+ * cache.
+ */
+async function budgetWriteFail(
+  action: string,
+  error: { status: number; value?: unknown },
+  set: StoreApi<HerdStore>["setState"]
+): Promise<never> {
+  if ((error.value as { error?: string } | null | undefined)?.error !== "start_month_changed") apiFail(action, error);
+  toast.error("O início da safra mudou em outra sessão; os orçamentos foram recarregados.");
+  await reloadHerd(set);
+  set({ budgets: {} });
+  throw new Error(`${action} failed (start_month_changed)`);
 }
 
 /** Refusals of a decision on a linha do extrato the farmer can act on. */
@@ -1297,7 +1371,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   reconciledIds: [],
   customCategories: [],
   semenBulls: [],
-  farm: { name: "", municipality: "", stateRegistration: "", manager: "" },
+  farm: { name: "", municipality: "", stateRegistration: "", manager: "", safraStartMonth: 10 },
   loaded: false,
   offline: false,
   snapshotAt: null,
@@ -1308,6 +1382,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   sync: { online: true, phase: "idle", counts: { queued: 0, conflict: 0, failed: 0 } },
   outboxCount: 0,
   ops: [],
+  budgets: {},
 
   load: async () => {
     if (get().loaded) {
@@ -1382,6 +1457,8 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     if (getActiveFarmId() === null && activeFarmId != null) setActiveFarmId(activeFarmId);
     set({
       ...data,
+      // The farm or the access may have changed: budgets load again on demand.
+      budgets: {},
       farms: farmsRes.data?.farms ?? get().farms,
       activeFarmId: activeFarmId ?? get().activeFarmId,
       offline: false,
@@ -1400,7 +1477,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     setActiveFarmId(farmId);
     set({ loaded: false });
     const data = await repository.load();
-    set({ ...data, activeFarmId: farmId, loaded: true, offline: false, snapshotAt: null });
+    set({ ...data, budgets: {}, activeFarmId: farmId, loaded: true, offline: false, snapshotAt: null });
     void persistSnapshot(get);
     // That farm's fila, if any, goes now.
     void getEngine()?.kick("enqueue");
@@ -1422,6 +1499,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const [herd, farmsRes] = await Promise.all([repository.load(), api.farms.get()]);
     set({
       ...herd,
+      budgets: {},
       farms: farmsRes.data?.farms ?? get().farms,
       activeFarmId: data.farmId,
       loaded: true,
@@ -2087,7 +2165,10 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     // No `headquarters` key: the server keeps the saved map view.
     const { data, error } = await api.farm.put(d);
     if (error) apiFail("salvar os dados da fazenda", error);
-    set({ farm: { ...(data as FarmData) } });
+    const farm = data as FarmData;
+    // Budgets keep their calendar months: another início groups them into other safras.
+    const regrouped = farm.safraStartMonth !== get().farm.safraStartMonth;
+    set({ farm: { ...farm }, ...(regrouped ? { budgets: {} } : {}) });
   },
 
   saveHeadquarters: async (view) => {
@@ -2414,6 +2495,42 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const result = data as { resolved: Resolved[]; refused: number };
     set((s) => mergeResolved(s, result.resolved, undefined, "pending"));
     return result;
+  },
+
+  loadBudgets: async (safra) => {
+    const farmId = get().activeFarmId;
+    const { data, error } = await api.budgets.get({ query: { safra } });
+    if (error) {
+      // Without signal, quiet: the Orçamento page says "sem conexão", the band and the form show nothing.
+      if (networkFailed(error) || get().offline) throw new Error(`carregar o orçamento failed (status ${error.status})`);
+      apiFail("carregar o orçamento", error);
+    }
+    const rows = data as Budget[];
+    // A farm switch while this was on its way: the answer is the other farm's.
+    if (get().activeFarmId === farmId) set((s) => ({ budgets: { ...s.budgets, [safra]: rows } }));
+    return rows;
+  },
+
+  saveBudgetLine: async (input) => {
+    // An offline snapshot from before the orçamento has no início da safra.
+    const { data, error } = await api.budgets.put({ ...input, startMonth: get().farm.safraStartMonth ?? 10 });
+    if (error) await budgetWriteFail("salvar o orçamento", error, set);
+    set((s) => ({ budgets: withBudgetLine(s.budgets, input, data as Budget[]) }));
+  },
+
+  removeBudgetLine: async (input) => {
+    // The line travels in the query; Eden asks for a body all the same.
+    const { error } = await api.budgets.delete({}, { query: { ...input, startMonth: get().farm.safraStartMonth ?? 10 } });
+    if (error) await budgetWriteFail("remover o orçamento", error, set);
+    set((s) => ({ budgets: withBudgetLine(s.budgets, input, []) }));
+  },
+
+  copyBudgets: async (input) => {
+    const { data, error } = await api.budgets.copy.post({ ...input, startMonth: get().farm.safraStartMonth ?? 10 });
+    if (error) await budgetWriteFail("copiar o orçamento", error, set);
+    const { copied, skipped, budgets } = data as { copied: number; skipped: number; budgets: Budget[] };
+    set((s) => ({ budgets: { ...s.budgets, [input.to]: budgets } }));
+    return { copied, skipped };
   },
 
   addCustomCategory: async (c) => {

@@ -593,6 +593,25 @@ export interface StatementLine {
   ignoreReason?: string;
 }
 
+/** How the twelve months of an orçamento line were filled. */
+export type BudgetDistribution = "equal" | "previous" | "manual";
+
+/**
+ * One month of one line of the orçamento: a grupo's own line (accountId absent)
+ * or a conta's. It carries no safra: which safra a month falls in follows from
+ * the farm's `safraStartMonth`.
+ */
+export interface Budget {
+  id: string;
+  category: ExpenseCategory;
+  accountId?: string;
+  /** First day of the calendar month, "YYYY-MM-01". */
+  month: string;
+  amountBrl: number;
+  /** The mode last used for the line; the same on its twelve rows. */
+  distribution: BudgetDistribution;
+}
+
 /** Recurring health protocol of the farm. */
 export interface HealthProtocol {
   id: string;
@@ -614,6 +633,8 @@ export interface FarmData {
    * Absent until the farmer saves one from the map.
    */
   headquarters?: { lat: number; lng: number; zoom?: number };
+  /** 1–12; the safra starts on this month (10 = outubro). */
+  safraStartMonth: number;
 }
 
 /** Root of the herd data. */

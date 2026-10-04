@@ -19,7 +19,7 @@ export function makeData(overrides: Partial<HerdData> = {}): HerdData {
     accounts: [],
     customCategories: [],
     semenBulls: [],
-    farm: { name: "Fazenda Teste", municipality: "", stateRegistration: "", manager: "" },
+    farm: { name: "Fazenda Teste", municipality: "", stateRegistration: "", manager: "", safraStartMonth: 10 },
     ...overrides,
   };
 }

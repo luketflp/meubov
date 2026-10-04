@@ -109,6 +109,11 @@ export const ROUTE_REQUIREMENTS: Readonly<Record<string, RouteRequirement>> = {
   "POST /api/herd/statement-lines/:id/transfer": edit("finance"),
   "POST /api/herd/statement-lines/:id/ignore": edit("finance"),
   "POST /api/herd/statement-lines/:id/undo": edit("finance"),
+  // Orçamento: reading a safra is seeing money; saving, removing or copying a line writes it.
+  "GET /api/herd/budgets": { view: "finance" },
+  "PUT /api/herd/budgets": edit("finance"),
+  "DELETE /api/herd/budgets": edit("finance"),
+  "POST /api/herd/budgets/copy": edit("finance"),
 
   "PUT /api/herd/farm": edit("farm"),
 

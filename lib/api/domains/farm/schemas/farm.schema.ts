@@ -2,12 +2,16 @@
 
 import { t } from "elysia";
 
-/** Body of PUT /farm: the registration fields. The sede has its own route. */
+/**
+ * Body of PUT /farm: the registration fields and the início da safra (absent
+ * leaves it as it is). The sede has its own route.
+ */
 export const FarmDataBody = t.Object({
   name: t.String(),
   municipality: t.String(),
   stateRegistration: t.String(),
   manager: t.String(),
+  safraStartMonth: t.Optional(t.Integer({ minimum: 1, maximum: 12 })),
 });
 
 /**

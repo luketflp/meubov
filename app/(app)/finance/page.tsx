@@ -2,11 +2,12 @@
 
 /**
  * Financeiro: the owner's cockpit for the window in the URL (?de&ate) — caixa,
- * capital, dívidas e sócios, the eight indicators against their references and
- * the year before, receita × custo, mercado, composição, contas, custo por
- * lote and the newest lançamentos. Every figure follows the window.
+ * capital, dívidas e sócios, the current safra's orçamento, the eight
+ * indicators against their references and the year before, receita × custo,
+ * mercado, composição, contas, custo por lote and the newest lançamentos.
+ * Every figure follows the window but the orçamento, which follows the safra.
  */
-import { Suspense, useMemo } from "react";
+import { Suspense, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
@@ -23,11 +24,13 @@ import {
 import { cashSummary, ledgerRows, pendingBills } from "@/lib/domain/ledger";
 import { lotEconomics } from "@/lib/domain/lotEconomics";
 import { capitalSummary } from "@/lib/domain/planTree";
+import { budgetView, safraOf } from "@/lib/domain/budget";
 import { RequireAccess } from "@/components/layout/RequireAccess";
 import { FinanceHeader } from "@/components/finance/FinanceHeader";
 import { FinanceSubnav } from "@/components/finance/FinanceSubnav";
 import { CashStrip } from "@/components/finance/CashStrip";
 import { CapitalStrip } from "@/components/finance/CapitalStrip";
+import { BudgetBand } from "@/components/finance/BudgetBand";
 import { Placar } from "@/components/finance/Placar";
 import { RevenueCostChart } from "@/components/finance/RevenueCostChart";
 import { MarketPanel } from "@/components/finance/MarketPanel";
@@ -72,6 +75,9 @@ function FinanceContent() {
   const accounts = useHerdStore((s) => s.accounts);
   const bankAccounts = useHerdStore((s) => s.bankAccounts);
   const transfers = useHerdStore((s) => s.transfers);
+  // An offline snapshot from before the orçamento has no início da safra.
+  const safraStartMonth = useHerdStore((s) => s.farm.safraStartMonth ?? 10);
+  const loadBudgets = useHerdStore((s) => s.loadBudgets);
   // Live arroba quote; null price = every @-figure shows "—".
   const quote = useArrobaQuote();
   const today = todayISO();
@@ -126,6 +132,19 @@ function FinanceContent() {
     () => capitalSummary({ ...inputs, accounts, bankAccounts, transfers }, period, today),
     [inputs, accounts, bankAccounts, transfers, period, today]
   );
+  // The band reads the current safra's orçamento, loaded on demand (never every safra with the herd).
+  const safra = safraOf(today, safraStartMonth);
+  const budgets = useHerdStore((s) => s.budgets[safra]);
+  const budgetsMissing = budgets === undefined;
+  useEffect(() => {
+    // Whenever absent (the store empties the cache on a farm switch and a new início da safra).
+    // A failed load leaves the band hidden: the store toasts why, or nothing without signal.
+    if (budgetsMissing) loadBudgets(safra).catch(() => {});
+  }, [budgetsMissing, safra, loadBudgets]);
+  const budget = useMemo(
+    () => (budgets ? budgetView({ budgets, expenses, treatments, accounts }, safra, safraStartMonth, today) : null),
+    [budgets, expenses, treatments, accounts, safra, safraStartMonth, today]
+  );
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 md:px-8">
@@ -144,6 +163,8 @@ function FinanceContent() {
       <CashStrip cash={cash} />
 
       <CapitalStrip summary={capital} period={period} resultBrl={ind.result} />
+
+      <BudgetBand view={budget} period={period} />
 
       <Placar ind={ind} deltas={deltas} quote={quote.price} />
 

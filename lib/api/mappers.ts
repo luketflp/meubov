@@ -12,6 +12,7 @@ import type {
   Attachment,
   BankAccount,
   Breeding,
+  Budget,
   Calving,
   CustomCategory,
   Expense,
@@ -39,6 +40,7 @@ import type {
   AttachmentRow,
   BankAccountRow,
   BreedingRow,
+  BudgetRow,
   CalvingRow,
   CustomCategoryRow,
   ExpenseRow,
@@ -359,6 +361,17 @@ export function toStatementLine(row: StatementLineRow): StatementLine {
   };
 }
 
+export function toBudget(row: BudgetRow): Budget {
+  return {
+    id: row.id,
+    category: row.category,
+    accountId: orNothing(row.accountId),
+    month: row.month,
+    amountBrl: row.amountBrl,
+    distribution: row.distribution,
+  };
+}
+
 export function toProtocol(row: HealthProtocolRow): HealthProtocol {
   return {
     id: row.id,
@@ -386,6 +399,7 @@ export function toFarmData(row: FarmRow): FarmData {
               : { zoom: row.headquartersZoom }),
           }
         : undefined,
+    safraStartMonth: row.safraStartMonth,
   };
 }
 

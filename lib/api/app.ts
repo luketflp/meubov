@@ -24,6 +24,7 @@ import { categoriesController } from "@/lib/api/domains/categories/categories.co
 import { accountsController } from "@/lib/api/domains/accounts/accounts.controller";
 import { attachmentsController } from "@/lib/api/domains/attachments/attachments.controller";
 import { bankAccountsController } from "@/lib/api/domains/bankAccounts/bankAccounts.controller";
+import { budgetsController } from "@/lib/api/domains/budgets/budgets.controller";
 import { statementsController } from "@/lib/api/domains/statements/statements.controller";
 import { expensesController } from "@/lib/api/domains/expenses/expenses.controller";
 import { farmController } from "@/lib/api/domains/farm/farm.controller";
@@ -84,6 +85,9 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
   /* ---- Contas bancárias, transferências, extratos e conciliação ---------- */
   .use(bankAccountsController)
   .use(statementsController)
+
+  /* ---- Orçamento por safra ---------------------------------------------- */
+  .use(budgetsController)
 
   /* ---- Manejo sessions --------------------------------------------------- */
   .use(manejoController);

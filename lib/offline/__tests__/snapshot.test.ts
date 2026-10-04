@@ -24,7 +24,7 @@ const herd = (name: string): HerdData => ({
   accounts: [],
   customCategories: [],
   semenBulls: [],
-  farm: { name, municipality: "Campo Grande", stateRegistration: "", manager: "" },
+  farm: { name, municipality: "Campo Grande", stateRegistration: "", manager: "", safraStartMonth: 10 },
 });
 
 const snapshot = (farmId: number, name = `Fazenda ${farmId}`): Snapshot => ({

@@ -1,14 +1,18 @@
+"use client";
+
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { periodSearch, type Period } from "@/lib/domain/period";
 import { cn } from "@/lib/utils";
 
-export type FinanceSection = "painel" | "lancamentos" | "contas";
+export type FinanceSection = "painel" | "lancamentos" | "contas" | "orcamento";
 
-/** The Financeiro pages; later cycles add Orçamento, Estoque, Patrimônio. */
+/** The Financeiro pages; later cycles add Estoque, Patrimônio. */
 const SECTIONS: readonly { key: FinanceSection; label: string; href: string }[] = [
   { key: "painel", label: "Painel", href: "/finance" },
   { key: "lancamentos", label: "Lançamentos", href: "/finance/lancamentos" },
   { key: "contas", label: "Contas bancárias", href: "/finance/contas" },
+  { key: "orcamento", label: "Orçamento", href: "/finance/orcamento" },
 ];
 
 /**
@@ -18,8 +22,19 @@ const SECTIONS: readonly { key: FinanceSection; label: string; href: string }[] 
  * usePathname, which can mismatch on hydration behind the proxy.
  */
 export function FinanceSubnav({ current, period }: { current: FinanceSection; period: Period }) {
+  const nav = useRef<HTMLElement>(null);
+  useEffect(() => {
+    // The phone's pills scroll sideways: centre the current one (Orçamento lies past the edge at 390 px).
+    // scrollLeft only, so the page itself never moves.
+    const row = nav.current;
+    const active = row?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!row || !active) return;
+    const r = row.getBoundingClientRect();
+    const a = active.getBoundingClientRect();
+    row.scrollLeft += a.left - r.left - (r.width - a.width) / 2;
+  }, [current]);
   return (
-    <nav aria-label="Seções do Financeiro" className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+    <nav ref={nav} aria-label="Seções do Financeiro" className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
       <div className="flex w-max gap-2 md:w-auto md:gap-6 md:border-b md:border-hairline">
         {SECTIONS.map((section) => {
           const active = section.key === current;

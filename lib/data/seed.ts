@@ -142,6 +142,7 @@ const FARM: FarmData = {
   stateRegistration: "12.345.678-0001",
   manager: "Lucas Alexandre",
   headquarters: { lat: -19.721, lng: -47.911 },
+  safraStartMonth: 10,
 };
 
 const BREEDING_TYPES: readonly BreedingType[] = ["timedAI", "naturalMating"];

@@ -11,6 +11,7 @@ import { Elysia } from "elysia";
 
 import { farmPlugin } from "@/lib/api/plugins/farm";
 import { sessionPlugin } from "@/lib/api/plugins/session";
+import { can } from "@/lib/domain/permissions";
 
 import { BrowseFarmsUseCase } from "./useCases/Browse.useCase";
 import { CreateFarmUseCase } from "./useCases/Create.useCase";
@@ -24,7 +25,16 @@ export const farmController = new Elysia()
   .use(sessionPlugin)
   .put(
     "/farm",
-    ({ farmId, body }) => new SaveFarmUseCase().run({ farmId, data: body }),
+    async ({ farmId, permissions, body, status }) => {
+      // The route asks Fazenda edit; moving the início da safra also asks Financeiro edit.
+      const result = await new SaveFarmUseCase().run({
+        farmId,
+        data: body,
+        canEditFinance: can(permissions, "finance", "edit"),
+      });
+      if (result === "finance_forbidden") return status(403, { error: "forbidden", area: "finance" });
+      return result;
+    },
     { farm: true, body: FarmDataBody }
   )
   .put(

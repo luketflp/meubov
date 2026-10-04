@@ -75,7 +75,7 @@ const herd: HerdData = {
   accounts: [{ id: "acc-1", group: "labor", name: "Salários" }],
   customCategories: [],
   semenBulls: [bull],
-  farm: { name: "Fazenda", municipality: "Uberaba", stateRegistration: "", manager: "" },
+  farm: { name: "Fazenda", municipality: "Uberaba", stateRegistration: "", manager: "", safraStartMonth: 10 },
 };
 
 describe("hasMoney", () => {

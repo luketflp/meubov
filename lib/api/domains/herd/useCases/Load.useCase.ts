@@ -347,7 +347,7 @@ export class LoadHerdUseCase implements CurrUseCase {
       semenBulls: semenBullRows.map((row) => toSemenBull(row, purchasesByBull.get(row.id) ?? [])),
       farm: farmRows.length
         ? toFarmData(farmRows[0])
-        : { name: "", municipality: "", stateRegistration: "", manager: "" },
+        : { name: "", municipality: "", stateRegistration: "", manager: "", safraStartMonth: 10 },
     };
   };
 }

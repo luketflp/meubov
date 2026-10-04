@@ -204,6 +204,13 @@ export const accountGroupEnum = pgEnum("account_group", [
   "partners",
 ]);
 
+/** How the twelve months of an orçamento line were filled. */
+export const budgetDistributionEnum = pgEnum("budget_distribution", [
+  "equal",
+  "previous",
+  "manual",
+]);
+
 /** Why an animal left the active herd. */
 export const inactiveReasonEnum = pgEnum("inactive_reason", [
   "sale",
@@ -217,27 +224,33 @@ export const inactiveReasonEnum = pgEnum("inactive_reason", [
 /* -------------------------------------------------------------------------- */
 
 /** Farm registration data. */
-export const farm = pgTable("farm", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  municipality: text("municipality").notNull(),
-  stateRegistration: text("state_registration").notNull(),
-  manager: text("manager").notNull(),
-  /**
-   * Saved map view of the farm (sede): where the map opens and how close.
-   * All three are null until the farmer saves a view; the map then falls back
-   * to the drawn invernadas and, failing those, to a fixed center.
-   */
-  headquartersLat: numeric("headquarters_lat", { mode: "number" }),
-  headquartersLng: numeric("headquarters_lng", { mode: "number" }),
-  headquartersZoom: integer("headquarters_zoom"),
-  /**
-   * Set when the Dono deletes the farm. Its rows stay; every lookup that turns
-   * a user into a farm (the farm macro, the farm list, the lazy first farm)
-   * skips it from then on.
-   */
-  deletedAt: timestamp("deleted_at"),
-});
+export const farm = pgTable(
+  "farm",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    municipality: text("municipality").notNull(),
+    stateRegistration: text("state_registration").notNull(),
+    manager: text("manager").notNull(),
+    /**
+     * Saved map view of the farm (sede): where the map opens and how close.
+     * All three are null until the farmer saves a view; the map then falls back
+     * to the drawn invernadas and, failing those, to a fixed center.
+     */
+    headquartersLat: numeric("headquarters_lat", { mode: "number" }),
+    headquartersLng: numeric("headquarters_lng", { mode: "number" }),
+    headquartersZoom: integer("headquarters_zoom"),
+    /**
+     * Set when the Dono deletes the farm. Its rows stay; every lookup that turns
+     * a user into a farm (the farm macro, the farm list, the lazy first farm)
+     * skips it from then on.
+     */
+    deletedAt: timestamp("deleted_at"),
+    /** Month the safra starts on (10 = outubro): the orçamento's twelve months count from it. */
+    safraStartMonth: integer("safra_start_month").notNull().default(10),
+  },
+  (t) => [check("farm_safra_start_month_check", sql`${t.safraStartMonth} between 1 and 12`)]
+);
 
 /** Membership of a user in a farm (a user can join many farms). */
 export const farmUsers = pgTable(
@@ -899,6 +912,44 @@ export const statementLines = pgTable(
   ]
 );
 
+/**
+ * One calendar month of one line of the orçamento: a grupo's own line
+ * (`accountId` null) or a conta's. No safra column: the farm's
+ * `safraStartMonth` groups the months into safras when they are read, so a
+ * changed start regroups them. A line is written twelve rows at a time, all
+ * carrying the distribution last used.
+ */
+export const budgets = pgTable(
+  "budgets",
+  {
+    id: text("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farm.id, { onDelete: "cascade" }),
+    category: expenseCategoryEnum("category").notNull(),
+    /** Null = the grupo's own line; removing the conta removes its lines. */
+    accountId: text("account_id").references(() => accounts.id, { onDelete: "cascade" }),
+    /** First day of the calendar month. */
+    month: date("month").notNull(),
+    amountBrl: numeric("amount_brl", { mode: "number" }).notNull(),
+    distribution: budgetDistributionEnum("distribution").notNull(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    /** User id; no FK, the row outlives a removed member. */
+    updatedBy: text("updated_by").notNull(),
+  },
+  (t) => [
+    // One row per line and month; the grupo's own line has no conta.
+    uniqueIndex("budgets_line_month_idx").on(
+      t.farmId,
+      t.category,
+      sql`coalesce(${t.accountId}, '')`,
+      t.month
+    ),
+    index("budgets_farm_id_month_idx").on(t.farmId, t.month),
+    check("budgets_amount_check", sql`${t.amountBrl} >= 0`),
+  ]
+);
+
 /** Recurring health protocol of the farm. */
 export const healthProtocols = pgTable("health_protocols", {
   id: text("id").primaryKey(),
@@ -1037,6 +1088,7 @@ export type BankAccountRow = typeof bankAccounts.$inferSelect;
 export type TransferRow = typeof transfers.$inferSelect;
 export type StatementImportRow = typeof statementImports.$inferSelect;
 export type StatementLineRow = typeof statementLines.$inferSelect;
+export type BudgetRow = typeof budgets.$inferSelect;
 export type CustomCategoryRow = typeof customCategories.$inferSelect;
 export type HealthProtocolRow = typeof healthProtocols.$inferSelect;
 export type ManejoSessionRow = typeof manejoSessions.$inferSelect;
