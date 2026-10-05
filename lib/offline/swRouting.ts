@@ -12,7 +12,11 @@ export interface SwRoute {
   strategy: SwStrategy;
   /** Where a good answer is kept: the page's path (documents) or `rsc:<path>`. */
   cacheKey: string | null;
-  /** The runner template this answer also refreshes, for a /manejo/<id> page. */
+  /**
+   * The runner template this answer also refreshes, for a /manejo/<id>
+   * document. Never for its RSC payload: Next drops one served under another
+   * page's URL, and reloads to the payload's own URL when it predates a deploy.
+   */
   templateKey: string | null;
 }
 
@@ -53,11 +57,7 @@ export function route(
   const prefetch =
     headers?.get("next-router-prefetch") != null || headers?.get("next-router-segment-prefetch") != null;
   if (rsc && !prefetch) {
-    return {
-      strategy: "rsc-network-first",
-      cacheKey: `rsc:${path}`,
-      templateKey: runner ? "rsc:/manejo/[id]" : null,
-    };
+    return { strategy: "rsc-network-first", cacheKey: `rsc:${path}`, templateKey: null };
   }
   return BYPASS;
 }

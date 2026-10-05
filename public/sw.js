@@ -8,11 +8,13 @@
  * - /_next/static/*: cache-first. The file names carry a content hash.
  * - Page documents and RSC fetches: network first; after 3 s a kept copy is
  *   served if there is one, else the worker waits for the network. A good
- *   answer is kept under its path and, for a /manejo/<id> page, also as the
- *   runner "template", which serves any session because the runner reads its
- *   id from the URL. Without signal: the same path, then the template, then
- *   /offline (documents) or a 503 (RSC; Next then retries as a document
- *   navigation, which lands on the document fallback).
+ *   answer is kept under its path and, for a /manejo/<id> document, also as
+ *   the runner "template", which serves any session because the runner reads
+ *   its id from the URL. Without signal: the same path, then the template,
+ *   then /offline (documents) or a 503 (RSC; Next then retries as a document
+ *   navigation, which lands on the document fallback). An RSC payload is
+ *   never served under another page's URL: Next drops it, and one kept
+ *   before a deploy makes Next reload to the payload's own URL instead.
  * - /api/*, /_next/image, prefetches, non-GET and every other file: not
  *   touched and never cached.
  * - The manejo flow (FLOW_PAGES) is kept up front, with the files its HTML
@@ -55,11 +57,7 @@ function route(url, mode, method, headers) {
   const prefetch =
     headers?.get("next-router-prefetch") != null || headers?.get("next-router-segment-prefetch") != null;
   if (rsc && !prefetch) {
-    return {
-      strategy: "rsc-network-first",
-      cacheKey: `rsc:${path}`,
-      templateKey: runner ? "rsc:/manejo/[id]" : null,
-    };
+    return { strategy: "rsc-network-first", cacheKey: `rsc:${path}`, templateKey: null };
   }
   return BYPASS;
 }

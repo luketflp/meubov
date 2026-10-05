@@ -41,8 +41,8 @@ const rows: Row[] = [
   ["a tratamento avulso", "/manejo/avulso/tratamento/abc", "navigate", "GET", {}, page("/manejo/avulso/tratamento/abc")],
   ["the old venda address", "/manejo/venda/abc", "navigate", "GET", {}, page("/manejo/venda/abc")],
   ["the offline page", "/offline", "navigate", "GET", {}, page("/offline")],
-  ["a runner's RSC by header", "/manejo/abc", "cors", "GET", { rsc: "1" }, rsc("rsc:/manejo/abc", "rsc:/manejo/[id]")],
-  ["a runner's RSC by query", "/manejo/abc?_rsc=1x2y3", "cors", "GET", {}, rsc("rsc:/manejo/abc", "rsc:/manejo/[id]")],
+  ["a runner's RSC by header, never as a template", "/manejo/abc", "cors", "GET", { rsc: "1" }, rsc("rsc:/manejo/abc")],
+  ["a runner's RSC by query", "/manejo/abc?_rsc=1x2y3", "cors", "GET", {}, rsc("rsc:/manejo/abc")],
   ["the list's RSC", "/manejo?_rsc=9z", "cors", "GET", { rsc: "1" }, rsc("rsc:/manejo")],
   ["a prefetch", "/manejo/abc?_rsc=1x2y3", "cors", "GET", { rsc: "1", "next-router-prefetch": "1" }, bypass],
   ["a segment prefetch", "/manejo/abc?_rsc=1x2y3", "cors", "GET", { rsc: "1", "next-router-segment-prefetch": "/_tree" }, bypass],
@@ -57,7 +57,7 @@ describe("route", () => {
 
   it("reads no headers when none are given", () => {
     expect(route(new URL("/manejo/abc?_rsc=1", BASE), "cors", "GET")).toEqual(
-      rsc("rsc:/manejo/abc", "rsc:/manejo/[id]")
+      rsc("rsc:/manejo/abc")
     );
   });
 });
