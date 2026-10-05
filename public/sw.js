@@ -15,6 +15,9 @@
  *   navigation, which lands on the document fallback).
  * - /api/*, /_next/image, prefetches, non-GET and every other file: not
  *   touched and never cached.
+ * - The manejo flow (FLOW_PAGES) is kept up front, with the files its HTML
+ *   names: at install and on every app load, so a phone that only ever opened
+ *   the Painel still reaches Manejo and the brete without signal.
  */
 const VERSION = "v1";
 const SHELL_CACHE = `meubov-shell-${VERSION}`;
@@ -22,6 +25,8 @@ const SHELL_CACHE = `meubov-shell-${VERSION}`;
 const STATIC_CACHE = `meubov-static-${VERSION}`;
 const OFFLINE_PAGE = "/offline";
 const NETWORK_TIMEOUT_MS = 3000;
+// Any /manejo/<id> document is the runner template: the runner reads its id from the URL.
+const FLOW_PAGES = ["/dashboard", "/manejo", "/manejo/modelo"];
 
 const BYPASS = { strategy: "bypass", cacheKey: null, templateKey: null };
 
@@ -90,6 +95,11 @@ function isOwnStatic(value) {
   return url.origin === self.location.origin && url.pathname.startsWith("/_next/static/");
 }
 
+/** The /_next/static files a page's HTML names (scripts, styles, preloaded fonts). */
+function staticUrls(html) {
+  return [...new Set(html.match(/\/_next\/static\/[^"'\s\\)&]+/g) ?? [])];
+}
+
 async function warmStatic(urls) {
   const cache = await caches.open(STATIC_CACHE);
   await Promise.all(
@@ -103,14 +113,18 @@ async function warmStatic(urls) {
   );
 }
 
-/** Keeps the document of a page the user reached by a link, so a reload without signal still opens it. */
+/** Keeps a page's document and the files it names, so it opens without signal even if never drawn here. */
 async function warmDocument(path) {
   try {
     const url = new URL(path, self.location.origin);
     const r = route(url, "navigate", "GET", new Headers());
     if (r.strategy !== "navigate-network-first") return;
     const response = await fetch(url, { credentials: "same-origin" });
-    if (response.ok && !response.redirected) await remember(await caches.open(SHELL_CACHE), r, response);
+    // Signed out: the proxy redirects to the landing page, which is not this page.
+    if (!response.ok || response.redirected) return;
+    const html = await response.clone().text();
+    await remember(await caches.open(SHELL_CACHE), r, response);
+    await warmStatic(staticUrls(html));
   } catch {
     // Best effort: the next visit tries again.
   }
@@ -181,7 +195,9 @@ self.addEventListener("install", (event) => {
       const html = await response.clone().text();
       await (await caches.open(SHELL_CACHE)).put(keyUrl(OFFLINE_PAGE), response);
       // Its stylesheet and scripts, so the page draws without signal.
-      await warmStatic([...new Set(html.match(/\/_next\/static\/[^"'\s\\)&]+/g) ?? [])]);
+      await warmStatic(staticUrls(html));
+      // Best effort: signed out, they are kept on the first app load instead.
+      await Promise.all(FLOW_PAGES.map(warmDocument));
       await self.skipWaiting();
     })()
   );
@@ -199,14 +215,16 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// The page that registered the worker loaded before the worker could see it:
-// it sends its chunk URLs and its path here so they are kept too.
+// Sent on every app load. The page that registered the worker loaded before the
+// worker could see it: it sends its chunk URLs and its path so they are kept
+// too. The manejo flow is refreshed each time, so a deploy's pages replace the old.
 self.addEventListener("message", (event) => {
   const data = event.data;
   if (!data || data.type !== "warm") return;
+  const pages = new Set(FLOW_PAGES);
+  if (typeof data.page === "string" && data.page.startsWith("/")) pages.add(data.page);
   const jobs = [warmStatic((Array.isArray(data.urls) ? data.urls : []).filter(isOwnStatic))];
-  if (typeof data.page === "string" && data.page.startsWith("/")) jobs.push(warmDocument(data.page));
-  event.waitUntil(Promise.all(jobs));
+  event.waitUntil(Promise.all([...jobs, ...[...pages].map(warmDocument)]));
 });
 
 self.addEventListener("fetch", (event) => {
