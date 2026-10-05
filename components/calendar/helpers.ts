@@ -4,7 +4,9 @@
  * Stateless functions; business rules live in lib/domain.
  */
 import type {
+  Animal,
   HealthProtocol,
+  Lot,
   Treatment,
   TreatmentStatus,
   TreatmentType,
@@ -161,6 +163,41 @@ export function groupTreatments(treatments: Treatment[]): TreatmentGroup[] {
     else map.set(key, [t]);
   }
   return [...map.entries()].map(([key, list]) => ({ key, treatments: list }));
+}
+
+/** The overdue treatments of one lote, as the Atrasados card lists them. */
+export interface TreatmentLotGroup {
+  /** The lote the animals are in today; null gathers the ones whose lote resolves to nothing. */
+  lotId: string | null;
+  /** The lote's name, a deleted one included; null with the null lote. */
+  name: string | null;
+  treatments: Treatment[];
+}
+
+/**
+ * Overdue treatments split by the lote each animal is in today (a treatment
+ * records no lote of its own). Takes them oldest first, as pendingTreatments
+ * sorts them, so the lote with the oldest one leads; "Sem lote" — a lote or
+ * ear tag that resolves to nothing — comes last.
+ */
+export function overdueByLot(treatments: Treatment[], animals: Animal[], lots: Lot[]): TreatmentLotGroup[] {
+  const lotIdByEarTag = new Map(animals.map((animal) => [animal.earTag, animal.lotId]));
+  const nameById = new Map(lots.map((lot) => [lot.id, lot.name]));
+  const groups = new Map<string | null, TreatmentLotGroup>();
+  for (const t of treatments) {
+    const lotId = lotIdByEarTag.get(t.animalEarTag) ?? "";
+    const name = nameById.get(lotId) ?? null;
+    const key = name === null ? null : lotId;
+    let group = groups.get(key);
+    if (!group) {
+      group = { lotId: key, name, treatments: [] };
+      groups.set(key, group);
+    }
+    group.treatments.push(t);
+  }
+  const noLot = groups.get(null);
+  groups.delete(null);
+  return noLot ? [...groups.values(), noLot] : [...groups.values()];
 }
 
 /** Aggregated chips of a day: count by type (foot-and-mouth apart) and derived status. */

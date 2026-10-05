@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, Trash2 } from "lucide-react";
+import { CheckCircle2, Fence, Trash2 } from "lucide-react";
 import type { Treatment } from "@/lib/types";
 import { todayISO, daysBetween, formatDate } from "@/lib/domain/dates";
 import { isFootAndMouth } from "@/lib/domain/status";
@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusDot } from "@/components/ui/status-dot";
-import { daysAgoLabel, groupTreatments } from "@/components/calendar/helpers";
+import { daysAgoLabel, groupTreatments, overdueByLot } from "@/components/calendar/helpers";
+import { activeLots } from "@/lib/store/selectors";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
 
@@ -22,7 +23,11 @@ interface OverdueSectionProps {
   onDeleteGroup: (treatment: Treatment) => void;
 }
 
-/** Overdue treatments of the whole herd, independent of the navigated month. */
+/**
+ * Overdue treatments of the whole herd, independent of the navigated month,
+ * lote by lote (the lote each animal is in today), each lote listing its
+ * agendamentos.
+ */
 export function OverdueSection({
   overdue,
   onMarkDone,
@@ -30,9 +35,12 @@ export function OverdueSection({
   onDeleteGroup,
 }: OverdueSectionProps) {
   const animals = useHerdStore((state) => state.animals);
+  const lots = useHerdStore((state) => state.lots);
   const canEdit = useCan("sanitary", "edit");
   const animalIdsByEarTag = new Map(animals.map((animal) => [animal.earTag, animal.id]));
-  const groups = groupTreatments(overdue);
+  const byLot = overdueByLot(overdue, animals, lots);
+  // A deleted lote still names the sold animals' treatments, but has no page to open.
+  const liveLotIds = new Set(activeLots(lots).map((lot) => lot.id));
 
   /** The ear tag, linked to the animal's ficha when it still resolves. */
   function animalLink(treatment: Treatment) {
@@ -58,6 +66,105 @@ export function OverdueSection({
     );
   }
 
+  /** A lote's agendamentos: one booked for many animals lists its heads under it. */
+  function agendamentos(treatments: Treatment[]) {
+    return (
+      <ul className="divide-y divide-hairline">
+        {groupTreatments(treatments).map((group) => {
+          const [first] = group.treatments;
+          if (group.treatments.length === 1) {
+            return (
+              <li key={group.key} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2.5">
+                {whenColumn(first)}
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-2 text-sm font-medium text-ink">
+                    {isFootAndMouth(first) ? <StatusDot status="fmd" /> : null}
+                    <span className="truncate">{first.name}</span>
+                  </p>
+                  {animalLink(first)}
+                </div>
+                {canEdit ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-11 md:min-h-0"
+                      onClick={() => onMarkDone(first.id)}
+                    >
+                      Marcar como feito
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Excluir tratamento"
+                      className="size-11 shrink-0 text-ink-soft hover:text-overdue md:size-9"
+                      onClick={() => onDelete(first)}
+                    >
+                      <Trash2 className="size-4" aria-hidden />
+                    </Button>
+                  </>
+                ) : null}
+              </li>
+            );
+          }
+          return (
+            <li key={group.key} className="py-2.5">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                {whenColumn(first)}
+                <p className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium text-ink">
+                  {isFootAndMouth(first) ? <StatusDot status="fmd" /> : null}
+                  <span className="truncate">{first.name}</span>
+                  <span className="shrink-0 text-xs font-normal text-ink-soft">
+                    {group.treatments.length} animais
+                  </span>
+                </p>
+                {canEdit ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="min-h-11 text-ink-soft hover:text-overdue md:min-h-0"
+                    onClick={() => onDeleteGroup(first)}
+                  >
+                    <Trash2 data-icon="inline-start" aria-hidden />
+                    Excluir todos
+                  </Button>
+                ) : null}
+              </div>
+              <ul className="mt-1 divide-y divide-hairline border-l border-hairline pl-3">
+                {group.treatments.map((t) => (
+                  <li key={t.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2">
+                    <span className="min-w-0 flex-1">{animalLink(t)}</span>
+                    {canEdit ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="min-h-11 md:min-h-0"
+                          onClick={() => onMarkDone(t.id)}
+                        >
+                          Marcar como feito
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Excluir tratamento deste animal"
+                          className="size-11 shrink-0 text-ink-soft hover:text-overdue md:size-9"
+                          onClick={() => onDelete(t)}
+                        >
+                          <Trash2 className="size-4" aria-hidden />
+                        </Button>
+                      </>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
   return (
     <SectionCard
       title="Atrasados"
@@ -76,99 +183,28 @@ export function OverdueSection({
           description="Todo o rebanho está em dia com o calendário sanitário."
         />
       ) : (
-        <ul className="divide-y divide-hairline">
-          {groups.map((group) => {
-            const [first] = group.treatments;
-            if (group.treatments.length === 1) {
-              return (
-                <li key={group.key} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2.5">
-                  {whenColumn(first)}
-                  <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-2 text-sm font-medium text-ink">
-                      {isFootAndMouth(first) ? <StatusDot status="fmd" /> : null}
-                      <span className="truncate">{first.name}</span>
-                    </p>
-                    {animalLink(first)}
-                  </div>
-                  {canEdit ? (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="min-h-11 md:min-h-0"
-                        onClick={() => onMarkDone(first.id)}
-                      >
-                        Marcar como feito
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Excluir tratamento"
-                        className="size-11 shrink-0 text-ink-soft hover:text-overdue md:size-9"
-                        onClick={() => onDelete(first)}
-                      >
-                        <Trash2 className="size-4" aria-hidden />
-                      </Button>
-                    </>
-                  ) : null}
-                </li>
-              );
-            }
-            return (
-              <li key={group.key} className="py-2.5">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                  {whenColumn(first)}
-                  <p className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium text-ink">
-                    {isFootAndMouth(first) ? <StatusDot status="fmd" /> : null}
-                    <span className="truncate">{first.name}</span>
-                    <span className="shrink-0 text-xs font-normal text-ink-soft">
-                      {group.treatments.length} animais
-                    </span>
-                  </p>
-                  {canEdit ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="min-h-11 text-ink-soft hover:text-overdue md:min-h-0"
-                      onClick={() => onDeleteGroup(first)}
-                    >
-                      <Trash2 data-icon="inline-start" aria-hidden />
-                      Excluir todos
-                    </Button>
-                  ) : null}
-                </div>
-                <ul className="mt-1 divide-y divide-hairline border-l border-hairline pl-3">
-                  {group.treatments.map((t) => (
-                    <li key={t.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2">
-                      <span className="min-w-0 flex-1">{animalLink(t)}</span>
-                      {canEdit ? (
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="min-h-11 md:min-h-0"
-                            onClick={() => onMarkDone(t.id)}
-                          >
-                            Marcar como feito
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Excluir tratamento deste animal"
-                            className="size-11 shrink-0 text-ink-soft hover:text-overdue md:size-9"
-                            onClick={() => onDelete(t)}
-                          >
-                            <Trash2 className="size-4" aria-hidden />
-                          </Button>
-                        </>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="flex flex-col gap-4">
+          {byLot.map((lot) => (
+            <section key={lot.lotId ?? "sem-lote"} aria-label={lot.name ?? "Sem lote"}>
+              <header className="flex items-center gap-2 border-b border-hairline pb-1.5">
+                <Fence className="size-3.5 shrink-0 text-ink-soft" aria-hidden />
+                <h3 className="text-sm font-semibold text-ink">{lot.name ?? "Sem lote"}</h3>
+                <span className="text-xs text-ink-soft">
+                  {lot.treatments.length === 1 ? "1 tratamento" : `${lot.treatments.length} tratamentos`}
+                </span>
+                {lot.lotId && liveLotIds.has(lot.lotId) ? (
+                  <Link
+                    href={`/lots/${lot.lotId}`}
+                    className="ml-auto inline-flex min-h-11 shrink-0 items-center text-sm font-medium text-brand hover:underline md:min-h-0"
+                  >
+                    Ver lote
+                  </Link>
+                ) : null}
+              </header>
+              {agendamentos(lot.treatments)}
+            </section>
+          ))}
+        </div>
       )}
     </SectionCard>
   );
