@@ -671,9 +671,9 @@ export const movements = pgTable(
 );
 
 /**
- * A conta of the farm's plano de contas, inside one grupo. Never deleted: a
- * conta with lançamentos is archived, which hides it from the form and keeps
- * the history.
+ * A conta of the farm's plano de contas, inside one grupo. A conta with
+ * lançamentos is archived, which hides it from the form and keeps the history;
+ * only an unused one is deleted (its orçamento lines go with it).
  */
 export const accounts = pgTable(
   "accounts",

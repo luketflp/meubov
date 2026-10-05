@@ -39,7 +39,7 @@ type CurrUseCase = _UseCase<UpdateAccountUseCaseProps, UpdateAccountUseCaseRespo
 /**
  * Renames a conta (the history follows, since lançamentos point at its id),
  * archives and restores it, or sets the saldo devedor inicial of a conta de
- * financiamento. A conta is never deleted and never changes grupo.
+ * financiamento. A conta never changes grupo.
  */
 export class UpdateAccountUseCase implements CurrUseCase {
   private repository: RepositoryType;

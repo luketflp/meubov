@@ -2,6 +2,11 @@
 
 exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
 {
+  "DELETE /api/herd/accounts/:id": {
+    "edit": [
+      "finance",
+    ],
+  },
   "DELETE /api/herd/animals/:id/diagnoses/:breedingId": {
     "edit": [
       "reproduction",
