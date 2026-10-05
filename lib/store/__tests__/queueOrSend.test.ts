@@ -6,6 +6,7 @@ const repoLoad = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/auth/client", () => ({ authClient: { getSession: vi.fn() } }));
 vi.mock("@/lib/api/client", () => ({
   api: { manejo: vi.fn(), farms: { get: vi.fn() }, invites: { get: vi.fn() } },
+  NO_ANSWER_MS: 10_000,
 }));
 vi.mock("@/lib/repository/ApiHerdRepository", () => ({
   ApiHerdRepository: class {

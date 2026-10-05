@@ -46,7 +46,7 @@ import type {
 import { toast } from "sonner";
 import { type HerdRepository } from "@/lib/repository/HerdRepository";
 import { ApiHerdRepository } from "@/lib/repository/ApiHerdRepository";
-import { api } from "@/lib/api/client";
+import { api, NO_ANSWER_MS } from "@/lib/api/client";
 import { clearActiveFarmId, getActiveFarmId, setActiveFarmId } from "@/lib/api/activeFarm";
 import { authClient } from "@/lib/auth/client";
 import { openStore } from "@/lib/offline/db";
@@ -795,7 +795,10 @@ let signedOut = false;
  * itself failed (no network).
  */
 async function readSessionUser(): Promise<string | null> {
-  const { data, error } = await authClient.getSession();
+  // A weak signal can leave it hanging: the fila waits on this answer, so it must fail and retry.
+  const { data, error } = await authClient.getSession({
+    fetchOptions: { signal: AbortSignal.timeout(NO_ANSWER_MS) },
+  });
   if (error) throw error;
   return data?.user.id ?? null;
 }
