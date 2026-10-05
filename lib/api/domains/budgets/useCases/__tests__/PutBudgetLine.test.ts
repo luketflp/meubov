@@ -147,6 +147,22 @@ describe("putBudgetLine", () => {
     expect(state.inserts).toEqual([]);
   });
 
+  it("saves a farm grupo's line and refuses a grupo that is not this farm's", async () => {
+    // The grupo (one of this farm's), then the farm's start month.
+    state.selectResults = [[{ id: "grp-maq" }], [{ startMonth: 10 }]];
+    await put({ category: "grp-maq" });
+    expect(renderSql(state.wheres[0] as SQL).params).toEqual([7, "grp-maq"]);
+    expect(inserted()[0]).toMatchObject({ category: "grp-maq", accountId: null });
+
+    state.inserts = [];
+    state.deletes = 0;
+    // No grupo of this farm by that id.
+    state.selectResults = [[]];
+    expect(await put({ category: "grp-of-another-farm" })).toBe("invalid_category");
+    expect(state.deletes).toBe(0);
+    expect(state.inserts).toEqual([]);
+  });
+
   it("refuses 11 or 13 months before reading anything", async () => {
     expect(await put({ months: EVEN.slice(1) })).toBe("months_mismatch");
     expect(await put({ months: [...EVEN, 0] })).toBe("months_mismatch");

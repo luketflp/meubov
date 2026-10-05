@@ -114,6 +114,19 @@ describe("addSeries — parcelado", () => {
     });
     expect(result).toBe("invalid_repeat");
   });
+
+  it("refuses a série in a grupo that is not the farm's, and writes nothing", async () => {
+    // The farm filter finds no grupo by that id.
+    state.selectResults = [[]];
+    const result = await new AddSeriesUseCase().run({
+      ...ENTRY,
+      category: "grp-of-another-farm",
+      amountBrl: 1000,
+      repeat: { mode: "installments", count: 3, frequency: "monthly", startsOn: "2026-10-10" },
+    });
+    expect(result).toBe("invalid_category");
+    expect(state.inserts).toEqual([]);
+  });
 });
 
 describe("addSeries — recorrente", () => {

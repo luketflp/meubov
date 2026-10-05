@@ -5,8 +5,8 @@
  * only. Runs the real copyPlan of lib/domain/budget.ts.
  *
  * Shared db stub. Selects answer in call order: the farm's start month, the
- * budgets of both safras, the lançamentos, the treatments, the contas, and,
- * after the insert, the target safra as it ends up.
+ * budgets of both safras, the lançamentos, the treatments, the contas, the
+ * grupos de despesa, and, after the insert, the target safra as it ends up.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -101,6 +101,7 @@ describe("copyBudgets", () => {
       [],
       // A conta's line is read only when the conta is the farm's.
       [{ id: "acc-cerca", group: "pasture", name: "Cerca", archivedAt: null }],
+      [],
       final,
     ];
 
@@ -137,6 +138,7 @@ describe("copyBudgets", () => {
       [{ row: { id: "t-1", date: "2025-11-05", status: "done", costBrl: 50 }, earTag: "001" }],
       [{ id: "acc-sal", group: "nutrition", name: "Sal mineral", archivedAt: null }],
       [],
+      [],
     ];
 
     const result = await copy({ source: "realized", adjustPct: 0 });
@@ -159,12 +161,35 @@ describe("copyBudgets", () => {
 
   it("writes nothing when every line already has a budget, and answers the target as it is", async () => {
     const final = line(2026, "admin", null, 100);
-    state.selectResults = [[{ startMonth: 10 }], [...line(2025, "admin", null, 90), ...final], [], [], [], final];
+    state.selectResults = [[{ startMonth: 10 }], [...line(2025, "admin", null, 90), ...final], [], [], [], [], final];
 
     const result = await copy({ source: "budgeted", adjustPct: 0 });
 
     expect(result).toMatchObject({ copied: 0, skipped: 1 });
     expect(result.budgets).toHaveLength(12);
     expect(state.inserts).toEqual([]);
+  });
+
+  it("copies a farm grupo's line and leaves an archived grupo's behind", async () => {
+    state.selectResults = [
+      [{ startMonth: 10 }],
+      [...line(2025, "g-maq", null, 100), ...line(2025, "g-arr", null, 500)],
+      [],
+      [],
+      [],
+      [
+        { id: "g-maq", farmId: 7, name: "Máquinas e veículos", archivedAt: null, createdAt: new Date("2025-08-01T00:00:00Z") },
+        { id: "g-arr", farmId: 7, name: "Arrendamento", archivedAt: new Date("2026-01-05T00:00:00Z"), createdAt: new Date("2025-07-01T00:00:00Z") },
+      ],
+      [],
+    ];
+
+    const result = await copy({ source: "budgeted", adjustPct: 0 });
+
+    expect(result).toMatchObject({ copied: 1, skipped: 0 });
+    expect(rowsOf("g-maq:null").map((row) => row.amountBrl)).toEqual(Array(12).fill(100));
+    expect(rowsOf("g-arr:null")).toEqual([]);
+    // The grupos read are this farm's.
+    expect(renderSql(state.wheres[5] as SQL).params).toEqual([7]);
   });
 });

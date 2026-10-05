@@ -42,6 +42,11 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
       "herd",
     ],
   },
+  "DELETE /api/herd/expense-groups/:id": {
+    "edit": [
+      "finance",
+    ],
+  },
   "DELETE /api/herd/expenses/:id": {
     "edit": [
       "finance",
@@ -146,6 +151,11 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
     ],
   },
   "PATCH /api/herd/bank-accounts/:id": {
+    "edit": [
+      "finance",
+    ],
+  },
+  "PATCH /api/herd/expense-groups/:id": {
     "edit": [
       "finance",
     ],
@@ -279,6 +289,11 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
   "POST /api/herd/categories": {
     "edit": [
       "herd",
+    ],
+  },
+  "POST /api/herd/expense-groups": {
+    "edit": [
+      "finance",
     ],
   },
   "POST /api/herd/expenses": {

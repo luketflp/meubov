@@ -16,6 +16,7 @@ import {
   breeds,
   calvings,
   customCategories,
+  expenseGroups,
   expenseSeries,
   expenses,
   farm,
@@ -49,6 +50,7 @@ import {
   toCustomCategory,
   toDiagnosis,
   toExpense,
+  toExpenseGroup,
   toFarmData,
   toInvernada,
   toLot,
@@ -120,6 +122,7 @@ export class LoadHerdUseCase implements CurrUseCase {
       transferRows,
       lineSummaryRows,
       reconciledRows,
+      expenseGroupRows,
     ] = await Promise.all([
       this.repository.select().from(farm).where(eq(farm.id, farmId)),
       this.repository.select().from(animals).where(eq(animals.farmId, farmId)).orderBy(asc(animals.earTag)),
@@ -213,7 +216,7 @@ export class LoadHerdUseCase implements CurrUseCase {
         .select()
         .from(accounts)
         .where(eq(accounts.farmId, farmId))
-        .orderBy(asc(accounts.group), asc(accounts.name)),
+        .orderBy(asc(accounts.name)),
       this.repository.select().from(expenseSeries).where(eq(expenseSeries.farmId, farmId)),
       this.repository
         .select({ expenseId: attachments.expenseId, total: count() })
@@ -260,6 +263,11 @@ export class LoadHerdUseCase implements CurrUseCase {
             inArray(statementLines.status, ["matched", "created", "transfer"])
           )
         ),
+      this.repository
+        .select()
+        .from(expenseGroups)
+        .where(eq(expenseGroups.farmId, farmId))
+        .orderBy(asc(expenseGroups.createdAt), asc(expenseGroups.name)),
     ]);
 
     const weighingsByAnimal = new Map<string, Weighing[]>();
@@ -340,6 +348,7 @@ export class LoadHerdUseCase implements CurrUseCase {
         )
       ),
       accounts: accountRows.map(toAccount),
+      expenseGroups: expenseGroupRows.map(toExpenseGroup),
       bankAccounts: bankAccountRows.map((row) => toBankAccount(row, linesByAccount.get(row.id))),
       transfers: transferRows.map(toTransfer),
       reconciledIds: reconciledRows.map(pairKey).filter((key): key is string => key !== undefined),

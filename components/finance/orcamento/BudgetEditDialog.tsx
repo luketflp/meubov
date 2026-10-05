@@ -15,7 +15,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { ChevronDown, CircleAlert, CircleCheck, Trash2 } from "lucide-react";
 import type { Budget, BudgetDistribution, ExpenseCategory } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
-import { EXPENSE_GROUPS, accountsByGroup } from "@/lib/domain/accounts";
+import { accountsByGroup } from "@/lib/domain/accounts";
 import { cents } from "@/lib/domain/bankAccounts";
 import {
   budgetView,
@@ -28,7 +28,7 @@ import {
   type BudgetView,
 } from "@/lib/domain/budget";
 import { formatCurrency } from "@/lib/domain/format";
-import { EXPENSE_CATEGORY_LABEL } from "@/lib/domain/labels";
+import { despesaGroups, groupLabel } from "@/lib/domain/groups";
 import { monthYear } from "@/lib/domain/series";
 import { useToast } from "@/components/providers/Toasts";
 import { parseAmount } from "@/components/finance/parseAmount";
@@ -120,7 +120,7 @@ export function BudgetEditDialog({
       <DialogContent className={SHEET}>
         <DialogHeader>
           <DialogTitle className="text-lg leading-6 font-semibold sm:text-xl">
-            Orçamento · {EXPENSE_CATEGORY_LABEL[category]}
+            Orçamento · {groupLabel(category, inputs.expenseGroups)}
           </DialogTitle>
           <DialogDescription>
             {safraLabel(safra, startMonth)} · {monthYear(`${months[0].key}-01`)} a {monthYear(`${months[11].key}-01`)}
@@ -138,9 +138,9 @@ export function BudgetEditDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {EXPENSE_GROUPS.map((group) => (
-                  <SelectItem key={group} value={group}>
-                    {EXPENSE_CATEGORY_LABEL[group]}
+                {despesaGroups(inputs.expenseGroups).map((group) => (
+                  <SelectItem key={group.key} value={group.key}>
+                    {group.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -185,12 +185,12 @@ function EditForm({ safra, startMonth, category, view, previous, inputs, today, 
   const saveBudgetLine = useHerdStore((s) => s.saveBudgetLine);
   const removeBudgetLine = useHerdStore((s) => s.removeBudgetLine);
   const { addToast } = useToast();
-  const label = EXPENSE_CATEGORY_LABEL[category];
+  const label = groupLabel(category, inputs.expenseGroups);
   const labels = safraMonths(safra, startMonth).map((month) => month.label);
   const group = view.groups.find((line) => line.category === category);
   const lineOf = (accountId: string) => group?.accounts.find((line) => line.accountId === accountId);
   // The grupo's contas, and an archived one that still holds a budget in this safra.
-  const contas = accountsByGroup(accounts, true)[category].filter(
+  const contas = (accountsByGroup(accounts, true)[category] ?? []).filter(
     (account) => account.archivedAt === undefined || lineOf(account.id)?.ownRows
   );
 

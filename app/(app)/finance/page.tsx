@@ -75,6 +75,7 @@ function FinanceContent() {
   const accounts = useHerdStore((s) => s.accounts);
   const bankAccounts = useHerdStore((s) => s.bankAccounts);
   const transfers = useHerdStore((s) => s.transfers);
+  const expenseGroups = useHerdStore((s) => s.expenseGroups);
   // An offline snapshot from before the orçamento has no início da safra.
   const safraStartMonth = useHerdStore((s) => s.farm.safraStartMonth ?? 10);
   const loadBudgets = useHerdStore((s) => s.loadBudgets);
@@ -104,8 +105,8 @@ function FinanceContent() {
     [expenses, movements, treatments, period, today]
   );
   const rows = useMemo(
-    () => ledgerRows({ ...inputs, accounts }, period, today),
-    [inputs, accounts, period, today]
+    () => ledgerRows({ ...inputs, accounts, expenseGroups }, period, today),
+    [inputs, accounts, expenseGroups, period, today]
   );
   const lotEcon = useMemo(
     () => lotEconomics(inputs, period, quote.price, today),
@@ -129,8 +130,8 @@ function FinanceContent() {
   );
   const bills = useMemo(() => pendingBills(expenses, today), [expenses, today]);
   const capital = useMemo(
-    () => capitalSummary({ ...inputs, accounts, bankAccounts, transfers }, period, today),
-    [inputs, accounts, bankAccounts, transfers, period, today]
+    () => capitalSummary({ ...inputs, accounts, bankAccounts, transfers, expenseGroups }, period, today),
+    [inputs, accounts, bankAccounts, transfers, expenseGroups, period, today]
   );
   // The band reads the current safra's orçamento, loaded on demand (never every safra with the herd).
   const safra = safraOf(today, safraStartMonth);
@@ -142,8 +143,11 @@ function FinanceContent() {
     if (budgetsMissing) loadBudgets(safra).catch(() => {});
   }, [budgetsMissing, safra, loadBudgets]);
   const budget = useMemo(
-    () => (budgets ? budgetView({ budgets, expenses, treatments, accounts }, safra, safraStartMonth, today) : null),
-    [budgets, expenses, treatments, accounts, safra, safraStartMonth, today]
+    () =>
+      budgets
+        ? budgetView({ budgets, expenses, treatments, accounts, expenseGroups }, safra, safraStartMonth, today)
+        : null,
+    [budgets, expenses, treatments, accounts, expenseGroups, safra, safraStartMonth, today]
   );
 
   return (

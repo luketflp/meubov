@@ -183,6 +183,13 @@
       "when": 1790982781011,
       "tag": "0025_financeiro-orcamento",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791230100939,
+      "tag": "0026_financeiro-grupos-da-fazenda",
+      "breakpoints": true
     }
   ]
 }

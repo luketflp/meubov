@@ -16,6 +16,7 @@ import type {
   Calving,
   CustomCategory,
   Expense,
+  ExpenseGroup,
   FarmData,
   HealthProtocol,
   Invernada,
@@ -43,6 +44,7 @@ import type {
   BudgetRow,
   CalvingRow,
   CustomCategoryRow,
+  ExpenseGroupRow,
   ExpenseRow,
   ExpenseSeriesRow,
   FarmAccountRow,
@@ -273,6 +275,15 @@ export function toAccount(row: FarmAccountRow): Account {
     archivedAt: row.archivedAt?.toISOString(),
     openingBalanceBrl: orNothing(row.openingBalanceBrl),
     openingDate: orNothing(row.openingDate),
+  };
+}
+
+export function toExpenseGroup(row: ExpenseGroupRow): ExpenseGroup {
+  return {
+    id: row.id,
+    name: row.name,
+    archivedAt: row.archivedAt?.toISOString(),
+    createdAt: row.createdAt.toISOString(),
   };
 }
 

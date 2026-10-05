@@ -33,6 +33,31 @@ const form = (patch: Partial<EntryFields> = {}): EntryFields => ({
 });
 
 describe("initialFields", () => {
+  const LIVE = { id: "g-maq", name: "Máquinas e veículos", createdAt: "2026-10-01T12:00:00Z" };
+  const ARCHIVED = { id: "g-old", name: "Leilões", createdAt: "2026-09-01T12:00:00Z", archivedAt: "2026-09-20T12:00:00Z" };
+  const GROUPS = [LIVE, ARCHIVED];
+
+  it("starts a new lançamento in a farm grupo only while the grupo is live", () => {
+    const start = (category: string) =>
+      initialFields({ defaultKind: "expense", initial: { kind: "expense", category, accountId: "diesel" } }, BANKS, TODAY, GROUPS);
+    expect(start("g-maq")).toMatchObject({ category: "g-maq", accountId: "diesel" });
+    // An archived grupo, or one deleted meanwhile, is no new choice: back to Nutrição, without its conta.
+    expect(start("g-old")).toMatchObject({ category: "nutrition", accountId: NONE });
+    expect(start("g-gone")).toMatchObject({ category: "nutrition", accountId: NONE });
+  });
+
+  it("duplicates a lançamento of an archived grupo into Nutrição, and edits it where it is", () => {
+    const row = { id: "e1", kind: "expense", date: "2026-05-01", category: "g-old", amountBrl: 100, accountId: "leiloeiro", createdAt: "2026-05-01T12:00:00Z" } as Expense;
+    expect(initialFields({ defaultKind: "expense", template: row }, BANKS, TODAY, GROUPS)).toMatchObject({
+      category: "nutrition",
+      accountId: NONE,
+    });
+    expect(initialFields({ defaultKind: "expense", expense: row }, BANKS, TODAY, GROUPS)).toMatchObject({
+      category: "g-old",
+      accountId: "leiloeiro",
+    });
+  });
+
   it("starts a new despesa paid today from the conta principal", () => {
     expect(initialFields({ defaultKind: "expense" }, BANKS, TODAY)).toMatchObject({
       kind: "expense",

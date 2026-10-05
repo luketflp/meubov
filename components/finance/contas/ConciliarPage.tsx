@@ -14,8 +14,9 @@ import { ArrowLeft, ArrowRight, Check, CheckCheck, CircleCheck, CircleDashed, Pl
 import type { Resolved } from "@/lib/api/domains/statements/useCases/ResolveLine.useCase";
 import type { ImportView } from "@/lib/api/domains/statements/useCases/GetImport.useCase";
 import type { StatementLine } from "@/lib/types";
-import { ACCOUNT_GROUP_LABEL, accountName } from "@/lib/domain/accounts";
+import { accountName } from "@/lib/domain/accounts";
 import { ENTRY_KIND_LABEL, entryGroup } from "@/lib/domain/entries";
+import { groupLabel } from "@/lib/domain/groups";
 import { accountBalance, bankAccountLabel } from "@/lib/domain/bankAccounts";
 import { addDays, formatDate } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
@@ -64,6 +65,7 @@ export function ConciliarPage({ accountId, importId }: { accountId: string; impo
   const movements = useHerdStore((s) => s.movements);
   const transfers = useHerdStore((s) => s.transfers);
   const accounts = useHerdStore((s) => s.accounts);
+  const expenseGroups = useHerdStore((s) => s.expenseGroups);
   const { addToast } = useToast();
 
   const [view, setView] = useState<ImportView | null | "missing">(null);
@@ -125,7 +127,7 @@ export function ConciliarPage({ accountId, importId }: { accountId: string; impo
     if (c.expense) {
       const e = c.expense;
       const groupKey = entryGroup(e);
-      const group = groupKey ? ACCOUNT_GROUP_LABEL[groupKey] : ENTRY_KIND_LABEL.yield;
+      const group = groupKey ? groupLabel(groupKey, expenseGroups) : ENTRY_KIND_LABEL.yield;
       const plan = accountName(e.accountId, accounts);
       return {
         title: plan ? `${group} › ${plan}` : group,

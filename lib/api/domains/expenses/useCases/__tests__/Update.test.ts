@@ -230,3 +230,34 @@ describe("updateExpense — what the kind needs", () => {
     expect(state.updates[0]).toMatchObject({ date: "2026-09-30", paidAt: "2026-09-30", dueDate: null });
   });
 });
+
+describe("updateExpense — grupo", () => {
+  const run = (patch: ExpensePatchInput) => new UpdateExpenseUseCase().run({ farmId: 7, id: "e-1", patch });
+
+  it("checks a grupo sent alone: not one of the farm's, or not the conta's", async () => {
+    // The row, then the grupo sent: no grupo of this farm by that id.
+    state.selectResults = [[ROW], []];
+    expect(await run({ category: "grp-of-another-farm" })).toBe("invalid_category");
+    // The row, then its conta (a built-in grupo asks nothing): a conta of Nutrição.
+    state.selectResults = [[ROW], [{ group: "nutrition" }]];
+    expect(await run({ category: "admin" })).toBe("invalid_account");
+    expect(state.updates).toEqual([]);
+  });
+
+  it("saves the edit of an old lançamento whose farm grupo is archived", async () => {
+    const old = { ...ROW, category: "grp-arrend", accountId: "acc-pasto-vizinho" };
+    // The row, its grupo (found whatever archived_at says), its conta.
+    state.selectResults = [[old], [{ id: "grp-arrend" }], [{ group: "grp-arrend" }]];
+    state.updateResults = [[{ ...old, notes: "Parcela de setembro" }]];
+
+    // The form sends every field back, grupo and conta included.
+    const result = await run({ category: "grp-arrend", accountId: "acc-pasto-vizinho", notes: "Parcela de setembro" });
+
+    expect(state.updates[0]).toMatchObject({
+      category: "grp-arrend",
+      accountId: "acc-pasto-vizinho",
+      notes: "Parcela de setembro",
+    });
+    expect(result).toMatchObject({ category: "grp-arrend", notes: "Parcela de setembro" });
+  });
+});

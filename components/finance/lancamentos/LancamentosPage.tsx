@@ -65,9 +65,21 @@ export function LancamentosPage() {
   const lots = useHerdStore((s) => s.lots);
   const bankAccounts = useHerdStore((s) => s.bankAccounts);
   const transfers = useHerdStore((s) => s.transfers);
+  const expenseGroups = useHerdStore((s) => s.expenseGroups);
   const inputs = useMemo<PlanInputs>(
-    () => ({ expenses, accounts, movements, manejoSessions, animals, treatments, lots, bankAccounts, transfers }),
-    [expenses, accounts, movements, manejoSessions, animals, treatments, lots, bankAccounts, transfers]
+    () => ({
+      expenses,
+      accounts,
+      movements,
+      manejoSessions,
+      animals,
+      treatments,
+      lots,
+      bankAccounts,
+      transfers,
+      expenseGroups,
+    }),
+    [expenses, accounts, movements, manejoSessions, animals, treatments, lots, bankAccounts, transfers, expenseGroups]
   );
 
   const params = useMemo(() => new URLSearchParams(query), [query]);

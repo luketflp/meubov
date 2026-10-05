@@ -33,6 +33,7 @@ const REFUSAL_STATUS: Record<ResolveRefusal, 400 | 404 | 409> = {
   due_before_date: 400,
   invalid_bank_account: 400,
   invalid_account: 400,
+  invalid_category: 400,
 };
 
 const resolveLine = (farmId: number, userId: string, lineId: string, action: LineAction) =>

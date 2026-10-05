@@ -1,18 +1,15 @@
-/** Request schemas for the plano de contas: farm-named contas inside the fixed grupos. */
+/** Request schemas for the plano de contas: farm-named contas inside its grupos. */
 
 import { t } from "elysia";
 
 import { DateString } from "@/lib/api/schemas/shared.schema";
-import { ExpenseCategoryModel } from "@/lib/api/domains/expenses/schemas/expense.schema";
 
-/** The seven despesa grupos, "revenue" (Receitas) and the three fora do resultado. */
-export const AccountGroupModel = t.Union([
-  ExpenseCategoryModel,
-  t.Literal("revenue"),
-  t.Literal("investment"),
-  t.Literal("financing"),
-  t.Literal("partners"),
-]);
+/**
+ * Grupo of a conta: "revenue" (Receitas), one of the three fora do resultado,
+ * or a despesa grupo (a built-in key or the id of one of the farm's grupos).
+ * AddAccount answers 400 `invalid_category` for anything else.
+ */
+export const AccountGroupModel = t.String({ minLength: 1, maxLength: 64 });
 
 const AccountName = t.String({ minLength: 1, maxLength: 60, pattern: "\\S" });
 

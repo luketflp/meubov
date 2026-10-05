@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Animal, ManejoSession } from "@/lib/types";
+import type { Animal, ExpenseGroup, ManejoSession } from "@/lib/types";
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 const repoLoad = vi.hoisted(() => vi.fn());
@@ -279,6 +279,17 @@ describe("an offline boot", () => {
     const confirmed = vi.mocked(setSyncUser).mock.invocationCallOrder.at(-1)!;
     const kicked = vi.mocked(wireOffline).mock.invocationCallOrder.at(-1)!;
     expect(confirmed).toBeLessThan(kicked);
+  });
+
+  it("reads an old snapshot without grupos de despesa as none, and the next save carries them", async () => {
+    const maquinas: ExpenseGroup = { id: "g-1", name: "Máquinas e veículos", createdAt: "2026-10-01T12:00:00.000Z" };
+    useHerdStore.setState({ expenseGroups: [maquinas] });
+    await bootOffline();
+    expect(useHerdStore.getState().expenseGroups).toEqual([]);
+
+    useHerdStore.setState({ expenseGroups: [maquinas] });
+    await persistSnapshot(useHerdStore.getState);
+    expect((await openStore<Snapshot>("snapshot").get("u0:1"))?.data.expenseGroups).toEqual([maquinas]);
   });
 
   it("sign-out resets the store and the next user's ops are theirs", async () => {

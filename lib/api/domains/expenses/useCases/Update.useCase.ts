@@ -41,6 +41,7 @@ interface UpdateExpenseUseCaseProps {
 type UpdateExpenseUseCaseResponse =
   | Expense
   | "due_before_date"
+  | "invalid_category"
   | "invalid_account"
   | "invalid_bank_account"
   | null;
@@ -52,8 +53,8 @@ type CurrUseCase = _UseCase<UpdateExpenseUseCaseProps, UpdateExpenseUseCaseRespo
  * the row will be after the patch:
  * - the vencimento against the data;
  * - what the kind needs and stores (normaliseEntry), when the kind, the
- *   movimento or the conta do plano changes, or when the row is fora do
- *   resultado;
+ *   movimento, the grupo or the conta do plano changes, or when the row is
+ *   fora do resultado;
  * - "Pago por", when it changes, or against a new kind or movimento.
  * A linha do extrato the edit no longer agrees with (unpaid, other conta,
  * value or side) is unpaired in the same transaction.
@@ -85,10 +86,12 @@ export class UpdateExpenseUseCase implements CurrUseCase {
         lotId: patch.lotId === undefined ? current.lotId : patch.lotId,
         bankAccountId: patch.bankAccountId === undefined ? current.bankAccountId : patch.bankAccountId,
       };
-      // A despesa or receita that keeps its kind and conta keeps its shape: no query for the conta.
+      // A despesa or receita that keeps its kind, grupo and conta keeps its shape: no query. So a row whose
+      // conta disagrees with its grupo from before that rule still takes "Marcar como pago".
       const reshaped =
         patch.kind !== undefined ||
         patch.flow !== undefined ||
+        patch.category !== undefined ||
         patch.accountId !== undefined ||
         (kind !== "expense" && kind !== "revenue");
       const shape = reshaped ? await normaliseEntry(tx, farmId, merged) : null;

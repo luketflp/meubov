@@ -2,7 +2,8 @@
 
 /**
  * "Nova conta": where it sits in the plano — Banco ou caixa, Investimento,
- * Financiamento, Sócios, Despesa (with its grupo) or Receita — then its name.
+ * Financiamento, Sócios, Despesa (with its grupo: one of the system's or the
+ * farm's, archived ones left out) or Receita — then its name.
  * A financiamento may take the saldo devedor it had on a day. "Banco ou
  * caixa" hands over to the conta bancária form (BankAccountDialog), rendered
  * from here so callers need nothing else.
@@ -10,7 +11,7 @@
 import { useState, type FormEvent } from "react";
 import { Banknote, HandCoins, Landmark, Receipt, Tractor, Users, type LucideIcon } from "lucide-react";
 import type { AccountGroup, CapitalGroup, ExpenseCategory } from "@/lib/types";
-import { ACCOUNT_GROUP_LABEL, EXPENSE_GROUPS } from "@/lib/domain/accounts";
+import { despesaGroups } from "@/lib/domain/groups";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
 import { parseAmount } from "@/components/finance/parseAmount";
@@ -129,6 +130,7 @@ function NewAccountForm({
   onDone(): void;
 }) {
   const addAccount = useHerdStore((s) => s.addAccount);
+  const expenseGroups = useHerdStore((s) => s.expenseGroups);
   const { addToast } = useToast();
   const [place, setPlace] = useState<AccountPlace>(defaultPlace);
   const [category, setCategory] = useState<ExpenseCategory>(defaultCategory);
@@ -210,9 +212,9 @@ function NewAccountForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {EXPENSE_GROUPS.map((g) => (
-                    <SelectItem key={g} value={g}>
-                      {ACCOUNT_GROUP_LABEL[g]}
+                  {despesaGroups(expenseGroups).map((g) => (
+                    <SelectItem key={g.key} value={g.key}>
+                      {g.label}
                     </SelectItem>
                   ))}
                 </SelectContent>

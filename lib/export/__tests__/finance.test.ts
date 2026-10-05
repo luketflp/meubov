@@ -51,6 +51,23 @@ describe("expensesExportTable with money outside the resultado", () => {
   });
 });
 
+describe("expensesExportTable with the farm's grupos", () => {
+  it("names a farm grupo and writes Grupo removido for one that is gone", () => {
+    const table = expensesExportTable(
+      [
+        { id: "e1", kind: "expense", date: "2026-01-05", category: "g-maq", amountBrl: 100 },
+        { id: "e2", kind: "expense", date: "2026-01-04", category: "g-gone", amountBrl: 50 },
+      ],
+      "Despesas",
+      [{ id: "g-maq", name: "Máquinas e veículos", createdAt: "2026-01-01T00:00:00.000Z" }]
+    );
+    expect(table.rows).toEqual([
+      ["2026-01-05", "Máquinas e veículos", null, 100],
+      ["2026-01-04", "Grupo removido", null, 50],
+    ]);
+  });
+});
+
 const period = { start: "2025-09-01", end: "2026-08-31" };
 
 function indicatorsFixture(overrides: Partial<Indicators> = {}): Indicators {

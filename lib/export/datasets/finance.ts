@@ -3,13 +3,14 @@
  * the Placar's indicators beside the prior window and their references, and
  * the Por lote table.
  */
-import type { Category, Expense } from "@/lib/types";
+import type { Category, Expense, ExpenseGroup } from "@/lib/types";
 import type { LedgerStatus } from "@/lib/domain/ledger";
 import type { Indicators } from "@/lib/domain/economics";
 import type { LotEconomics } from "@/lib/domain/lotEconomics";
 import { benchmark, type BenchmarkKey } from "@/lib/domain/benchmarks";
 import { formatNumber } from "@/lib/domain/format";
-import { EXPENSE_CATEGORY_LABEL, pluralCategory } from "@/lib/domain/labels";
+import { groupLabel } from "@/lib/domain/groups";
+import { pluralCategory } from "@/lib/domain/labels";
 import type { PaneRow } from "@/lib/domain/planTree";
 import { buildTable, type ExportTable } from "@/lib/export/table";
 
@@ -18,13 +19,20 @@ export function expensesNewestFirst(expenses: readonly Expense[]): Expense[] {
   return [...expenses].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
 
-/** Every despesa, newest first; receitas and the kinds outside the resultado are left out. */
-export function expensesExportTable(expenses: readonly Expense[], title = "Despesas"): ExportTable {
+/**
+ * Every despesa, newest first; receitas and the kinds outside the resultado
+ * are left out. `expenseGroups` names the farm's grupos.
+ */
+export function expensesExportTable(
+  expenses: readonly Expense[],
+  title = "Despesas",
+  expenseGroups: readonly ExpenseGroup[] = []
+): ExportTable {
   return buildTable(
     title,
     [
       { header: "Data", kind: "date", value: (e) => e.date },
-      { header: "Categoria", value: (e) => EXPENSE_CATEGORY_LABEL[e.category] },
+      { header: "Categoria", value: (e) => groupLabel(e.category, expenseGroups) },
       { header: "Descrição", value: (e) => e.notes ?? null },
       { header: "Valor (R$)", kind: "money", value: (e) => e.amountBrl },
     ],

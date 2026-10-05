@@ -9,7 +9,8 @@ import { accountName } from "@/lib/domain/accounts";
 import { isCost } from "@/lib/domain/entries";
 import { inPeriod, periodSearch, type Period } from "@/lib/domain/period";
 import { nodeParam } from "@/lib/domain/planTree";
-import { EXPENSE_CATEGORY_LABEL } from "@/lib/domain/labels";
+import { groupLabel } from "@/lib/domain/groups";
+import { useHerdStore } from "@/lib/store/useHerdStore";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
@@ -72,6 +73,7 @@ export function CostBreakdownCard({
   accounts,
   period,
 }: CostBreakdownCardProps) {
+  const expenseGroups = useHerdStore((s) => s.expenseGroups);
   // null = the default (largest open); "none" = the user closed every grupo.
   const [picked, setPicked] = useState<ExpenseCategory | "none" | null>(null);
   // A picked grupo with no cost in this window falls back to the largest.
@@ -132,7 +134,7 @@ export function CostBreakdownCard({
                     <span className="flex items-baseline justify-between gap-2">
                       <span className="inline-flex items-center gap-2 text-[13px] text-ink">
                         <span aria-hidden className={cn("size-2 rounded-full", color)} />
-                        {EXPENSE_CATEGORY_LABEL[slice.category]}
+                        {groupLabel(slice.category, expenseGroups)}
                       </span>
                       <span className="font-mono text-[13px] whitespace-nowrap text-ink">
                         {formatCurrency(slice.amountBrl)}
@@ -158,7 +160,7 @@ export function CostBreakdownCard({
             <div className="mt-3 border-t border-hairline pt-2.5">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold text-ink">
-                  {EXPENSE_CATEGORY_LABEL[openSlice.category]} por conta
+                  {groupLabel(openSlice.category, expenseGroups)} por conta
                 </span>
                 <span className="text-xs text-ink-soft">
                   {byAccount.length} {byAccount.length === 1 ? "conta" : "contas"}

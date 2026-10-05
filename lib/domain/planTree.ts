@@ -17,9 +17,10 @@ import type {
   EntryKind,
   Expense,
   ExpenseCategory,
+  ExpenseGroup,
   Transfer,
 } from "@/lib/types";
-import { ACCOUNT_GROUP_LABEL, EXPENSE_GROUPS, accountsByGroup } from "@/lib/domain/accounts";
+import { accountsByGroup } from "@/lib/domain/accounts";
 import {
   BANK_ACCOUNT_KIND_LABEL,
   accountBalance,
@@ -32,6 +33,7 @@ import { formatDate } from "@/lib/domain/dates";
 import { coe, periodRevenue } from "@/lib/domain/economics";
 import { isInflow } from "@/lib/domain/entries";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
+import { TOP_GROUP_LABEL, despesaGroups, groupLabel, isBuiltinCategory, isDespesaGroup } from "@/lib/domain/groups";
 import {
   effectiveDueDate,
   ledgerRows,
@@ -155,11 +157,9 @@ const GROUP_PARAM: Record<TopGroup, string> = {
   revenue: "receitas",
 };
 
-const isCategory = (value: string): value is ExpenseCategory =>
-  (EXPENSE_GROUPS as readonly string[]).includes(value);
-
 /** URL value of `conta`: todos · bancos · banco:<id> · investimentos · financiamentos · socios ·
- *  despesas · receitas · grupo:<category> · conta:<id> · compra-de-gado · venda-de-gado. */
+ *  despesas · receitas · grupo:<key> (a built-in grupo or the id of a farm's) · conta:<id> ·
+ *  compra-de-gado · venda-de-gado. */
 export function nodeParam(node: PlanNode): string {
   switch (node.type) {
     case "all":
@@ -173,11 +173,14 @@ export function nodeParam(node: PlanNode): string {
     case "auto":
       return node.which === "purchases" ? "compra-de-gado" : "venda-de-gado";
     case "group":
-      return isCategory(node.group) ? `grupo:${node.group}` : GROUP_PARAM[node.group];
+      return isDespesaGroup(node.group) ? `grupo:${node.group}` : GROUP_PARAM[node.group as TopGroup];
   }
 }
 
-/** The nó of a `conta` value; null when absent, unknown or malformed. */
+/**
+ * The nó of a `conta` value; null when absent, unknown or malformed. Any grupo
+ * de despesa key reads: one that names no grupo opens as "Grupo removido".
+ */
 export function parseNode(param: string | null | undefined): PlanNode | null {
   if (!param) return null;
   if (param === "todos") return { type: "all" };
@@ -191,7 +194,7 @@ export function parseNode(param: string | null | undefined): PlanNode | null {
   const [, prefix, value] = match;
   if (prefix === "banco") return { type: "bank", id: value };
   if (prefix === "conta") return { type: "account", id: value };
-  return isCategory(value) ? { type: "group", group: value } : null;
+  return isDespesaGroup(value) ? { type: "group", group: value } : null;
 }
 
 /** The old Extrato's `tipo` values. */
@@ -213,7 +216,8 @@ export function legacyNode(params: {
   if (conta) return { type: "account", id: conta };
   if (grupo === "revenue") return { type: "group", group: "revenue" };
   if (grupo === "capital") return { type: "auto", which: "purchases" };
-  if (grupo && isCategory(grupo)) return { type: "group", group: grupo };
+  // The old Extrato only knew the seven built-in grupos.
+  if (grupo && isBuiltinCategory(grupo)) return { type: "group", group: grupo };
   return LEGACY_KIND.get(tipo ?? "") ?? null;
 }
 
@@ -304,7 +308,7 @@ export function planTree(inputs: PlanInputs, period: Period, todayIso: string): 
   const of = (id: string) => (r: LedgerRow) => r.expense?.accountId === id;
   /** The grupo's contas by name; an archived one only while it has a line in the window. */
   const contas = (group: AccountGroup, amount: (a: Account) => number): TreeItem[] =>
-    byGroup[group]
+    (byGroup[group] ?? [])
       .filter((a) => a.archivedAt === undefined || withLines.has(a.id))
       .map((a) => item({ type: "account", id: a.id }, a.name, amount(a), { archived: a.archivedAt !== undefined }));
   const debt = (a: Account) => debtBalance(a, inputs.expenses, todayIso);
@@ -312,6 +316,17 @@ export function planTree(inputs: PlanInputs, period: Period, todayIso: string): 
   const banks = [...inputs.bankAccounts]
     .sort(byBankOrder)
     .filter((b) => b.archivedAt === undefined || accountMovements(b, inputs, period).length > 0);
+  // The grupos de despesa: an archived farm grupo only while it has a line in the window, like an
+  // archived conta; a key that names no grupo (a removed one) while its lines are there, as "Grupo removido".
+  const coeGroups = new Set(rows.filter(inCoe).map((r) => r.group));
+  const grupos = despesaGroups(inputs.expenseGroups, { archived: true }).filter(
+    (g) => !g.archived || coeGroups.has(g.key)
+  );
+  for (const key of coeGroups) {
+    if (!grupos.some((g) => g.key === key)) {
+      grupos.push({ key, label: groupLabel(key, inputs.expenseGroups), custom: true, archived: false });
+    }
+  }
 
   return [
     item({ type: "banks" }, BANKS, bankTotal(inputs.bankAccounts, inputs, todayIso), {
@@ -325,7 +340,7 @@ export function planTree(inputs: PlanInputs, period: Period, todayIso: string): 
     }),
     item(
       { type: "group", group: "investment" },
-      ACCOUNT_GROUP_LABEL.investment,
+      TOP_GROUP_LABEL.investment,
       spent(rows, isKind("investment", "purchase")),
       {
         tag: "no período",
@@ -335,25 +350,26 @@ export function planTree(inputs: PlanInputs, period: Period, todayIso: string): 
         ],
       }
     ),
-    item({ type: "group", group: "financing" }, ACCOUNT_GROUP_LABEL.financing, sum(live, debt), {
+    item({ type: "group", group: "financing" }, TOP_GROUP_LABEL.financing, sum(live, debt), {
       tag: "devedor",
       children: contas("financing", debt),
     }),
-    item({ type: "group", group: "partners" }, ACCOUNT_GROUP_LABEL.partners, spent(rows, isKind("partners")), {
+    item({ type: "group", group: "partners" }, TOP_GROUP_LABEL.partners, spent(rows, isKind("partners")), {
       tag: "retirado",
       children: contas("partners", (a) => spent(rows, of(a.id))),
     }),
     item({ type: "group", group: "expenses" }, EXPENSES, cents(coe(inputs.expenses, inputs.treatments, period)), {
       tag: "custo (COE)",
-      children: EXPENSE_GROUPS.map((c) =>
-        item({ type: "group", group: c }, ACCOUNT_GROUP_LABEL[c], spent(rows, (r) => inCoe(r) && r.group === c), {
-          children: contas(c, (a) => spent(rows, of(a.id))),
+      children: grupos.map((g) =>
+        item({ type: "group", group: g.key }, g.label, spent(rows, (r) => inCoe(r) && r.group === g.key), {
+          archived: g.archived,
+          children: contas(g.key, (a) => spent(rows, of(a.id))),
         })
       ),
     }),
     item(
       { type: "group", group: "revenue" },
-      ACCOUNT_GROUP_LABEL.revenue,
+      TOP_GROUP_LABEL.revenue,
       cents(periodRevenue(inputs.expenses, inputs.movements, period).total),
       {
         tag: "no período",
@@ -387,7 +403,9 @@ function belongs(node: Exclude<PlanNode, { type: "bank" | "banks" }>, r: LedgerR
     case "auto":
       return r.kind === (node.which === "purchases" ? "purchase" : "sale");
     case "group":
-      return isCategory(node.group) ? inCoe(r) && r.group === node.group : GROUP_KINDS[node.group].includes(r.kind);
+      return isDespesaGroup(node.group)
+        ? inCoe(r) && r.group === node.group
+        : GROUP_KINDS[node.group as TopGroup].includes(r.kind);
   }
 }
 
@@ -460,7 +478,8 @@ export function nodeRows(node: PlanNode, inputs: PlanInputs, period: Period, tod
     return accountMovements(bank, inputs, period).map((move) => {
       if (move.transfer) return transferLine(move.transfer, bank.id, banks, move.balance);
       const r = byId.get(move.id)!;
-      const group = isCategory(r.group) ? `${EXPENSES} › ${r.groupLabel}` : r.groupLabel;
+      // A despesa or a treatment sits in a grupo de despesa.
+      const group = inCoe(r) ? `${EXPENSES} › ${r.groupLabel}` : r.groupLabel;
       return {
         ...ledgerLine(r, banks),
         date: move.date,
@@ -565,23 +584,28 @@ const toPay = (expenses: Expense[], pick: (e: Expense) => boolean): Expense[] =>
     .sort((a, b) => effectiveDueDate(a).localeCompare(effectiveDueDate(b)));
 
 /** Where a nó sits and which strip it shows. */
-function placeOf(node: PlanNode, account: Account | undefined): { strip: Strip; crumb: string | null; title: string } {
+function placeOf(
+  node: PlanNode,
+  account: Account | undefined,
+  groups: readonly ExpenseGroup[]
+): { strip: Strip; crumb: string | null; title: string } {
   if (account) {
     const g = account.group;
-    return isCategory(g)
-      ? { strip: "expense", crumb: `${EXPENSES} › ${ACCOUNT_GROUP_LABEL[g]}`, title: account.name }
-      : { strip: g, crumb: ACCOUNT_GROUP_LABEL[g], title: account.name };
+    return isDespesaGroup(g)
+      ? { strip: "expense", crumb: `${EXPENSES} › ${groupLabel(g, groups)}`, title: account.name }
+      : { strip: g as Strip, crumb: groupLabel(g, groups), title: account.name };
   }
   if (node.type === "banks") return { strip: "banks", crumb: null, title: BANKS };
   if (node.type === "auto") {
     return node.which === "purchases"
-      ? { strip: "investment", crumb: ACCOUNT_GROUP_LABEL.investment, title: PURCHASES }
-      : { strip: "revenue", crumb: ACCOUNT_GROUP_LABEL.revenue, title: SALES };
+      ? { strip: "investment", crumb: TOP_GROUP_LABEL.investment, title: PURCHASES }
+      : { strip: "revenue", crumb: TOP_GROUP_LABEL.revenue, title: SALES };
   }
   if (node.type === "group") {
     if (node.group === "expenses") return { strip: "expense", crumb: null, title: EXPENSES };
-    if (isCategory(node.group)) return { strip: "expense", crumb: EXPENSES, title: ACCOUNT_GROUP_LABEL[node.group] };
-    return { strip: node.group, crumb: null, title: ACCOUNT_GROUP_LABEL[node.group] };
+    const title = groupLabel(node.group, groups);
+    if (isDespesaGroup(node.group)) return { strip: "expense", crumb: EXPENSES, title };
+    return { strip: node.group as Strip, crumb: null, title };
   }
   return { strip: "all", crumb: null, title: "Todos os lançamentos" };
 }
@@ -652,7 +676,7 @@ export function nodeSummary(node: PlanNode, inputs: PlanInputs, period: Period, 
   const account = node.type === "account" ? inputs.accounts.find((a) => a.id === node.id) : undefined;
   if (node.type === "account" && account === undefined) return null;
 
-  const { strip, crumb, title } = placeOf(node, account);
+  const { strip, crumb, title } = placeOf(node, account, inputs.expenseGroups);
   const lines = nodeRows(node, inputs, period, todayIso).flatMap((r) => (r.ledger ? [r.ledger] : []));
   const ins = lines.filter((r) => r.inflow);
   const outs = lines.filter((r) => !r.inflow);
@@ -786,15 +810,15 @@ export function entryInitialFor(node: PlanNode, accounts: Account[], bankAccount
         : { bankAccountId: node.id };
     case "group":
       if (node.group === "expenses") return { kind: "expense" };
-      if (isCategory(node.group)) return { kind: "expense", category: node.group };
-      return { kind: node.group };
+      if (isDespesaGroup(node.group)) return { kind: "expense", category: node.group };
+      return { kind: node.group as "revenue" | CapitalGroup };
     case "account": {
       const account = accounts.find((a) => a.id === node.id);
       if (!account) return {};
       const g = account.group;
-      return isCategory(g)
+      return isDespesaGroup(g)
         ? { kind: "expense", category: g, accountId: account.id }
-        : { kind: g, accountId: account.id };
+        : { kind: g as "revenue" | CapitalGroup, accountId: account.id };
     }
     default:
       return {};

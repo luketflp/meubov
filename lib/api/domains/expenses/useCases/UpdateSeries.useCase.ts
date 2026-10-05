@@ -21,6 +21,7 @@ interface UpdateSeriesUseCaseProps {
 type UpdateSeriesUseCaseResponse =
   | Expense
   | "due_before_date"
+  | "invalid_category"
   | "invalid_account"
   | "invalid_bank_account"
   | null;

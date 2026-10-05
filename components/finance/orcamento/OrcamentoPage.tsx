@@ -15,7 +15,7 @@ import { Copy, Plus, Target } from "lucide-react";
 import type { ExpenseCategory } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
-import { EXPENSE_GROUPS } from "@/lib/domain/accounts";
+import { despesaGroups } from "@/lib/domain/groups";
 import { budgetView, safraLabel, safraOf, safraRange, type BudgetInputs, type BudgetView } from "@/lib/domain/budget";
 import { MONTH_ABBREV, formatDate, todayISO } from "@/lib/domain/dates";
 import { formatNumber } from "@/lib/domain/format";
@@ -48,6 +48,7 @@ export function OrcamentoPage() {
   const expenses = useHerdStore((s) => s.expenses);
   const treatments = useHerdStore((s) => s.treatments);
   const accounts = useHerdStore((s) => s.accounts);
+  const expenseGroups = useHerdStore((s) => s.expenseGroups);
   const loadBudgets = useHerdStore((s) => s.loadBudgets);
   const today = todayISO();
 
@@ -87,8 +88,8 @@ export function OrcamentoPage() {
   }, [previousMissing, safra, loadBudgets]);
 
   const inputs = useMemo<BudgetInputs>(
-    () => ({ budgets: budgets ?? [], expenses, treatments, accounts }),
-    [budgets, expenses, treatments, accounts]
+    () => ({ budgets: budgets ?? [], expenses, treatments, accounts, expenseGroups }),
+    [budgets, expenses, treatments, accounts, expenseGroups]
   );
   const view = useMemo(
     () => (budgets ? budgetView(inputs, safra, startMonth, today) : null),
@@ -96,12 +97,13 @@ export function OrcamentoPage() {
   );
   const range = safraRange(safra, startMonth);
   const budgeted = view?.groups.some((group) => group.hasBudget) ?? false;
-  /** "Orçar um grupo": the first grupo without an orçado, Nutrição on an empty safra. */
+  /** "Orçar um grupo": the first active grupo without an orçado, Nutrição on an empty safra. */
   const orcar = () =>
     setEditing({
       category:
-        EXPENSE_GROUPS.find((category) => !view?.groups.some((g) => g.category === category && g.hasBudget)) ??
-        "nutrition",
+        despesaGroups(expenseGroups).find(
+          ({ key }) => !view?.groups.some((g) => g.category === key && g.hasBudget)
+        )?.key ?? "nutrition",
       pick: true,
     });
   const onEdit = (category: ExpenseCategory) => setEditing({ category, pick: false });

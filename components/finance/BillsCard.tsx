@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { CircleCheck } from "lucide-react";
 import type { Expense } from "@/lib/types";
-import { ACCOUNT_GROUP_LABEL, accountName } from "@/lib/domain/accounts";
+import { accountName } from "@/lib/domain/accounts";
 import { ENTRY_KIND_LABEL, entryGroup } from "@/lib/domain/entries";
+import { groupLabel } from "@/lib/domain/groups";
 import { effectiveDueDate } from "@/lib/domain/ledger";
 import { formatDate, todayISO } from "@/lib/domain/dates";
 import { formatCurrency } from "@/lib/domain/format";
@@ -30,6 +31,7 @@ interface BillsCardProps {
 export function BillsCard({ payables, receivables, canEdit }: BillsCardProps) {
   const accounts = useHerdStore((s) => s.accounts);
   const lots = useHerdStore((s) => s.lots);
+  const expenseGroups = useHerdStore((s) => s.expenseGroups);
   const markPaid = useMarkPaid();
   const [tab, setTab] = useState<Tab>("payables");
   // Ids being marked; their checkbox stays disabled so a double tap can't fire twice.
@@ -107,9 +109,9 @@ export function BillsCard({ payables, receivables, canEdit }: BillsCardProps) {
               const due = effectiveDueDate(entry);
               const late = due < today;
               const group = entryGroup(entry);
-              const groupLabel = group ? ACCOUNT_GROUP_LABEL[group] : ENTRY_KIND_LABEL.yield;
+              const grupo = group ? groupLabel(group, expenseGroups) : ENTRY_KIND_LABEL.yield;
               const conta = accountName(entry.accountId, accounts);
-              const title = conta ? `${groupLabel} › ${conta}` : groupLabel;
+              const title = conta ? `${grupo} › ${conta}` : grupo;
               const lotName = entry.lotId
                 ? lots.find((lot) => lot.id === entry.lotId)?.name
                 : undefined;

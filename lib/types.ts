@@ -376,15 +376,20 @@ export interface Movement {
   bankAccountId?: string;
 }
 
-/** Category of a farm expense. */
-export type ExpenseCategory =
-  | "nutrition"
-  | "pasture"
-  | "labor"
-  | "health"
-  | "breeding"
-  | "admin"
-  | "other";
+/** One of the seven grupos de despesa the app ships with; they never change. */
+export type BuiltinCategory = "nutrition" | "pasture" | "labor" | "health" | "breeding" | "admin" | "other";
+
+/** Grupo of a despesa: a BuiltinCategory key or the id of one of the farm's ExpenseGroup. */
+export type ExpenseCategory = string;
+
+/** A grupo de despesa the farm created ("Máquinas e veículos"); it counts in the COE like the seven. */
+export interface ExpenseGroup {
+  id: string;
+  name: string;
+  /** ISO timestamp; an archived grupo leaves the forms and keeps its history. */
+  archivedAt?: string;
+  createdAt: string;
+}
 
 /**
  * What the money of a lançamento is. Despesa and receita make the resultado;
@@ -480,8 +485,8 @@ export interface Attachment {
   createdAt: string;
 }
 
-/** Grupo of a conta: receitas, the seven expense categories and the three outside the resultado. */
-export type AccountGroup = ExpenseCategory | "revenue" | CapitalGroup;
+/** Grupo of a conta: "revenue", a CapitalGroup or a despesa grupo (ExpenseCategory). */
+export type AccountGroup = string;
 
 /** A farm-defined conta inside a grupo ("Sal mineral" in Nutrição). */
 export interface Account {
@@ -656,6 +661,8 @@ export interface HerdData {
   expenses: Expense[];
   /** Plano de contas: the farm's contas, archived ones included. */
   accounts: Account[];
+  /** Grupos de despesa the farm created, archived ones included; absent in an old snapshot. */
+  expenseGroups?: ExpenseGroup[];
   /** Contas bancárias, caixa and cartões, archived ones included. */
   bankAccounts?: BankAccount[];
   transfers?: Transfer[];

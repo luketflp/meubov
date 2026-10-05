@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Account, BankAccount, Expense, Movement, Transfer } from "@/lib/types";
-import { EXPENSE_GROUPS } from "@/lib/domain/accounts";
+import type { Account, BankAccount, Expense, ExpenseGroup, Movement, Transfer } from "@/lib/types";
 import { formatCurrency } from "@/lib/domain/format";
+import { BUILTIN_CATEGORIES } from "@/lib/domain/groups";
 import {
   capitalSummary,
   debtBalance,
@@ -178,6 +178,7 @@ const inputs: PlanInputs = {
   lots: [{ id: "lot-1", name: "Lote do Rio" }],
   bankAccounts: [CARTAO, BB, SICREDI, CAIXA, RDC, OLD],
   transfers: [T_APL],
+  expenseGroups: [],
 };
 
 describe("nodeParam and parseNode", () => {
@@ -214,12 +215,12 @@ describe("nodeParam and parseNode", () => {
   });
 
   it("reads back every nó, every grupo de despesa included", () => {
-    const grupos: PlanNode[] = EXPENSE_GROUPS.map((group) => ({ type: "group", group }));
+    const grupos: PlanNode[] = BUILTIN_CATEGORIES.map((group) => ({ type: "group", group }));
     for (const node of [...nodes, ...grupos]) expect(parseNode(nodeParam(node))).toEqual(node);
   });
 
   it("reads an absent, empty, unknown or malformed value as null", () => {
-    for (const value of [null, undefined, "", "nope", "Bancos", "banco", "banco:", "conta:", "grupo:", "grupo:nope", "grupo:revenue"]) {
+    for (const value of [null, undefined, "", "nope", "Bancos", "banco", "banco:", "conta:", "grupo:", "grupo:revenue", "grupo:expenses", "grupo:investment"]) {
       expect(parseNode(value)).toBeNull();
     }
   });
@@ -315,7 +316,7 @@ describe("planTree", () => {
 
   it("opens Despesas into the seven grupos with the treatments under Sanidade", () => {
     const grupos = top("despesas").children ?? [];
-    expect(grupos.map((i) => i.key)).toEqual(EXPENSE_GROUPS.map((c) => `grupo:${c}`));
+    expect(grupos.map((i) => i.key)).toEqual(BUILTIN_CATEGORIES.map((c) => `grupo:${c}`));
     const grupo = (c: string) => grupos.find((i) => i.key === `grupo:${c}`)!;
     expect(["nutrition", "health", "admin", "pasture"].map((c) => grupo(c).amountBrl)).toEqual([1200, 310, 90, 0]);
     expect(figures(grupo("health").children)).toEqual([["Vacinas", 300]]);
@@ -749,6 +750,87 @@ describe("capitalSummary", () => {
       debt: 105000,
       debtAccounts: 2,
       nextInstallment: { dueDate: "2026-10-15", amountBrl: 10000 },
+    });
+  });
+});
+
+describe("the farm's grupos de despesa", () => {
+  const MAQ = "6f1c2b8e-4a3d-4e5f-9b7a-1c2d3e4f5a6b";
+  const ARRENDAMENTO = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+  const VELHO = "1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
+  const groups: ExpenseGroup[] = [
+    { id: MAQ, name: "Máquinas e veículos", createdAt: "2026-08-01T12:00:00.000Z" },
+    { id: ARRENDAMENTO, name: "Arrendamento", archivedAt: "2026-09-20T00:00:00.000Z", createdAt: "2026-07-01T12:00:00.000Z" },
+    { id: VELHO, name: "Grupo velho", archivedAt: "2026-05-01T00:00:00.000Z", createdAt: "2026-01-01T12:00:00.000Z" },
+  ];
+  const farm: PlanInputs = {
+    ...inputs,
+    expenseGroups: groups,
+    accounts: [...accounts, { id: "maq-diesel", group: MAQ, name: "Diesel" }],
+    expenses: [
+      ...expenses,
+      entry("g-diesel", { category: MAQ, accountId: "maq-diesel", date: "2026-09-02", amountBrl: 700, paidAt: "2026-09-02", bankAccountId: "caixa" }),
+      entry("g-arrend", { category: ARRENDAMENTO, date: "2026-08-10", amountBrl: 3000 }),
+      // Its grupo is gone (an old snapshot): it still reads, as "Grupo removido".
+      entry("g-gone", { category: "grupo-apagado", date: "2026-09-03", amountBrl: 50 }),
+    ],
+  };
+  const despesas = (period = PERIOD) => planTree(farm, period, TODAY).find((i) => i.key === "despesas")!;
+
+  it("writes and reads a farm grupo by its id, and any other key as a grupo", () => {
+    const node: PlanNode = { type: "group", group: MAQ };
+    expect(nodeParam(node)).toBe(`grupo:${MAQ}`);
+    expect(parseNode(`grupo:${MAQ}`)).toEqual(node);
+    expect(parseNode("grupo:grupo-apagado")).toEqual({ type: "group", group: "grupo-apagado" });
+    // The old Extrato only knew the seven.
+    expect(legacyNode({ grupo: MAQ })).toBeNull();
+  });
+
+  it("lists them after the seven, an archived one only while it has a line in the window, a removed one last", () => {
+    const tree = despesas();
+    expect(tree.children?.slice(7).map((i) => [i.key, i.label, i.amountBrl, i.archived])).toEqual([
+      [`grupo:${ARRENDAMENTO}`, "Arrendamento", 3000, true],
+      [`grupo:${MAQ}`, "Máquinas e veículos", 700, false],
+      ["grupo:grupo-apagado", "Grupo removido", 50, false],
+    ]);
+    expect(tree.children?.reduce((sum, i) => sum + i.amountBrl, 0)).toBe(tree.amountBrl);
+    expect(tree.children?.find((i) => i.key === `grupo:${MAQ}`)?.children?.map((i) => [i.label, i.amountBrl])).toEqual([
+      ["Diesel", 700],
+    ]);
+    // In September Arrendamento has no line: it leaves the tree.
+    expect(despesas({ start: "2026-09-01", end: "2026-09-30" }).children?.slice(7).map((i) => i.label)).toEqual([
+      "Máquinas e veículos",
+      "Grupo removido",
+    ]);
+  });
+
+  it("titles a farm grupo by its name, a removed one Grupo removido, and puts its contas under it", () => {
+    const summary = (node: PlanNode) => nodeSummary(node, farm, PERIOD, TODAY);
+    expect(summary({ type: "group", group: MAQ })).toMatchObject({
+      crumb: "Despesas",
+      title: "Máquinas e veículos",
+      pills: [{ text: "custo (COE)", tone: "muted" }],
+    });
+    expect(summary({ type: "account", id: "maq-diesel" })).toMatchObject({ crumb: "Despesas › Máquinas e veículos", title: "Diesel" });
+    expect(summary({ type: "group", group: "grupo-apagado" })).toMatchObject({ crumb: "Despesas", title: "Grupo removido" });
+    expect(nodeRows({ type: "group", group: "grupo-apagado" }, farm, PERIOD, TODAY).map((r) => [r.id, r.history])).toEqual([
+      ["g-gone", "Grupo removido"],
+    ]);
+    // A key no line ever had: an empty pane, still titled.
+    expect(nodeRows({ type: "group", group: "nunca" }, farm, PERIOD, TODAY)).toEqual([]);
+    expect(summary({ type: "group", group: "nunca" })?.title).toBe("Grupo removido");
+    expect(nodeRows({ type: "bank", id: "caixa" }, farm, PERIOD, TODAY).find((r) => r.id === "g-diesel")).toMatchObject({
+      contra: "Diesel",
+      contraGroup: "Despesas › Máquinas e veículos",
+    });
+  });
+
+  it("starts Novo as a despesa of the farm grupo", () => {
+    expect(entryInitialFor({ type: "group", group: MAQ }, farm.accounts)).toEqual({ kind: "expense", category: MAQ });
+    expect(entryInitialFor({ type: "account", id: "maq-diesel" }, farm.accounts)).toEqual({
+      kind: "expense",
+      category: MAQ,
+      accountId: "maq-diesel",
     });
   });
 });

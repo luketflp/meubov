@@ -4,9 +4,9 @@
  * business rule, only an enum -> text mapping.
  */
 import type {
+  BuiltinCategory,
   Category,
   DiagnosisResult,
-  ExpenseCategory,
   InactiveReason,
   Sex,
   BreedingType,
@@ -103,8 +103,8 @@ export function animalCategoryName(
   return CATEGORY_LABEL[animal.category];
 }
 
-/** Label of each expense category, e.g.: "Nutrição". */
-export const EXPENSE_CATEGORY_LABEL: Record<ExpenseCategory, string> = {
+/** Label of each built-in grupo de despesa, e.g.: "Nutrição"; a farm grupo's is its name (lib/domain/groups.ts). */
+export const BUILTIN_CATEGORY_LABEL: Record<BuiltinCategory, string> = {
   nutrition: "Nutrição",
   pasture: "Pastagem",
   labor: "Mão de obra",

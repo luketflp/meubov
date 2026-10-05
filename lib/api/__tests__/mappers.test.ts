@@ -1,16 +1,18 @@
 /**
  * toExpense: the série a row belongs to decides its markers ("2/3", "todo dia 20").
  * toAccount: a financiamento carries its saldo inicial.
+ * toExpenseGroup: a farm grupo with its dates in ISO, archivedAt only once archived.
  * toBankAccount: "conciliado até" and the pending count come from its linhas.
  * toBudget: a month of a grupo's or a conta's line, without the farm and audit columns.
  * toFarmData: the início da safra travels with the farm.
  */
 import { describe, expect, it } from "vitest";
 
-import { toAccount, toBankAccount, toBudget, toExpense, toFarmData } from "@/lib/api/mappers";
+import { toAccount, toBankAccount, toBudget, toExpense, toExpenseGroup, toFarmData } from "@/lib/api/mappers";
 import type {
   BankAccountRow,
   BudgetRow,
+  ExpenseGroupRow,
   ExpenseRow,
   ExpenseSeriesRow,
   FarmAccountRow,
@@ -101,6 +103,26 @@ describe("toAccount", () => {
     const plain = toAccount({ ...ACCOUNT, group: "nutrition", openingBalanceBrl: null, openingDate: null });
     expect(plain.openingBalanceBrl).toBeUndefined();
     expect(plain.openingDate).toBeUndefined();
+  });
+});
+
+describe("toExpenseGroup", () => {
+  it("dates the grupo in ISO and leaves archivedAt out while it is active", () => {
+    const row: ExpenseGroupRow = {
+      id: "g-1",
+      farmId: 7,
+      name: "Máquinas e veículos",
+      archivedAt: null,
+      createdAt: new Date("2026-10-01T12:00:00Z"),
+    };
+    expect(toExpenseGroup(row)).toEqual({
+      id: "g-1",
+      name: "Máquinas e veículos",
+      createdAt: "2026-10-01T12:00:00.000Z",
+    });
+    expect(toExpenseGroup({ ...row, archivedAt: new Date("2026-10-03T09:00:00Z") }).archivedAt).toBe(
+      "2026-10-03T09:00:00.000Z"
+    );
   });
 });
 

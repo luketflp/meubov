@@ -76,6 +76,9 @@ describe("ROUTE_REQUIREMENTS", () => {
       "PATCH /api/herd/accounts/:id",
       "DELETE /api/herd/accounts/:id",
       "POST /api/herd/accounts/defaults",
+      "POST /api/herd/expense-groups",
+      "PATCH /api/herd/expense-groups/:id",
+      "DELETE /api/herd/expense-groups/:id",
     ]) {
       expect(ROUTE_REQUIREMENTS[key]).toEqual({ edit: ["finance"] });
     }

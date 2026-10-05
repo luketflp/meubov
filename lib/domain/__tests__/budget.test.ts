@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Account, Budget, Expense, ExpenseCategory } from "@/lib/types";
+import type { Account, Budget, Expense, ExpenseCategory, ExpenseGroup } from "@/lib/types";
 import {
   budgetView,
   copyPlan,
@@ -169,6 +169,7 @@ const INPUTS: BudgetInputs = {
     makeTreatment({ id: "agendada", date: "2026-01-05", status: "scheduled", costBrl: 80 }),
     makeTreatment({ id: "sem-custo", date: "2025-12-01", status: "done" }),
   ],
+  expenseGroups: [],
 };
 
 const view = budgetView(INPUTS, 2025, 10, TODAY);
@@ -237,7 +238,7 @@ describe("budgetView: orçado of a grupo and its contas", () => {
 
   it("places each row on its calendar month", () => {
     const g = budgetView(
-      { budgets: [row("pasture", "2025-10", 700), row("pasture", "2026-09", 300)], expenses: [], treatments: [], accounts: [] },
+      { budgets: [row("pasture", "2025-10", 700), row("pasture", "2026-09", 300)], expenses: [], treatments: [], accounts: [], expenseGroups: [] },
       2025, 10, TODAY
     ).groups[0];
     expect(g.budgeted).toEqual([700, ...Array<number>(10).fill(0), 300]);
@@ -251,7 +252,7 @@ describe("budgetView: orçado of a grupo and its contas", () => {
 
   it("spreads saved months over two safras when the safra starts elsewhere", () => {
     // Administrativo of out/25–set/26, read with the safra starting in janeiro.
-    const inputs: BudgetInputs = { budgets: budgetLine("admin", 500), expenses: [], treatments: [], accounts: [] };
+    const inputs: BudgetInputs = { budgets: budgetLine("admin", 500), expenses: [], treatments: [], accounts: [], expenseGroups: [] };
     expect(budgetView(inputs, 2025, 1, TODAY).groups[0].budgeted).toEqual([...Array<number>(9).fill(0), 500, 500, 500]);
     expect(budgetView(inputs, 2026, 1, TODAY).groups[0].budgeted).toEqual([...Array<number>(9).fill(500), 0, 0, 0]);
   });
@@ -325,6 +326,7 @@ describe("budgetView: % usado and its tone", () => {
         expenses: [expense("p", { category: "pasture", date: "2025-10-01", amountBrl: spent })],
         treatments: [],
         accounts: [],
+        expenseGroups: [],
       },
       2025, 10, "2025-10-20"
     );
@@ -386,6 +388,7 @@ describe("budgetView: totals and grupos over", () => {
         ],
         treatments: [makeTreatment({ id: "vac", date: "2025-10-05", status: "done", costBrl: 500 })],
         accounts: [],
+        expenseGroups: [],
       },
       2025, 10, "2025-10-20"
     );
@@ -401,6 +404,7 @@ describe("budgetView: totals and grupos over", () => {
         expenses: spent.map(([category, amountBrl]) => expense(category, { category, amountBrl })),
         treatments: [],
         accounts: [],
+        expenseGroups: [],
       },
       2025, 10, "2025-10-20"
     ).over;
@@ -409,6 +413,43 @@ describe("budgetView: totals and grupos over", () => {
       { label: "Administrativo", usedPct: 200 },
       { label: "Nutrição", usedPct: 150 },
     ]);
+  });
+});
+
+describe("budgetView with the farm's grupos", () => {
+  const groups: ExpenseGroup[] = [
+    { id: "g-maq", name: "Máquinas e veículos", createdAt: "2025-08-01T00:00:00.000Z" },
+    { id: "g-arr", name: "Arrendamento", archivedAt: "2026-01-05T00:00:00.000Z", createdAt: "2025-07-01T00:00:00.000Z" },
+    { id: "g-old", name: "Grupo velho", archivedAt: "2025-06-01T00:00:00.000Z", createdAt: "2025-01-01T00:00:00.000Z" },
+  ];
+  const farm: BudgetInputs = {
+    budgets: [...budgetLine("g-maq", 200), ...budgetLine("g-arr", 1000)],
+    expenses: [
+      expense("diesel", { category: "g-maq", accountId: "maq-diesel", amountBrl: 150 }),
+      expense("renda", { category: "g-arr", amountBrl: 1000 }),
+    ],
+    treatments: [],
+    accounts: [{ id: "maq-diesel", group: "g-maq", name: "Diesel" }],
+    expenseGroups: groups,
+  };
+
+  it("lists them after the seven by creation, an archived one while it has orçado or despesas in the safra", () => {
+    const farmView = budgetView(farm, 2025, 10, TODAY);
+    expect(farmView.groups.map((g) => [g.key, g.label, g.budgetedTotal, g.realizedToDate])).toEqual([
+      ["g-arr", "Arrendamento", 12000, 1000],
+      ["g-maq", "Máquinas e veículos", 2400, 150],
+    ]);
+    expect(farmView.groups[1].accounts.map((a) => [a.label, a.realizedToDate])).toEqual([["Diesel", 150]]);
+    expect(budgetView({ ...farm, budgets: [] }, 2025, 10, TODAY).groups.map((g) => g.key)).toEqual(["g-arr", "g-maq"]);
+    expect(budgetView({ ...farm, budgets: [], expenses: [] }, 2025, 10, TODAY).groups).toEqual([]);
+  });
+
+  it("leaves an archived grupo out of the copy into the next safra", () => {
+    expect(copyPlan(farm, 2025, 2026, "budgeted", 0, 10, TODAY)).toEqual({
+      lines: [{ category: "g-maq", accountId: null, months: Array<number>(12).fill(200) }],
+      skipped: 0,
+    });
+    expect(copyPlan(farm, 2025, 2026, "realized", 0, 10, TODAY).lines.map((l) => l.category)).toEqual(["g-maq"]);
   });
 });
 
@@ -461,7 +502,7 @@ describe("copyPlan", () => {
   });
 
   it("rounds each month to the centavo", () => {
-    const inputs: BudgetInputs = { budgets: budgetLine("pasture", distribute(100, "equal")), expenses: [], treatments: [], accounts: [] };
+    const inputs: BudgetInputs = { budgets: budgetLine("pasture", distribute(100, "equal")), expenses: [], treatments: [], accounts: [], expenseGroups: [] };
     expect(copyPlan(inputs, 2025, 2026, "budgeted", 5, 10, TODAY).lines[0].months).toEqual([
       ...Array<number>(11).fill(8.75),
       8.79,

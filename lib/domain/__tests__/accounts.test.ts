@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  ACCOUNT_GROUP_LABEL,
-  ACCOUNT_GROUPS,
   accountName,
   accountsByGroup,
   counterpartySuggestions,
   DEFAULT_ACCOUNTS,
-  EXPENSE_GROUPS,
   missingDefaults,
 } from "@/lib/domain/accounts";
+import { CAPITAL_GROUPS } from "@/lib/domain/entries";
+import { BUILTIN_CATEGORIES } from "@/lib/domain/groups";
 import type { Account, Expense } from "@/lib/types";
 
 const account = (overrides: Partial<Account>): Account => ({
@@ -25,43 +24,6 @@ const expense = (overrides: Partial<Expense>): Expense => ({
   category: "other",
   amountBrl: 100,
   ...overrides,
-});
-
-describe("ACCOUNT_GROUPS and ACCOUNT_GROUP_LABEL", () => {
-  it("lists Receitas first, then the seven grupos of custo, then the three outside the resultado", () => {
-    expect(ACCOUNT_GROUPS).toEqual([
-      "revenue",
-      "nutrition",
-      "pasture",
-      "labor",
-      "health",
-      "breeding",
-      "admin",
-      "other",
-      "investment",
-      "financing",
-      "partners",
-    ]);
-    expect(ACCOUNT_GROUPS.map((g) => ACCOUNT_GROUP_LABEL[g])).toEqual([
-      "Receitas",
-      "Nutrição",
-      "Pastagem",
-      "Mão de obra",
-      "Sanidade",
-      "Reprodução",
-      "Administrativo",
-      "Outros",
-      "Investimentos",
-      "Financiamentos",
-      "Sócios",
-    ]);
-  });
-});
-
-describe("EXPENSE_GROUPS", () => {
-  it("is the seven grupos of custo in screen order", () => {
-    expect(EXPENSE_GROUPS).toEqual(["nutrition", "pasture", "labor", "health", "breeding", "admin", "other"]);
-  });
 });
 
 describe("DEFAULT_ACCOUNTS", () => {
@@ -104,11 +66,22 @@ describe("accountsByGroup", () => {
     expect(byGroup.revenue.map((a) => a.id)).toEqual(["a-5"]);
   });
 
-  it("has every grupo, empty ones included", () => {
+  it("has Receitas, the seven built-in grupos and the three outside the resultado, empty ones included", () => {
     const byGroup = accountsByGroup(accounts);
-    expect(Object.keys(byGroup).sort()).toEqual([...ACCOUNT_GROUPS].sort());
+    expect(Object.keys(byGroup).sort()).toEqual(["revenue", ...BUILTIN_CATEGORIES, ...CAPITAL_GROUPS].sort());
     expect(byGroup.labor).toEqual([]);
     expect(byGroup.financing).toEqual([]);
+  });
+
+  it("adds a farm grupo once it has a conta to show", () => {
+    const farm = [
+      ...accounts,
+      account({ id: "a-6", group: "g-maq", name: "Pneus", archivedAt: "2026-05-01T00:00:00.000Z" }),
+      account({ id: "a-7", group: "g-maq", name: "Diesel" }),
+    ];
+    expect(accountsByGroup(farm)["g-maq"].map((a) => a.id)).toEqual(["a-7"]);
+    expect(accountsByGroup(farm, true)["g-maq"].map((a) => a.id)).toEqual(["a-7", "a-6"]);
+    expect(accountsByGroup(accounts)["g-maq"]).toBeUndefined();
   });
 
   it("includes archived contas when asked", () => {

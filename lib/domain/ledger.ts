@@ -10,6 +10,7 @@ import type {
   Animal,
   EntryKind,
   Expense,
+  ExpenseGroup,
   Lot,
   ManejoSession,
   ManejoSessionAnimal,
@@ -17,7 +18,9 @@ import type {
   Treatment,
 } from "@/lib/types";
 import { inPeriod, type Period } from "@/lib/domain/period";
-import { ACCOUNT_GROUP_LABEL, accountName } from "@/lib/domain/accounts";
+import { accountName } from "@/lib/domain/accounts";
+import { TOP_GROUP_LABEL, groupLabel } from "@/lib/domain/groups";
+import { BUILTIN_CATEGORY_LABEL } from "@/lib/domain/labels";
 import { saleSummary } from "@/lib/domain/movements";
 import { KG_PER_ARROBA } from "@/lib/domain/weights";
 import { formatArroba } from "@/lib/domain/format";
@@ -63,6 +66,8 @@ export interface LedgerInputs {
   animals: Animal[];
   treatments: Treatment[];
   lots: Lot[];
+  /** The farm's grupos de despesa, archived ones included: they name the rows. */
+  expenseGroups: readonly ExpenseGroup[];
 }
 
 /** Order of the kinds on the same day. */
@@ -142,7 +147,7 @@ export function ledgerRows(input: LedgerInputs, period: Period, todayIso: string
       status: entryStatus(e, todayIso),
       // A rendimento sits in no grupo of the plano.
       group: group ?? "capital",
-      groupLabel: group === null ? ENTRY_KIND_LABEL.yield : ACCOUNT_GROUP_LABEL[group],
+      groupLabel: group === null ? ENTRY_KIND_LABEL.yield : groupLabel(group, input.expenseGroups),
       account: accountName(e.accountId, input.accounts),
       bankAccountId: e.bankAccountId ?? null,
       counterparty: e.counterparty ?? null,
@@ -182,7 +187,7 @@ export function ledgerRows(input: LedgerInputs, period: Period, todayIso: string
       status: sale ? "received" : "paid",
       // A compra de gado is an investimento the manejos write: no conta of the plano.
       group: sale ? "revenue" : "capital",
-      groupLabel: sale ? ACCOUNT_GROUP_LABEL.revenue : ACCOUNT_GROUP_LABEL.investment,
+      groupLabel: sale ? TOP_GROUP_LABEL.revenue : TOP_GROUP_LABEL.investment,
       account: sale ? "Venda de gado" : "Compra de gado",
       bankAccountId: m.bankAccountId ?? null,
       counterparty: session
@@ -220,7 +225,7 @@ export function ledgerRows(input: LedgerInputs, period: Period, todayIso: string
       paidAt: day.date,
       status: "paid",
       group: "health",
-      groupLabel: ACCOUNT_GROUP_LABEL.health,
+      groupLabel: BUILTIN_CATEGORY_LABEL.health,
       account: null,
       bankAccountId: null,
       counterparty: null,

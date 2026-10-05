@@ -6,8 +6,9 @@
  * receita and the capital kinds write category "other"; the capital kinds
  * need a conta and a movimento and take no lote. Pure.
  */
-import type { BankAccount, EntryFlow, EntryKind, Expense, ExpenseCategory, StatementLine } from "@/lib/types";
+import type { BankAccount, EntryFlow, EntryKind, Expense, ExpenseCategory, ExpenseGroup, StatementLine } from "@/lib/types";
 import { isCapitalKind, isInflow, mayPayFrom } from "@/lib/domain/entries";
+import { despesaGroups } from "@/lib/domain/groups";
 import type { EntryInitial } from "@/lib/domain/planTree";
 import { parseAmount } from "@/components/finance/parseAmount";
 import { defaultPaidBy } from "@/components/finance/contas/PaidByField";
@@ -68,7 +69,13 @@ export interface EntryValues {
 
 const amountText = (amountBrl: number) => String(amountBrl).replace(".", ",");
 
-export function initialFields(source: EntrySource, bankAccounts: BankAccount[], today: string): EntryFields {
+/** `groups`: the farm's grupos de despesa; a new lançamento only starts in one it may still pick. */
+export function initialFields(
+  source: EntrySource,
+  bankAccounts: BankAccount[],
+  today: string,
+  groups: readonly ExpenseGroup[] = []
+): EntryFields {
   const { expense, template, initial, fromLine } = source;
   if (fromLine) {
     return {
@@ -113,13 +120,16 @@ export function initialFields(source: EntrySource, bankAccounts: BankAccount[], 
   // Duplicar keeps what the lançamento is and drops when and how it was paid.
   const kind = template?.kind ?? initial?.kind ?? source.defaultKind;
   const flow = template?.flow ?? initial?.flow ?? "out";
+  // An archived grupo, or one deleted meanwhile, falls back to Nutrição, without its conta.
+  const picked = template?.category ?? initial?.category;
+  const live = picked === undefined || despesaGroups(groups).some((g) => g.key === picked);
   return {
     kind,
     flow,
     date: today,
     amount: template ? amountText(template.amountBrl) : "",
-    category: template?.category ?? initial?.category ?? "nutrition",
-    accountId: template?.accountId ?? initial?.accountId ?? NONE,
+    category: live ? (picked ?? "nutrition") : "nutrition",
+    accountId: live ? (template?.accountId ?? initial?.accountId ?? NONE) : NONE,
     dueDate: today,
     dueTouched: false,
     paid: !template,

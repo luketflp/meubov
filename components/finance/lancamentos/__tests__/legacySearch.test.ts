@@ -59,13 +59,14 @@ const inputs: PlanInputs = {
   lots: [],
   bankAccounts: [],
   transfers: [],
+  expenseGroups: [],
 };
 const period = { start: "2025-10-01", end: "2026-09-30" };
 const TODAY = "2026-09-30";
 
 describe("resolveNode", () => {
   it("falls back to todos when conta is absent, malformed or gone", () => {
-    for (const param of [null, "", "nope", "banco:", "grupo:nope", "conta:deleted"]) {
+    for (const param of [null, "", "nope", "banco:", "grupo:revenue", "conta:deleted"]) {
       const resolved = resolveNode(param, inputs, period, TODAY);
       expect(resolved.picked).toBeNull();
       expect(resolved.node).toEqual({ type: "all" });
@@ -79,5 +80,11 @@ describe("resolveNode", () => {
     expect(conta.picked).toEqual({ type: "account", id: "acc-1" });
     expect(conta.node).toEqual({ type: "account", id: "acc-1" });
     expect(conta.summary.title).toBe("Sal mineral");
+  });
+
+  it("opens a grupo key that names no grupo as an empty Grupo removido", () => {
+    const gone = resolveNode("grupo:nope", inputs, period, TODAY);
+    expect(gone.picked).toEqual({ type: "group", group: "nope" });
+    expect(gone.summary).toMatchObject({ crumb: "Despesas", title: "Grupo removido" });
   });
 });

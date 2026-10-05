@@ -6,6 +6,8 @@ import { accounts } from "@/lib/db/schema";
 import { isUniqueViolation } from "@/lib/api/dbErrors";
 import { toAccount } from "@/lib/api/mappers";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
+import { isFarmCategory } from "@/lib/api/domains/expenseGroups/farmCategory";
+import { CAPITAL_GROUPS } from "@/lib/domain/entries";
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
 import type { Account, AccountGroup } from "@/lib/types";
@@ -23,8 +25,10 @@ interface AddAccountUseCaseProps {
  * - `duplicate`: the grupo already has the name, archived contas included.
  * - `invalid_opening`: a saldo inicial comes without its date (or the
  *   reverse), or on a grupo that is not financiamento.
+ * - `invalid_category`: the grupo is not Receitas, one fora do resultado, a
+ *   built-in despesa grupo or one of this farm's.
  */
-type AddAccountUseCaseResponse = Account | "duplicate" | "invalid_opening";
+type AddAccountUseCaseResponse = Account | "duplicate" | "invalid_opening" | "invalid_category";
 
 type CurrUseCase = _UseCase<AddAccountUseCaseProps, AddAccountUseCaseResponse>;
 
@@ -47,6 +51,9 @@ export class AddAccountUseCase implements CurrUseCase {
 
   public run: CurrUseCase["run"] = async ({ farmId, group, name, openingBalanceBrl = null, openingDate = null }) => {
     if (!validOpening(group, openingBalanceBrl, openingDate)) return "invalid_opening";
+    // Receitas and the three fora do resultado are fixed keys; any other grupo is a despesa grupo of this farm.
+    const fixed = group === "revenue" || (CAPITAL_GROUPS as readonly string[]).includes(group);
+    if (!fixed && !(await isFarmCategory(this.repository, farmId, group))) return "invalid_category";
     const trimmed = name.trim();
     const [clash] = await this.repository
       .select({ id: accounts.id })

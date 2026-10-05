@@ -60,8 +60,8 @@ export interface Resolved {
  * `same_account`: a transferência to the line's own conta; `card_from`: an
  * entrada from a cartão (a cartão only receives its fatura); `amount_differs`:
  * a paid lançamento, a venda/compra or a transferência worth another value
- * than the line; `due_before_date`, `invalid_account` and
- * `invalid_bank_account`: the lançamento "Criar lançamento" sent.
+ * than the line; `due_before_date`, `invalid_category`, `invalid_account`
+ * and `invalid_bank_account`: the lançamento "Criar lançamento" sent.
  */
 export type ResolveRefusal =
   | "not_found"
@@ -74,6 +74,7 @@ export type ResolveRefusal =
   | "card_from"
   | "amount_differs"
   | "due_before_date"
+  | "invalid_category"
   | "invalid_account"
   | "invalid_bank_account";
 

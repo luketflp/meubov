@@ -37,7 +37,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { Permissions } from "@/lib/domain/permissions";
-import type { CsvMapping } from "@/lib/types";
+import type { AccountGroup, CsvMapping, ExpenseCategory } from "@/lib/types";
 
 /* -------------------------------------------------------------------------- */
 /* Enums (stored unions only)                                                 */
@@ -139,17 +139,6 @@ export const manejoOutcomeEnum = pgEnum("manejo_outcome", [
   "held",
 ]);
 
-/** Category of a farm expense. */
-export const expenseCategoryEnum = pgEnum("expense_category", [
-  "nutrition",
-  "pasture",
-  "labor",
-  "health",
-  "breeding",
-  "admin",
-  "other",
-]);
-
 /** What the money of a lançamento is (lib/types.ts EntryKind). */
 export const entryKindEnum = pgEnum("entry_kind", [
   "expense",
@@ -187,21 +176,6 @@ export const statementLineStatusEnum = pgEnum("statement_line_status", [
   "created",
   "transfer",
   "ignored",
-]);
-
-/** Grupo of a conta: the seven expense categories, receitas and the three outside the resultado. */
-export const accountGroupEnum = pgEnum("account_group", [
-  "nutrition",
-  "pasture",
-  "labor",
-  "health",
-  "breeding",
-  "admin",
-  "other",
-  "revenue",
-  "investment",
-  "financing",
-  "partners",
 ]);
 
 /** How the twelve months of an orçamento line were filled. */
@@ -671,6 +645,27 @@ export const movements = pgTable(
 );
 
 /**
+ * A grupo de despesa the farm created, next to the seven built-in ones. The
+ * columns that hold a grupo (`accounts.group`, `expenses.category`,
+ * `expense_series.category`, `budgets.category`) are text: a built-in grupo
+ * is its key ("nutrition"), a farm grupo its row id, so they carry no FK.
+ */
+export const expenseGroups = pgTable(
+  "expense_groups",
+  {
+    id: text("id").primaryKey(),
+    farmId: integer("farm_id")
+      .notNull()
+      .references(() => farm.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    archivedAt: timestamp("archived_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  // Names are unique per farm ignoring case.
+  (t) => [uniqueIndex("expense_groups_farm_name_idx").on(t.farmId, sql`lower(${t.name})`)]
+);
+
+/**
  * A conta of the farm's plano de contas, inside one grupo. A conta with
  * lançamentos is archived, which hides it from the form and keeps the history;
  * only an unused one is deleted (its orçamento lines go with it).
@@ -682,7 +677,8 @@ export const accounts = pgTable(
     farmId: integer("farm_id")
       .notNull()
       .references(() => farm.id, { onDelete: "cascade" }),
-    group: accountGroupEnum("group").notNull(),
+    /** "revenue", a capital grupo, a built-in despesa key or an expense_groups id. */
+    group: text("group").$type<AccountGroup>().notNull(),
     name: text("name").notNull(),
     archivedAt: timestamp("archived_at"),
     /** Financing only, both or neither: saldo devedor at the end of `openingDate`. */
@@ -723,7 +719,7 @@ export const expenseSeries = pgTable(
     kind: entryKindEnum("kind").notNull().default("expense"),
     /** Investment, financing and partners only. */
     flow: entryFlowEnum("flow"),
-    category: expenseCategoryEnum("category").notNull(),
+    category: text("category").$type<ExpenseCategory>().notNull(),
     amountBrl: numeric("amount_brl", { mode: "number" }).notNull(),
     accountId: text("account_id").references(() => accounts.id, { onDelete: "set null" }),
     lotId: text("lot_id").references(() => lots.id, { onDelete: "set null" }),
@@ -755,8 +751,8 @@ export const expenses = pgTable(
     flow: entryFlowEnum("flow"),
     /** Competência. */
     date: date("date").notNull(),
-    /** Grupo of a despesa; the other kinds write "other" and nothing reads it. */
-    category: expenseCategoryEnum("category").notNull(),
+    /** Grupo of a despesa (a built-in key or an expense_groups id); the other kinds write "other" and nothing reads it. */
+    category: text("category").$type<ExpenseCategory>().notNull(),
     amountBrl: numeric("amount_brl", { mode: "number" }).notNull(),
     notes: text("notes"),
     /** Vencimento; null means `date`. */
@@ -926,7 +922,7 @@ export const budgets = pgTable(
     farmId: integer("farm_id")
       .notNull()
       .references(() => farm.id, { onDelete: "cascade" }),
-    category: expenseCategoryEnum("category").notNull(),
+    category: text("category").$type<ExpenseCategory>().notNull(),
     /** Null = the grupo's own line; removing the conta removes its lines. */
     accountId: text("account_id").references(() => accounts.id, { onDelete: "cascade" }),
     /** First day of the calendar month. */
@@ -1082,6 +1078,7 @@ export type CalvingRow = typeof calvings.$inferSelect;
 export type MovementRow = typeof movements.$inferSelect;
 export type ExpenseRow = typeof expenses.$inferSelect;
 export type FarmAccountRow = typeof accounts.$inferSelect;
+export type ExpenseGroupRow = typeof expenseGroups.$inferSelect;
 export type ExpenseSeriesRow = typeof expenseSeries.$inferSelect;
 export type AttachmentRow = typeof attachments.$inferSelect;
 export type BankAccountRow = typeof bankAccounts.$inferSelect;

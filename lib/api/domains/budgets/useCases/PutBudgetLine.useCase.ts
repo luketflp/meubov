@@ -5,6 +5,7 @@ import { accounts, budgets } from "@/lib/db/schema";
 import { toBudget } from "@/lib/api/mappers";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
 import { lineRows, lineWhere, safraStartMonth } from "@/lib/api/domains/budgets/budgetLine";
+import { isFarmCategory } from "@/lib/api/domains/expenseGroups/farmCategory";
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
 import type { Budget, BudgetDistribution, ExpenseCategory } from "@/lib/types";
@@ -26,11 +27,17 @@ interface PutBudgetLineUseCaseProps {
 
 /**
  * - `months_mismatch`: not twelve months.
+ * - `invalid_category`: the grupo is neither a built-in one nor one of this farm's.
  * - `invalid_account`: the conta is not of this farm, or not of this grupo.
  * - `start_month_changed`: the farm's início is no longer `startMonth`, so the
  *   safra the client means is other calendar months.
  */
-type PutBudgetLineUseCaseResponse = Budget[] | "months_mismatch" | "invalid_account" | "start_month_changed";
+type PutBudgetLineUseCaseResponse =
+  | Budget[]
+  | "months_mismatch"
+  | "invalid_category"
+  | "invalid_account"
+  | "start_month_changed";
 
 type CurrUseCase = _UseCase<PutBudgetLineUseCaseProps, PutBudgetLineUseCaseResponse>;
 
@@ -50,6 +57,7 @@ export class PutBudgetLineUseCase implements CurrUseCase {
 
   public run: CurrUseCase["run"] = async ({ farmId, userId, startMonth, months, distribution, ...key }) => {
     if (months.length !== 12) return "months_mismatch";
+    if (!(await isFarmCategory(this.repository, farmId, key.category))) return "invalid_category";
     if (key.accountId !== undefined) {
       const [account] = await this.repository
         .select({ group: accounts.group })

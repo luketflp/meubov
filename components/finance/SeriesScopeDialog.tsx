@@ -7,8 +7,9 @@
  */
 import { useState } from "react";
 import type { Expense, SeriesScope } from "@/lib/types";
-import { ACCOUNT_GROUP_LABEL, accountName } from "@/lib/domain/accounts";
+import { accountName } from "@/lib/domain/accounts";
 import { ENTRY_KIND_LABEL, entryGroup } from "@/lib/domain/entries";
+import { groupLabel } from "@/lib/domain/groups";
 import { formatDate } from "@/lib/domain/dates";
 import { formatCurrency } from "@/lib/domain/format";
 import { effectiveDueDate } from "@/lib/domain/ledger";
@@ -48,6 +49,7 @@ export function SeriesScopeDialog({
 }: SeriesScopeDialogProps) {
   const accounts = useHerdStore((s) => s.accounts);
   const expenses = useHerdStore((s) => s.expenses);
+  const expenseGroups = useHerdStore((s) => s.expenseGroups);
   const [scope, setScope] = useState<SeriesScope>("following");
 
   const recurring = expense.seriesFrequency !== undefined;
@@ -58,8 +60,8 @@ export function SeriesScopeDialog({
   const firstDue = rows.map(effectiveDueDate).sort()[0] ?? effectiveDueDate(expense);
   const due = effectiveDueDate(expense);
   const group = entryGroup(expense);
-  const groupLabel = group ? ACCOUNT_GROUP_LABEL[group] : ENTRY_KIND_LABEL.yield;
-  const name = [accountName(expense.accountId, accounts) ?? groupLabel, expense.counterparty]
+  const grupo = group ? groupLabel(group, expenseGroups) : ENTRY_KIND_LABEL.yield;
+  const name = [accountName(expense.accountId, accounts) ?? grupo, expense.counterparty]
     .filter(Boolean)
     .join(" · ");
   const items = recurring ? "contas" : "parcelas";

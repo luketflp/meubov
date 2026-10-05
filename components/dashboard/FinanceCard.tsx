@@ -8,8 +8,9 @@ import Link from "next/link";
 import { ArrowRight, Coins } from "lucide-react";
 import type { CostBreakdownSlice, MonthlyRevenueCost } from "@/lib/domain/economics";
 import type { PeriodResult } from "@/lib/domain/finance";
-import { EXPENSE_CATEGORY_LABEL } from "@/lib/domain/labels";
+import { groupLabel } from "@/lib/domain/groups";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
+import { useHerdStore } from "@/lib/store/useHerdStore";
 import { formatCompactCurrency } from "@/components/finance/format";
 import { BarChart, type BarGroup } from "@/components/charts/bar-chart";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -26,6 +27,7 @@ interface FinanceCardProps {
 }
 
 export function FinanceCard({ result, breakdown, months }: FinanceCardProps) {
+  const expenseGroups = useHerdStore((s) => s.expenseGroups);
   const empty = result.totalRevenue === 0 && result.totalCost === 0;
   const positive = result.result >= 0;
   const groups: BarGroup[] = months.map((month) => ({
@@ -122,7 +124,7 @@ export function FinanceCard({ result, breakdown, months }: FinanceCardProps) {
                         aria-hidden
                         className={cn("size-2 shrink-0 rounded-full", SLICE_COLORS[index % SLICE_COLORS.length])}
                       />
-                      {EXPENSE_CATEGORY_LABEL[slice.category]}
+                      {groupLabel(slice.category, expenseGroups)}
                       <span className="ml-auto font-mono text-ink">{formatNumber(slice.pct)}%</span>
                     </li>
                   ))}

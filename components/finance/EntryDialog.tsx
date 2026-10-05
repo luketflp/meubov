@@ -8,6 +8,8 @@
  * recorrente) and anexos. A capital kind needs a conta of its grupo and a
  * Movimento (Compra / Venda do bem, Pagamento / Liberação, Retirada / Aporte)
  * and takes no grupo or lote; the words about paying follow the direction.
+ * The Grupo picker lists the seven of the system, then the farm's under "da
+ * fazenda"; an archived grupo shows only while the lançamento sits in it.
  * `initial` starts it on the nó picked in Lançamentos; `template` fills it
  * from a lançamento (Duplicar: today, pending, no anexos, no repetition).
  * With `fromLine` it is "Criar lançamento" of the conciliação: the linha do
@@ -38,7 +40,7 @@ import { accountsByGroup, counterpartySuggestions } from "@/lib/domain/accounts"
 import { CAPITAL_GROUPS, ENTRY_KIND_LABEL, FLOW_LABEL, isCapitalKind, isInflow } from "@/lib/domain/entries";
 import type { EntryInitial } from "@/lib/domain/planTree";
 import { todayISO } from "@/lib/domain/dates";
-import { EXPENSE_CATEGORY_LABEL } from "@/lib/domain/labels";
+import { despesaGroups } from "@/lib/domain/groups";
 import { MAX_INSTALLMENTS, MIN_INSTALLMENTS, installmentLabel, recurrenceLabel } from "@/lib/domain/series";
 import { cn } from "@/lib/utils";
 import { parseAmount } from "@/components/finance/parseAmount";
@@ -75,13 +77,14 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-
-const CATEGORY_LIST = Object.keys(EXPENSE_CATEGORY_LABEL) as ExpenseCategory[];
 
 /** The type switch: despesa, receita, then the three kinds outside the resultado. */
 const KINDS: readonly EntryKind[] = ["expense", "revenue", ...CAPITAL_GROUPS];
@@ -203,6 +206,7 @@ function EntryForm({
 }) {
   const { expense, fromLine } = source;
   const accounts = useHerdStore((s) => s.accounts);
+  const expenseGroups = useHerdStore((s) => s.expenseGroups);
   const bankAccounts = useHerdStore((s) => s.bankAccounts);
   const expenses = useHerdStore((s) => s.expenses);
   const lots = useHerdStore((s) => s.lots);
@@ -216,7 +220,7 @@ function EntryForm({
   /** The linha do extrato fixes the kind, the value and the payment. */
   const fixed = fromLine !== undefined;
 
-  const [fields, setFields] = useState<EntryFields>(() => initialFields(source, bankAccounts, todayISO()));
+  const [fields, setFields] = useState<EntryFields>(() => initialFields(source, bankAccounts, todayISO(), expenseGroups));
   const [repeatFields, setRepeatFields] = useState<RepeatFields>(() => initialRepeat(todayISO()));
   const [pending, setPending] = useState<PendingFile[]>([]);
   /** The edit waiting for "Só esta" · "Esta e as próximas" · "Todas". */
@@ -236,7 +240,11 @@ function EntryForm({
   const capitalKind = isCapitalKind(fields.kind) ? fields.kind : null;
   const inflow = isInflow(fields);
   const group: AccountGroup = capitalKind ?? (fields.kind === "revenue" ? "revenue" : fields.category);
-  const groupAccounts = accountsByGroup(accounts)[group];
+  // A farm grupo without contas has no entry in accountsByGroup.
+  const groupAccounts = accountsByGroup(accounts)[group] ?? [];
+  // Only the row being edited keeps its archived grupo, whatever the farmer picks meanwhile.
+  const groupOptions = despesaGroups(expenseGroups, { keep: source.expense?.category });
+  const farmGroups = groupOptions.filter((g) => g.custom);
   const currentAccount = accounts.find((a) => a.id === fields.accountId);
   const accountOptions =
     currentAccount && currentAccount.group === group && !groupAccounts.some((a) => a.id === currentAccount.id)
@@ -512,11 +520,28 @@ function EntryForm({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {CATEGORY_LIST.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {EXPENSE_CATEGORY_LABEL[category]}
-                      </SelectItem>
-                    ))}
+                    {groupOptions
+                      .filter((g) => !g.custom)
+                      .map((g) => (
+                        <SelectItem key={g.key} value={g.key}>
+                          {g.label}
+                        </SelectItem>
+                      ))}
+                    {farmGroups.length > 0 ? (
+                      <>
+                        <SelectSeparator />
+                        <SelectGroup className="p-0">
+                          <SelectLabel className="text-[11px] font-medium tracking-wide text-ink-soft uppercase">
+                            da fazenda
+                          </SelectLabel>
+                          {farmGroups.map((g) => (
+                            <SelectItem key={g.key} value={g.key}>
+                              {g.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </>
+                    ) : null}
                   </SelectContent>
                 </Select>
               </>

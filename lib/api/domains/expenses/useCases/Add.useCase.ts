@@ -18,12 +18,18 @@ type AddExpenseUseCaseProps = Omit<Expense, "id" | "kind"> & {
 
 /**
  * - `due_before_date`: the vencimento is earlier than the data.
- * - `invalid_account`: the conta do plano does not fit the kind (see normaliseEntry).
+ * - `invalid_category`: the grupo is neither a built-in one nor one of this farm's.
+ * - `invalid_account`: the conta do plano does not fit the kind or the grupo (see normaliseEntry).
  * - `invalid_bank_account`: "Pago por" is not a conta of the farm that may pay
  *   it. That covers an archived conta, a cartão receiving money, and anything
  *   but an aplicação for a rendimento.
  */
-type AddExpenseUseCaseResponse = Expense | "due_before_date" | "invalid_account" | "invalid_bank_account";
+type AddExpenseUseCaseResponse =
+  | Expense
+  | "due_before_date"
+  | "invalid_category"
+  | "invalid_account"
+  | "invalid_bank_account";
 
 type CurrUseCase = _UseCase<AddExpenseUseCaseProps, AddExpenseUseCaseResponse>;
 

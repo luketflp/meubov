@@ -1,25 +1,12 @@
 /**
- * Plano de contas: the fixed grupos (Receitas, the seven cost categories and
- * the three outside the resultado) and the farm's contas inside them. Pure.
+ * Plano de contas: the grupos (Receitas, the seven built-in grupos of custo,
+ * the farm's own grupos de despesa and the three outside the resultado) and
+ * the farm's contas inside them. Pure. Order and labels of the grupos live in
+ * groups.ts.
  */
-import type { Account, AccountGroup, Expense, ExpenseCategory } from "@/lib/types";
-import { EXPENSE_CATEGORY_LABEL } from "@/lib/domain/labels";
+import type { Account, AccountGroup, Expense } from "@/lib/types";
 import { CAPITAL_GROUPS } from "@/lib/domain/entries";
-
-/** The seven grupos of custo (the COE), in screen order. */
-export const EXPENSE_GROUPS: readonly ExpenseCategory[] = Object.keys(EXPENSE_CATEGORY_LABEL) as ExpenseCategory[];
-
-/** Label of each grupo: "Receitas", the cost categories' labels and the three outside the resultado. */
-export const ACCOUNT_GROUP_LABEL: Record<AccountGroup, string> = {
-  revenue: "Receitas",
-  ...EXPENSE_CATEGORY_LABEL,
-  investment: "Investimentos",
-  financing: "Financiamentos",
-  partners: "Sócios",
-};
-
-/** Grupos in screen order: Receitas, the cost categories, then the three outside the resultado. */
-export const ACCOUNT_GROUPS: readonly AccountGroup[] = ["revenue", ...EXPENSE_GROUPS, ...CAPITAL_GROUPS];
+import { BUILTIN_CATEGORIES } from "@/lib/domain/groups";
 
 /** What "Sugerir contas padrão" creates. */
 export const DEFAULT_ACCOUNTS: readonly { group: AccountGroup; name: string }[] = [
@@ -54,19 +41,23 @@ export const DEFAULT_ACCOUNTS: readonly { group: AccountGroup; name: string }[] 
   { group: "partners", name: "Distribuição de lucro" },
 ];
 
-/** Contas per grupo, every grupo present, sorted by name; archived ones only when asked. */
+/**
+ * Contas per grupo, sorted by name; archived ones only when asked. Receitas,
+ * the seven built-in grupos and the three outside the resultado are always
+ * there (maybe empty); a farm grupo only once it has a conta, so read
+ * `byGroup[key] ?? []`.
+ */
 export function accountsByGroup(
   accounts: Account[],
   includeArchived = false
 ): Record<AccountGroup, Account[]> {
-  const byGroup = Object.fromEntries(ACCOUNT_GROUPS.map((g) => [g, [] as Account[]])) as Record<
-    AccountGroup,
-    Account[]
-  >;
+  const byGroup: Record<AccountGroup, Account[]> = Object.fromEntries(
+    ["revenue", ...BUILTIN_CATEGORIES, ...CAPITAL_GROUPS].map((g): [string, Account[]] => [g, []])
+  );
   for (const a of accounts) {
-    if (includeArchived || a.archivedAt === undefined) byGroup[a.group].push(a);
+    if (includeArchived || a.archivedAt === undefined) (byGroup[a.group] ??= []).push(a);
   }
-  for (const g of ACCOUNT_GROUPS) byGroup[g].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  for (const list of Object.values(byGroup)) list.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   return byGroup;
 }
 

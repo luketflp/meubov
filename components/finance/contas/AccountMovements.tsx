@@ -9,8 +9,9 @@ import { useMemo, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, CircleCheck, Pencil } from "lucide-react";
 import type { BankAccount, Expense } from "@/lib/types";
 import { accountMovements, type BankMove } from "@/lib/domain/bankAccounts";
-import { ACCOUNT_GROUP_LABEL, accountName } from "@/lib/domain/accounts";
+import { accountName } from "@/lib/domain/accounts";
 import { ENTRY_KIND_LABEL, entryGroup } from "@/lib/domain/entries";
+import { TOP_GROUP_LABEL, groupLabel } from "@/lib/domain/groups";
 import { formatDate } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
 import type { Period } from "@/lib/domain/period";
@@ -47,6 +48,7 @@ export function AccountMovements({ account, period, onPeriodChange, canEdit, onE
   const accounts = useHerdStore((s) => s.accounts);
   const bankAccounts = useHerdStore((s) => s.bankAccounts);
   const reconciledIds = useHerdStore((s) => s.reconciledIds);
+  const expenseGroups = useHerdStore((s) => s.expenseGroups);
   const [pageNumber, setPageNumber] = useState(1);
 
   const rows = useMemo<Row[]>(() => {
@@ -56,7 +58,7 @@ export function AccountMovements({ account, period, onPeriodChange, canEdit, onE
       if (move.expense) {
         const e = move.expense;
         const groupKey = entryGroup(e);
-        const group = groupKey ? ACCOUNT_GROUP_LABEL[groupKey] : ENTRY_KIND_LABEL.yield;
+        const group = groupKey ? groupLabel(groupKey, expenseGroups) : ENTRY_KIND_LABEL.yield;
         return { ...move, description: e.counterparty ?? e.notes ?? group, plan: planOf(e) ?? group, group: planOf(e) ? group : null };
       }
       if (move.movement) {
@@ -66,14 +68,14 @@ export function AccountMovements({ account, period, onPeriodChange, canEdit, onE
           ...move,
           description: `${sale ? "Venda" : "Compra"} · ${sale ? m.destination : m.origin}`,
           plan: sale ? "Venda de gado" : "Compra de gado",
-          group: ACCOUNT_GROUP_LABEL[sale ? "revenue" : "investment"],
+          group: TOP_GROUP_LABEL[sale ? "revenue" : "investment"],
         };
       }
       const t = move.transfer!;
       const other = move.kind === "transferIn" ? `de ${nameOf(t.fromId)}` : `para ${nameOf(t.toId)}`;
       return { ...move, description: t.notes ?? `Transferência ${other}`, plan: "Transferência", group: other };
     });
-  }, [account, expenses, movements, transfers, period, accounts, bankAccounts]);
+  }, [account, expenses, movements, transfers, period, accounts, bankAccounts, expenseGroups]);
 
   const reconciledSet = useMemo(() => new Set(reconciledIds), [reconciledIds]);
   // A transferência is conciliada per side (`pairKey`).

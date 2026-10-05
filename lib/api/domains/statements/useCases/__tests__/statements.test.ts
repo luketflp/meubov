@@ -310,6 +310,18 @@ describe("ResolveLineUseCase", () => {
     expect(result).toMatchObject({ line: { status: "created", expenseId: "e-1" } });
   });
 
+  it("refuses to create a lançamento in a grupo that is not the farm's, and leaves the line pending", async () => {
+    // The line, then the grupo sent: no grupo of this farm by that id.
+    state.selectResults = [[LINE], []];
+    const result = await resolveRun({
+      type: "create",
+      entry: { date: "2026-09-18", category: "grp-of-another-farm", amountBrl: 1 },
+    });
+    expect(result).toBe("invalid_category");
+    expect(state.inserts).toEqual([]);
+    expect(state.updates).toEqual([]);
+  });
+
   it("turns a saque into a transferência to the other conta", async () => {
     const saque = { ...LINE, amountBrl: -1000, description: "SAQUE CAIXA 24H" };
     state.selectResults = [[saque], [{ id: "caixa" }]];

@@ -5,8 +5,8 @@
  * movimento; a rendimento takes its aplicação and is paid on its data.
  *
  * Same chainable db stub as the other use-case tests: selects answer from a
- * queued list of rows (the conta do plano, then "Pago por"), inserts record
- * the row and echo it.
+ * queued list of rows (a farm grupo when the category is not a built-in one,
+ * the conta do plano, then "Pago por"), inserts record the row and echo it.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -199,5 +199,46 @@ describe("addExpense — fora do resultado", () => {
     expect(await add(rendimento)).toBe("invalid_bank_account");
     expect(await add({ ...rendimento, accountId: "acc-1", bankAccountId: "cdb" })).toBe("invalid_account");
     expect(state.inserts).toHaveLength(1);
+  });
+});
+
+describe("addExpense — grupo", () => {
+  it("takes a grupo of the farm with a conta of that grupo", async () => {
+    // The grupo (one of this farm's), then the conta do plano.
+    state.selectResults = [[{ id: "grp-maq" }], [{ group: "grp-maq" }]];
+
+    await add({ ...ENTRY, category: "grp-maq", accountId: "acc-trator" });
+
+    expect(state.inserts[0]).toMatchObject({ kind: "expense", category: "grp-maq", accountId: "acc-trator" });
+  });
+
+  it("refuses a grupo of another farm or an unknown key, before reading the conta", async () => {
+    // The farm filter finds no grupo by that id; the conta queued after it is never read.
+    state.selectResults = [[], [{ group: "grp-maq" }]];
+    expect(await add({ ...ENTRY, category: "grp-of-another-farm", accountId: "acc-trator" })).toBe(
+      "invalid_category"
+    );
+    expect(state.selectResults).toEqual([[{ group: "grp-maq" }]]);
+
+    state.selectResults = [[]];
+    expect(await add({ ...ENTRY, category: "fuel" })).toBe("invalid_category");
+    expect(state.inserts).toEqual([]);
+  });
+
+  it("keeps a despesa in a conta of its own grupo and a receita in a conta of Receitas", async () => {
+    // A built-in grupo asks nothing: the only select is the conta.
+    state.selectResults = [[{ group: "admin" }]];
+    expect(await add({ ...ENTRY, accountId: "acc-escritorio" })).toBe("invalid_account");
+    state.selectResults = [[{ id: "grp-maq" }], [{ group: "nutrition" }]];
+    expect(await add({ ...ENTRY, category: "grp-maq", accountId: "acc-sal" })).toBe("invalid_account");
+    state.selectResults = [[{ group: "nutrition" }]];
+    expect(await add({ ...ENTRY, kind: "revenue", category: "other", accountId: "acc-sal" })).toBe(
+      "invalid_account"
+    );
+    expect(state.inserts).toEqual([]);
+
+    state.selectResults = [[{ group: "revenue" }]];
+    await add({ ...ENTRY, kind: "revenue", category: "other", accountId: "acc-aluguel" });
+    expect(state.inserts[0]).toMatchObject({ kind: "revenue", category: "other", accountId: "acc-aluguel" });
   });
 });

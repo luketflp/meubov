@@ -100,7 +100,10 @@ export function reportDatasets(data: HerdData, todayIso: string, seeMoney: boole
     },
   ];
   if (seeMoney) {
-    datasets.push({ ...one("expenses", "Despesas", expensesExportTable(data.expenses)), finance: true });
+    datasets.push({
+      ...one("expenses", "Despesas", expensesExportTable(data.expenses, "Despesas", data.expenseGroups)),
+      finance: true,
+    });
   }
 
   return datasets.map((dataset) => ({

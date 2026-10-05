@@ -145,4 +145,21 @@ describe("addAccount", () => {
     ).toBe("invalid_opening");
     expect(state.inserts).toEqual([]);
   });
+
+  it("creates a conta in a grupo of the farm, and refuses a grupo that is not this farm's", async () => {
+    // The grupo (one of this farm's), then the name clash (none).
+    state.selectResults = [[{ id: "grp-maq" }], []];
+
+    const result = await new AddAccountUseCase().run({ farmId: 7, group: "grp-maq", name: "Trator" });
+
+    expect(new PgDialect().sqlToQuery(state.wheres[0] as SQL).params).toEqual([7, "grp-maq"]);
+    expect(result).toMatchObject({ group: "grp-maq", name: "Trator" });
+
+    // Another farm's grupo, an unknown key, the tree's Despesas node: no grupo of this farm by that id.
+    for (const group of ["grp-of-another-farm", "fuel", "expenses"]) {
+      state.selectResults = [[]];
+      expect(await new AddAccountUseCase().run({ farmId: 7, group, name: "Trator" })).toBe("invalid_category");
+    }
+    expect(state.inserts).toHaveLength(1);
+  });
 });

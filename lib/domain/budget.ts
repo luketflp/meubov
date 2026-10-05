@@ -13,13 +13,15 @@ import type {
   BudgetDistribution,
   Expense,
   ExpenseCategory,
+  ExpenseGroup,
   Treatment,
 } from "@/lib/types";
 import type { Period } from "@/lib/domain/period";
-import { ACCOUNT_GROUP_LABEL, EXPENSE_GROUPS, accountsByGroup } from "@/lib/domain/accounts";
+import { accountsByGroup } from "@/lib/domain/accounts";
 import { cents } from "@/lib/domain/bankAccounts";
 import { monthYearLabel, parseISODate, toISO } from "@/lib/domain/dates";
 import { isCost } from "@/lib/domain/entries";
+import { despesaGroups } from "@/lib/domain/groups";
 
 export interface SafraMonth {
   year: number;
@@ -143,7 +145,7 @@ export interface BudgetView {
   months: SafraMonth[];
   /** Index of today's month in `months`; -1 before the safra, 12 after it. */
   todayIndex: number;
-  /** EXPENSE_GROUPS order; grupos with neither orçado nor despesas in the safra left out. */
+  /** despesaGroups order, archived farm grupos too; grupos with neither orçado nor despesas in the safra left out. */
   groups: BudgetGroup[];
   /** The grupos with a budget only: what grupos without one spend is in their own rows. */
   totals: Figures;
@@ -156,6 +158,8 @@ export interface BudgetInputs {
   expenses: Expense[];
   treatments: Treatment[];
   accounts: Account[];
+  /** The farm's grupos de despesa, archived ones included. */
+  expenseGroups: readonly ExpenseGroup[];
 }
 
 const zeros = (): number[] => Array<number>(12).fill(0);
@@ -269,11 +273,11 @@ export function budgetView(inputs: BudgetInputs, safra: number, startMonth: numb
   const spent = (key: LineKey): boolean => incurred.get(key)?.some((v) => v > 0) ?? false;
   const contasByGroup = accountsByGroup(inputs.accounts, true);
   const groups: BudgetGroup[] = [];
-  for (const category of EXPENSE_GROUPS) {
-    const accounts = contasByGroup[category]
+  for (const { key: category, label } of despesaGroups(inputs.expenseGroups, { archived: true })) {
+    const accounts = (contasByGroup[category] ?? [])
       .map((a) => line(category, a.id, a.name))
       .filter((c) => c.ownRows || spent(c.key));
-    const group = line(category, null, ACCOUNT_GROUP_LABEL[category], accounts);
+    const group = line(category, null, label, accounts);
     if (!group.hasBudget && !spent(group.key)) continue;
     const withRows = accounts.filter((c) => c.ownRows);
     const contasTotal = sum(withRows.map((c) => c.budgetedTotal));
@@ -324,8 +328,9 @@ export interface CopyLine {
  * Lines of safra `from` to write into `to`: its own orçado lines (grupos and
  * contas), or its realizado per grupo; each month × (1 + adjustPct %) to the
  * centavo. A line that already has rows in `to` is skipped, and so is a
- * grupo whose contas have rows there: it is budgeted through them. Both safras
- * are read from the same `inputs.budgets`.
+ * grupo whose contas have rows there: it is budgeted through them. An archived
+ * farm grupo is not carried into `to` at all, nor are its contas' lines. Both
+ * safras are read from the same `inputs.budgets`.
  */
 export function copyPlan(
   inputs: BudgetInputs,
@@ -344,10 +349,12 @@ export function copyPlan(
       .flatMap((b) => [lineKey(b.category, b.accountId), lineKey(b.category)])
   );
   const { groups } = budgetView(inputs, from, startMonth, todayIso);
+  const archived = new Set(inputs.expenseGroups.filter((g) => g.archivedAt !== undefined).map((g) => g.id));
+  const live = groups.filter((g) => !archived.has(g.category));
   const sources =
     source === "budgeted"
-      ? groups.flatMap((g) => [g, ...g.accounts]).filter((l) => l.ownRows)
-      : groups.filter((g) => g.realizedToDate > 0);
+      ? live.flatMap((g) => [g, ...g.accounts]).filter((l) => l.ownRows)
+      : live.filter((g) => g.realizedToDate > 0);
   const lines = sources
     .filter((l) => !taken.has(l.key))
     .map((l) => ({

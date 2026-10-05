@@ -49,14 +49,15 @@ interface AddSeriesUseCaseProps {
  *   centavo each), a recorrência ends before it starts, nothing falls in the
  *   window, or it is a rendimento.
  * - `starts_too_old`: a recorrência starts more than 12 months ago.
- * - `invalid_account` and `invalid_bank_account`: as for one lançamento
- *   (normaliseEntry, isPayingAccount).
+ * - `invalid_category`, `invalid_account` and `invalid_bank_account`: as for
+ *   one lançamento (normaliseEntry, isPayingAccount).
  */
 type AddSeriesUseCaseResponse =
   | Expense[]
   | "due_before_date"
   | "invalid_repeat"
   | "starts_too_old"
+  | "invalid_category"
   | "invalid_account"
   | "invalid_bank_account";
 

@@ -19,6 +19,7 @@ import type {
   CustomCategory,
   Expense,
   ExpenseCategory,
+  ExpenseGroup,
   FarmData,
   InactiveReason,
   HerdData,
@@ -308,6 +309,7 @@ export interface NewFarmInput {
 
 export interface HerdStore extends HerdData {
   /** Always present in the store; HerdData leaves them optional for older snapshots and fixtures. */
+  expenseGroups: ExpenseGroup[];
   bankAccounts: BankAccount[];
   transfers: Transfer[];
   reconciledIds: string[];
@@ -529,6 +531,12 @@ export interface HerdStore extends HerdData {
   ) => Promise<boolean>;
   /** Deletes a conta and its orçamento lines; "in_use" when a lançamento or recorrência keeps it (409). */
   removeAccount: (id: string) => Promise<"deleted" | "in_use">;
+  /** Creates a grupo de despesa of the farm; null when the name is taken or is a fixed grupo's (409). */
+  addExpenseGroup: (name: string) => Promise<ExpenseGroup | null>;
+  /** Renames, archives or restores a grupo of the farm; false when the name is taken (409). */
+  updateExpenseGroup: (id: string, patch: { name?: string; archived?: boolean }) => Promise<boolean>;
+  /** Deletes a grupo nothing uses, with its contas and orçamento lines; "in_use" on 409. */
+  removeExpenseGroup: (id: string) => Promise<"deleted" | "in_use">;
   /** Creates the standard contas the farm lacks; resolves how many were created. */
   seedDefaultAccounts: () => Promise<number>;
   /** "Nova conta"; one marked principal (or the farm's first) takes the place of the current one. */
@@ -682,6 +690,7 @@ const BANK_REFUSALS: Record<string, string> = {
   invalid_bank_account:
     "Essa conta não serve aqui: um cartão só paga despesas e compras de bens, uma aplicação só recebe rendimentos e uma conta arquivada não recebe lançamentos.",
   invalid_account: "Escolha uma conta do plano para esse lançamento.",
+  invalid_category: "Esse grupo não existe mais. Escolha outro.",
   invalid_opening: "O saldo devedor inicial vai com a data dele, e só numa conta de financiamento.",
   investment_cannot_be_main: "Uma aplicação não pode ser a conta principal.",
   amount_differs: "O valor do lançamento é diferente do banco. Ajuste o valor antes de conciliar.",
@@ -771,6 +780,7 @@ function herdDataOf(s: HerdStore): HerdData {
     manejoSessions: s.manejoSessions,
     expenses: s.expenses,
     accounts: s.accounts,
+    expenseGroups: s.expenseGroups,
     bankAccounts: s.bankAccounts,
     transfers: s.transfers,
     reconciledIds: s.reconciledIds,
@@ -1371,6 +1381,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   manejoSessions: [],
   expenses: [],
   accounts: [],
+  expenseGroups: [],
   bankAccounts: [],
   transfers: [],
   reconciledIds: [],
@@ -1420,6 +1431,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       const { snap } = boot;
       set({
         ...snap.data,
+        expenseGroups: snap.data.expenseGroups ?? [],
         farms: snap.farms,
         activeFarmId: snap.activeFarmId,
         loaded: true,
@@ -2372,6 +2384,51 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
         Object.entries(s.budgets).map(([safra, rows]) => [safra, rows.filter((b) => b.accountId !== id)])
       ),
     }));
+    return "deleted";
+  },
+
+  addExpenseGroup: async (name) => {
+    const { data, error } = await api["expense-groups"].post({ name });
+    if (error) {
+      if (error.status === CONFLICT) return null;
+      apiFail("criar o grupo", error);
+    }
+    const group = data as ExpenseGroup;
+    set((s) => ({ expenseGroups: [...s.expenseGroups, group] }));
+    return group;
+  },
+
+  updateExpenseGroup: async (id, patch) => {
+    const { data, error } = await api["expense-groups"]({ id }).patch(patch);
+    if (error) {
+      if (error.status === CONFLICT) return false;
+      apiFail("salvar o grupo", error);
+    }
+    const group = data as ExpenseGroup;
+    set((s) => ({ expenseGroups: s.expenseGroups.map((g) => (g.id === id ? group : g)) }));
+    return true;
+  },
+
+  removeExpenseGroup: async (id) => {
+    const { error } = await api["expense-groups"]({ id }).delete();
+    if (error) {
+      if (error.status === CONFLICT) return "in_use";
+      apiFail("excluir o grupo", error);
+    }
+    set((s) => {
+      // Its contas go with it, and so do their orçamento lines, whatever grupo a line was filed under.
+      const contas = new Set(s.accounts.filter((a) => a.group === id).map((a) => a.id));
+      return {
+        expenseGroups: s.expenseGroups.filter((g) => g.id !== id),
+        accounts: s.accounts.filter((a) => !contas.has(a.id)),
+        budgets: Object.fromEntries(
+          Object.entries(s.budgets).map(([safra, rows]) => [
+            safra,
+            rows.filter((b) => b.category !== id && !(b.accountId && contas.has(b.accountId))),
+          ])
+        ),
+      };
+    });
     return "deleted";
   },
 

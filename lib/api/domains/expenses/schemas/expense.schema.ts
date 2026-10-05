@@ -4,15 +4,8 @@ import { t } from "elysia";
 
 import { DateString } from "@/lib/api/schemas/shared.schema";
 
-export const ExpenseCategoryModel = t.Union([
-  t.Literal("nutrition"),
-  t.Literal("pasture"),
-  t.Literal("labor"),
-  t.Literal("health"),
-  t.Literal("breeding"),
-  t.Literal("admin"),
-  t.Literal("other"),
-]);
+/** A built-in grupo key or a farm grupo id; the use cases check it belongs to the farm. */
+export const ExpenseCategoryModel = t.String({ minLength: 1, maxLength: 64 });
 
 /** Despesa, receita, the three kinds fora do resultado, and rendimento. */
 export const EntryKindModel = t.Union([

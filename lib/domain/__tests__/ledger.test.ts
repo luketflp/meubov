@@ -8,7 +8,7 @@ import {
   type LedgerRow,
 } from "@/lib/domain/ledger";
 import type { Period } from "@/lib/domain/period";
-import type { Account, Expense, Lot, Movement } from "@/lib/types";
+import type { Account, Expense, ExpenseGroup, Lot, Movement } from "@/lib/types";
 import { makeAnimal, makeManejoSession, makeTreatment } from "./fixtures";
 
 const TODAY = "2026-09-24";
@@ -155,6 +155,7 @@ const input: LedgerInputs = {
   animals,
   treatments,
   lots,
+  expenseGroups: [],
 };
 
 const rows = ledgerRows(input, PERIOD, TODAY);
@@ -355,6 +356,27 @@ describe("ledgerRows", () => {
       headCount: 3,
       expense: null,
     });
+  });
+});
+
+describe("ledgerRows with the farm's grupos", () => {
+  it("names a farm grupo, archived or not, and reads Grupo removido for a grupo that is gone", () => {
+    const groups: ExpenseGroup[] = [
+      { id: "g-maq", name: "Máquinas e veículos", archivedAt: "2026-09-15T00:00:00.000Z", createdAt: "2026-01-10T00:00:00.000Z" },
+    ];
+    const farmRows = ledgerRows(
+      {
+        ...input,
+        expenseGroups: groups,
+        expenses: [expense({ id: "e-maq", category: "g-maq" }), expense({ id: "e-gone", category: "g-gone" })],
+      },
+      PERIOD,
+      TODAY
+    );
+    expect(farmRows.filter((r) => r.kind === "expense").map((r) => [r.id, r.group, r.groupLabel])).toEqual([
+      ["e-gone", "g-gone", "Grupo removido"],
+      ["e-maq", "g-maq", "Máquinas e veículos"],
+    ]);
   });
 });
 
