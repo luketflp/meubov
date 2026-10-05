@@ -7,12 +7,13 @@
  * Sócios) on the left, Despesas (COE) on the right, one block per grupo. A
  * conta shows its last 12 months and lançamento count; a financiamento shows
  * its saldo devedor today instead, its saldo inicial under the name, and
- * edits the saldo inicial beside the name. A conta is never deleted:
- * archiving hides it from the form and keeps history.
+ * edits the saldo inicial beside the name. A conta with lançamentos is
+ * archived, which hides it from the form and keeps history; one without them
+ * may be deleted.
  */
 import { useState, type KeyboardEvent, type ReactNode } from "react";
 import Link from "next/link";
-import { Archive, ArchiveRestore, ArrowLeft, Info, Pencil, Plus, Sparkles } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, Info, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import type { Account, AccountGroup, ExpenseCategory } from "@/lib/types";
 import { ACCOUNT_GROUP_LABEL, EXPENSE_GROUPS, accountsByGroup } from "@/lib/domain/accounts";
 import { CAPITAL_GROUPS, isCapitalKind, isInflow } from "@/lib/domain/entries";
@@ -27,6 +28,14 @@ import { useToast } from "@/components/providers/Toasts";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { SectionCard } from "@/components/ui/section-card";
 import {
@@ -69,6 +78,8 @@ export function AccountsPage() {
     s.amount += isCapitalKind(e.kind) && isInflow(e) ? -e.amountBrl : e.amountBrl;
     stats.set(e.accountId, s);
   }
+  // Any lançamento ever, not only the 12 months above, keeps a conta from being deleted.
+  const used = new Set(expenses.map((e) => e.accountId));
   const byGroup = accountsByGroup(accounts, true);
   // A financiamento shows what is still owed today instead of its 12 months.
   for (const account of byGroup.financing) {
@@ -134,7 +145,7 @@ export function AccountsPage() {
               <ul className="-mx-4 -mt-4 divide-y divide-hairline">
                 <AutomaticLine name="Venda de gado" className="px-4" />
               </ul>
-              <AccountList accounts={byGroup.revenue} stats={stats} canEdit={canEdit} />
+              <AccountList accounts={byGroup.revenue} stats={stats} used={used} canEdit={canEdit} />
             </SectionCard>
 
             <SectionCard
@@ -156,6 +167,7 @@ export function AccountsPage() {
                     <AccountList
                       accounts={byGroup[group]}
                       stats={stats}
+                      used={used}
                       canEdit={canEdit}
                       empty="Sem contas — crie uma para lançar aqui"
                     />
@@ -173,7 +185,7 @@ export function AccountsPage() {
                   group={group}
                   onAdd={canEdit ? () => setAdding({ place: "expense", category: group }) : undefined}
                 >
-                  <AccountList accounts={byGroup[group]} stats={stats} canEdit={canEdit} />
+                  <AccountList accounts={byGroup[group]} stats={stats} used={used} canEdit={canEdit} />
                 </GroupSection>
               ))}
             </div>
@@ -184,7 +196,7 @@ export function AccountsPage() {
           <Info className="mt-0.5 size-4 shrink-0 text-attention" aria-hidden />
           <p>
             Conta com lançamentos não se apaga: arquive para tirá-la do formulário e manter o
-            histórico. Renomear uma conta renomeia também os lançamentos antigos. Despesa ou receita
+            histórico; conta sem lançamentos pode ser excluída. Renomear uma conta renomeia também os lançamentos antigos. Despesa ou receita
             sem conta fica só no grupo; investimento, financiamento e sócios sempre levam uma conta.
           </p>
         </div>
@@ -243,11 +255,14 @@ function GroupSection({ group, onAdd, children }: { group: AccountGroup; onAdd?:
 function AccountList({
   accounts,
   stats,
+  used,
   canEdit,
   empty = "Sem contas — lançamentos ficam só no grupo",
 }: {
   accounts: Account[];
   stats: Map<string, AccountStats>;
+  /** Contas some lançamento points at. */
+  used: ReadonlySet<string | undefined>;
   canEdit: boolean;
   /** What an empty grupo says. */
   empty?: string;
@@ -261,7 +276,13 @@ function AccountList({
       ) : (
         <ul className="mt-2 divide-y divide-hairline">
           {active.map((account) => (
-            <AccountRow key={account.id} account={account} stats={stats.get(account.id)} canEdit={canEdit} />
+            <AccountRow
+              key={account.id}
+              account={account}
+              stats={stats.get(account.id)}
+              deletable={!used.has(account.id)}
+              canEdit={canEdit}
+            />
           ))}
         </ul>
       )}
@@ -272,7 +293,13 @@ function AccountList({
           </summary>
           <ul className="divide-y divide-hairline">
             {archived.map((account) => (
-              <AccountRow key={account.id} account={account} stats={stats.get(account.id)} canEdit={canEdit} />
+              <AccountRow
+              key={account.id}
+              account={account}
+              stats={stats.get(account.id)}
+              deletable={!used.has(account.id)}
+              canEdit={canEdit}
+            />
             ))}
           </ul>
         </details>
@@ -284,14 +311,20 @@ function AccountList({
 function AccountRow({
   account,
   stats,
+  deletable,
   canEdit,
 }: {
   account: Account;
   stats: AccountStats | undefined;
+  /** No lançamento points at it; the server still refuses one a recorrência keeps. */
+  deletable: boolean;
   canEdit: boolean;
 }) {
   const updateAccount = useHerdStore((s) => s.updateAccount);
+  const removeAccount = useHerdStore((s) => s.removeAccount);
   const { addToast } = useToast();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
   /** Renaming; a financiamento also edits its saldo devedor inicial and its day. */
   const [draft, setDraft] = useState<{ name: string; opening: string; openingDate: string } | null>(null);
   const archived = Boolean(account.archivedAt);
@@ -335,6 +368,22 @@ function AccountRow({
   async function onArchive() {
     if (await updateAccount(account.id, { archived: !archived })) {
       addToast({ messageType: "success", text: archived ? "Conta restaurada" : "Conta arquivada" });
+    }
+  }
+
+  async function onRemove() {
+    setBusy(true);
+    try {
+      if ((await removeAccount(account.id)) === "in_use") {
+        addToast({ messageType: "error", text: "Conta com lançamentos não se apaga. Arquive em vez de excluir." });
+        setConfirming(false);
+        return;
+      }
+      addToast({ messageType: "success", text: "Conta excluída" });
+    } catch {
+      // apiFail already told the user.
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -428,8 +477,56 @@ function AccountRow({
           >
             {archived ? <ArchiveRestore aria-hidden /> : <Archive aria-hidden />}
           </Button>
+          {deletable ? (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-11 md:size-8"
+              aria-label={`Excluir ${account.name}`}
+              title="Excluir"
+              onClick={() => setConfirming(true)}
+            >
+              <Trash2 aria-hidden />
+            </Button>
+          ) : (
+            // Keeps the figures lined up with the rows that can be deleted.
+            <span className="size-11 md:size-8" aria-hidden />
+          )}
         </span>
       ) : null}
+      <Dialog
+        open={confirming}
+        onOpenChange={(next) => {
+          if (!next && !busy) setConfirming(false);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir conta?</DialogTitle>
+            <DialogDescription>{account.name} sai do plano de contas e do orçamento.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              className="min-h-11 md:min-h-9"
+              disabled={busy}
+              onClick={() => setConfirming(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="min-h-11 md:min-h-9"
+              disabled={busy}
+              onClick={() => void onRemove()}
+            >
+              {busy ? "Excluindo…" : "Excluir"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </li>
   );
 }

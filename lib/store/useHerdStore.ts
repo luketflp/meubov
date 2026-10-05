@@ -527,6 +527,8 @@ export interface HerdStore extends HerdData {
     id: string,
     patch: { name?: string; archived?: boolean; openingBalanceBrl?: number | null; openingDate?: string | null }
   ) => Promise<boolean>;
+  /** Deletes a conta and its orçamento lines; "in_use" when a lançamento or recorrência keeps it (409). */
+  removeAccount: (id: string) => Promise<"deleted" | "in_use">;
   /** Creates the standard contas the farm lacks; resolves how many were created. */
   seedDefaultAccounts: () => Promise<number>;
   /** "Nova conta"; one marked principal (or the farm's first) takes the place of the current one. */
@@ -2353,6 +2355,21 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const account = data as Account;
     set((s) => ({ accounts: s.accounts.map((a) => (a.id === id ? account : a)) }));
     return true;
+  },
+
+  removeAccount: async (id) => {
+    const { error } = await api.accounts({ id }).delete();
+    if (error) {
+      if (error.status === CONFLICT) return "in_use";
+      apiFail("excluir a conta", error);
+    }
+    set((s) => ({
+      accounts: s.accounts.filter((a) => a.id !== id),
+      budgets: Object.fromEntries(
+        Object.entries(s.budgets).map(([safra, rows]) => [safra, rows.filter((b) => b.accountId !== id)])
+      ),
+    }));
+    return "deleted";
   },
 
   seedDefaultAccounts: async () => {
