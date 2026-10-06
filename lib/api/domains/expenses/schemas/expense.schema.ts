@@ -37,6 +37,7 @@ export const RepeatModel = t.Object({
 });
 
 const Counterparty = t.String({ maxLength: 120 });
+const History = t.String({ maxLength: 200 });
 const Document = t.String({ maxLength: 120 });
 
 /**
@@ -59,6 +60,7 @@ export const NewExpenseBody = t.Object({
   flow: t.Optional(EntryFlowModel),
   dueDate: t.Optional(DateString),
   paidAt: t.Optional(DateString),
+  history: t.Optional(History),
   counterparty: t.Optional(Counterparty),
   document: t.Optional(Document),
   accountId: t.Optional(t.String()),
@@ -81,6 +83,7 @@ export const UpdateExpenseBody = t.Object({
   notes: t.Optional(t.Nullable(t.String())),
   dueDate: t.Optional(t.Nullable(DateString)),
   paidAt: t.Optional(t.Nullable(DateString)),
+  history: t.Optional(t.Nullable(History)),
   counterparty: t.Optional(t.Nullable(Counterparty)),
   document: t.Optional(t.Nullable(Document)),
   accountId: t.Optional(t.Nullable(t.String())),

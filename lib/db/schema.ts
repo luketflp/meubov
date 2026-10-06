@@ -725,6 +725,8 @@ export const expenseSeries = pgTable(
     amountBrl: numeric("amount_brl", { mode: "number" }).notNull(),
     accountId: text("account_id").references(() => accounts.id, { onDelete: "set null" }),
     lotId: text("lot_id").references(() => lots.id, { onDelete: "set null" }),
+    /** What the lançamento is, shown first in the list; null falls back to the pago para. */
+    history: text("history"),
     counterparty: text("counterparty"),
     document: text("document"),
     notes: text("notes"),
@@ -761,6 +763,8 @@ export const expenses = pgTable(
     dueDate: date("due_date"),
     /** Day it was paid or received; null means pendente. */
     paidAt: date("paid_at"),
+    /** What the lançamento is, shown first in the list; null falls back to the pago para. */
+    history: text("history"),
     /** Pago para / recebido de, free text. */
     counterparty: text("counterparty"),
     /** "NF 4.812", free text. */

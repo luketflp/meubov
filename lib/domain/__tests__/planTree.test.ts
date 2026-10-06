@@ -381,7 +381,7 @@ describe("nodeRows", () => {
     ]);
   });
 
-  it("puts who over what: observação, documento and the manejo's line under it, never repeating the history", () => {
+  it("puts the histórico (or who) over pago para, observação, documento and the manejo's line, never repeating it", () => {
     const farm: PlanInputs = {
       ...inputs,
       expenses: [
@@ -395,6 +395,16 @@ describe("nodeRows", () => {
           document: "NF 2.871",
         }),
         entry("e-diesel", { category: "admin", date: "2026-09-02", notes: "Diesel do trator", document: "NF 77" }),
+        entry("i-historico", {
+          kind: "investment",
+          flow: "out",
+          accountId: "inv-maq",
+          date: "2026-09-04",
+          history: "Carreta agrícola 4 t",
+          counterparty: "Agropecuária Sertão",
+          notes: "entrega na sede",
+          document: "NF 11.640",
+        }),
       ],
       manejoSessions: [
         makeManejoSession({
@@ -409,7 +419,8 @@ describe("nodeRows", () => {
     };
     const lines = nodeRows({ type: "all" }, farm, PERIOD, TODAY);
     const line = (id: string) => lines.find((r) => r.id === id)!;
-    expect(["i-trator", "e-diesel", "m-sale", TREATMENT].map((id) => [line(id).history, line(id).detail])).toEqual([
+    expect(["i-historico", "i-trator", "e-diesel", "m-sale", TREATMENT].map((id) => [line(id).history, line(id).detail])).toEqual([
+      ["Carreta agrícola 4 t", "Agropecuária Sertão · entrega na sede · NF 11.640"],
       ["Agro Máquinas Uberaba", "Trator MF 4275 · NF 2.871"],
       ["Diesel do trator", "NF 77"],
       ["Frigorífico Minerva", "manejo · 1 animal"],

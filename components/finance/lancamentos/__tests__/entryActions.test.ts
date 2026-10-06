@@ -28,6 +28,7 @@ function ledgerRow(expense: Expense | null, patch: Partial<LedgerRow> = {}): Led
     group: "investment",
     groupLabel: "Investimentos",
     account: "Máquinas e implementos",
+    history: expense?.history ?? null,
     bankAccountId: null,
     counterparty: "Agropecuária Sertão",
     document: null,

@@ -242,6 +242,7 @@ export function toExpense(
     notes: orNothing(row.notes),
     dueDate: orNothing(row.dueDate),
     paidAt: orNothing(row.paidAt),
+    history: orNothing(row.history),
     counterparty: orNothing(row.counterparty),
     document: orNothing(row.document),
     accountId: orNothing(row.accountId),

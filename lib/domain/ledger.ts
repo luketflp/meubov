@@ -45,6 +45,8 @@ export interface LedgerRow {
   account: string | null;
   /** The conta bancária it went through ("Pago por", or a venda's conta); null for none. */
   bankAccountId: string | null;
+  /** The lançamento's histórico; null on manejo and treatment rows. */
+  history: string | null;
   counterparty: string | null;
   document: string | null;
   lotId: string | null;
@@ -150,6 +152,7 @@ export function ledgerRows(input: LedgerInputs, period: Period, todayIso: string
       groupLabel: group === null ? ENTRY_KIND_LABEL.yield : groupLabel(group, input.expenseGroups),
       account: accountName(e.accountId, input.accounts),
       bankAccountId: e.bankAccountId ?? null,
+      history: e.history ?? null,
       counterparty: e.counterparty ?? null,
       document: e.document ?? null,
       lotId,
@@ -190,6 +193,7 @@ export function ledgerRows(input: LedgerInputs, period: Period, todayIso: string
       groupLabel: sale ? TOP_GROUP_LABEL.revenue : TOP_GROUP_LABEL.investment,
       account: sale ? "Venda de gado" : "Compra de gado",
       bankAccountId: m.bankAccountId ?? null,
+      history: null,
       counterparty: session
         ? session.counterparty?.trim() || null
         : sale
@@ -228,6 +232,7 @@ export function ledgerRows(input: LedgerInputs, period: Period, todayIso: string
       groupLabel: BUILTIN_CATEGORY_LABEL.health,
       account: null,
       bankAccountId: null,
+      history: null,
       counterparty: null,
       document: null,
       lotId: null,

@@ -433,6 +433,8 @@ export interface Expense {
   dueDate?: string;
   /** Day it was paid or received; absent means pendente. */
   paidAt?: string;
+  /** What the lançamento is ("Trator MF 4275"), shown first in the list; absent falls back to the pago para. */
+  history?: string;
   /** Pago para / recebido de, free text. */
   counterparty?: string;
   /** "NF 4.812", free text. */

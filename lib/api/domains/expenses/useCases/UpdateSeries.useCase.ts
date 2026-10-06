@@ -31,7 +31,7 @@ type CurrUseCase = _UseCase<UpdateSeriesUseCaseProps, UpdateSeriesUseCaseRespons
 type SharedFields = Partial<
   Pick<
     typeof expenses.$inferInsert,
-    "category" | "flow" | "accountId" | "lotId" | "counterparty" | "document" | "notes" | "amountBrl"
+    "category" | "flow" | "accountId" | "lotId" | "history" | "counterparty" | "document" | "notes" | "amountBrl"
   >
 >;
 
@@ -41,12 +41,13 @@ type SharedFields = Partial<
  * may have overruled the form.
  */
 function sharedFields(patch: ExpensePatchInput, recurring: boolean, row: Expense): SharedFields {
-  const { category, flow, accountId, lotId, counterparty, document, notes, amountBrl } = patch;
+  const { category, flow, accountId, lotId, history, counterparty, document, notes, amountBrl } = patch;
   const fields: SharedFields = {
     category: category === undefined ? undefined : row.category,
     flow: flow === undefined ? undefined : (row.flow ?? null),
     accountId,
     lotId: lotId === undefined ? undefined : (row.lotId ?? null),
+    history,
     counterparty,
     document,
     notes,
@@ -61,7 +62,7 @@ function sharedFields(patch: ExpensePatchInput, recurring: boolean, row: Expense
 /**
  * "Esta e as próximas" / "Todas" on a row of a série. The row itself takes the
  * whole patch; the série's template and every UNPAID row in scope take the
- * shared fields (grupo, conta, movimento, lote, pago para, documento,
+ * shared fields (grupo, conta, movimento, lote, histórico, pago para, documento,
  * observação, and the valor of a recorrência). Moving an ocorrência's
  * vencimento moves the rule: its day
  * becomes the série's day and every unpaid row in scope is re-dated by its

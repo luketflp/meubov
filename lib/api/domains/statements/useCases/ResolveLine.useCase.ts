@@ -29,6 +29,7 @@ export interface LineEntry {
   notes?: string;
   dueDate?: string;
   paidAt?: string;
+  history?: string;
   counterparty?: string;
   document?: string;
   accountId?: string;

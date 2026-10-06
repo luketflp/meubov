@@ -17,15 +17,17 @@ interface SortableHeadProps {
   sort: LineSort | null;
   onSort: (key: string) => void;
   align?: "right";
+  /** The table's own header look and width. */
+  className?: string;
 }
 
-export function SortableHead({ label, sortKey = label, sort, onSort, align }: SortableHeadProps) {
+export function SortableHead({ label, sortKey = label, sort, onSort, align, className }: SortableHeadProps) {
   const active = sort?.key === sortKey;
   const direction = active ? sort.direction : null;
   return (
     <TableHead
       aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : undefined}
-      className={align === "right" ? "text-right" : undefined}
+      className={cn(align === "right" && "text-right", className)}
     >
       <button
         type="button"

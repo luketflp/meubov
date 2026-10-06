@@ -409,10 +409,14 @@ function belongs(node: Exclude<PlanNode, { type: "bank" | "banks" }>, r: LedgerR
   }
 }
 
-/** "Trator MF 4275 · NF 2.871 · parcela 2/10": observação, documento and parcela, without what the history already says. */
+/** "Agro Máquinas Uberaba · NF 2.871 · parcela 2/10": pago para, observação, documento and parcela, without what the history already says. */
 function detailOf(r: LedgerRow, history: string): string | null {
   const parcela = r.expense ? installmentLabel(r.expense) : null;
-  return [r.notes, r.document, parcela && `parcela ${parcela}`].filter((t) => t && t !== history).join(" · ") || null;
+  return (
+    [r.counterparty, r.notes, r.document, parcela && `parcela ${parcela}`]
+      .filter((t) => t && t !== history)
+      .join(" · ") || null
+  );
 }
 
 const bankName = (banks: BankAccount[], id: string | null): string | null =>
@@ -421,7 +425,8 @@ const bankName = (banks: BankAccount[], id: string | null): string | null =>
 /** A ledger row as every nó but a conta bancária shows it: the contra partida is the conta bancária. */
 function ledgerLine(r: LedgerRow, banks: BankAccount[]): PaneRow {
   const contra = bankName(banks, r.bankAccountId);
-  const history = r.counterparty ?? r.notes ?? r.account ?? r.groupLabel;
+  // Rows typed before the Histórico existed fall back to who, then what.
+  const history = r.history ?? r.counterparty ?? r.notes ?? r.account ?? r.groupLabel;
   return {
     id: r.id,
     date: r.date,

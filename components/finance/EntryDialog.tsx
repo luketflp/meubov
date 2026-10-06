@@ -365,6 +365,7 @@ function EntryForm({
           category: values.category,
           amountBrl: values.amountBrl,
           dueDate: values.dueDate,
+          history: values.history ?? undefined,
           counterparty: values.counterparty ?? undefined,
           document: values.document ?? undefined,
           accountId: values.accountId ?? undefined,
@@ -400,6 +401,7 @@ function EntryForm({
           amountBrl: values.amountBrl,
           dueDate: values.dueDate,
           paidAt: values.paidAt ?? undefined,
+          history: values.history ?? undefined,
           counterparty: values.counterparty ?? undefined,
           document: values.document ?? undefined,
           accountId: values.accountId ?? undefined,
@@ -721,6 +723,19 @@ function EntryForm({
           amount={parseAmount(fields.amount)}
         />
       )}
+
+      <div className="grid gap-1.5">
+        <Label htmlFor="entry-history">Histórico</Label>
+        <Input
+          id="entry-history"
+          value={fields.history}
+          maxLength={200}
+          placeholder="Ex.: Trator MF 4275"
+          onChange={(e) => set({ history: e.target.value })}
+          className="min-h-11"
+        />
+        <p className="text-xs text-ink-soft">o que foi: aparece em primeiro na lista</p>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         {/* Without Lote, Pago para and Documento share the row. */}

@@ -99,7 +99,8 @@ describe("initialFields", () => {
       counterparty: "Agro Máquinas Uberaba",
       document: "NF 2.871",
       accountId: "maquinas",
-      notes: "Trator MF 4275",
+      history: "Trator MF 4275",
+      notes: "entrega na sede",
       seriesId: "s1",
       seriesIndex: 6,
       seriesCount: 6,
@@ -117,10 +118,11 @@ describe("initialFields", () => {
       paid: false,
       paidAt: TODAY,
       bankAccountId: "sicredi",
+      history: "Trator MF 4275",
       counterparty: "Agro Máquinas Uberaba",
       document: "NF 2.871",
       lotId: NONE,
-      notes: "Trator MF 4275",
+      notes: "entrega na sede",
     });
   });
 

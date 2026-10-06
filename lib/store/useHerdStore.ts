@@ -189,7 +189,7 @@ export type SemenBullPatch = Partial<Pick<SemenBull, "name" | "code" | "breed" |
 
 /** Editable fields of a lançamento: only sent ones change; null clears an optional one. */
 export type ExpensePatch = Partial<Pick<Expense, "date" | "category" | "amountBrl" | "flow">> & {
-  [K in "notes" | "dueDate" | "paidAt" | "counterparty" | "document" | "accountId" | "lotId" | "bankAccountId"]?:
+  [K in "notes" | "dueDate" | "paidAt" | "history" | "counterparty" | "document" | "accountId" | "lotId" | "bankAccountId"]?:
     | string
     | null;
 };

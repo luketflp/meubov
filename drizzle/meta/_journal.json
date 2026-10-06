@@ -197,6 +197,13 @@
       "when": 1791322296660,
       "tag": "0027_agenda-inseminacao-ultrassom",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1791325251267,
+      "tag": "0028_lancamento-historico",
+      "breakpoints": true
     }
   ]
 }

@@ -4,10 +4,13 @@
  * The lançamentos of the nó picked, newest first. md+: a table of 50 rows a
  * page with a radio per row that picks the lançamento the toolbar acts on;
  * "Extrato" shows the contra partida and the saldo (or the status),
- * "Detalhado" the vencimento, lote and conta bancária. Phone: a list that
- * grows by 50, a tap opening the row's sheet.
+ * "Detalhado" the vencimento, lote and conta bancária. The headers sort it
+ * like the other tables (the saldo follows the date, so it does not sort). A
+ * click on a row opens the lançamento in full; the radio only picks it. Phone:
+ * a list that grows by 50, a tap opening the same lançamento as a sheet.
  */
 import { useState } from "react";
+import { nextLineSort, sortLines, type LineSort, type SortValue } from "@/lib/domain/lineSort";
 import { ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import type { PaneRow, PlanNode } from "@/lib/domain/planTree";
 import { formatDate } from "@/lib/domain/dates";
@@ -16,8 +19,9 @@ import { useHerdStore } from "@/lib/store/useHerdStore";
 import { ELLIPSIS, pageWindow, paginate } from "@/components/herd/pagination";
 import { AttachmentCount, InstallmentChip, RecurrenceTag } from "@/components/finance/SeriesMarkers";
 import { LedgerStatusPill } from "@/components/finance/lancamentos/pills";
-import { RowSheet } from "@/components/finance/lancamentos/RowSheet";
+import { EntryDetailDialog } from "@/components/finance/lancamentos/EntryDetailDialog";
 import { Button } from "@/components/ui/button";
+import { SortableHead } from "@/components/ui/sortable-head";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -30,6 +34,9 @@ const money = (value: number, signed: boolean): string =>
 const dayMonth = (iso: string): string => formatDate(iso).slice(0, 5);
 /** "Trator MF 4275, NF 2.871 · parcela 6/6, 10/02/2026": tells the parcelas of one compra apart. */
 const rowName = (row: PaneRow): string => [row.history, row.detail, formatDate(row.date)].filter(Boolean).join(", ");
+
+/** What needs looking at first sorts first: vencida, a pagar, a receber, then the settled ones. */
+const STATUS_RANK = { overdue: 0, payable: 1, receivable: 2, paid: 3, received: 4 } as const;
 
 /** Money in is "+" and healthy. */
 function Amount({ value, className }: { value: number; className?: string }) {
@@ -150,11 +157,26 @@ export function PaneRows({ node, rows, view, selectedId, onSelect, page: pageNum
   const bankAccounts = useHerdStore((s) => s.bankAccounts);
   const [shown, setShown] = useState(PAGE_SIZE);
   const [openId, setOpenId] = useState<string | null>(null);
-  // Looked up on every render: a removed row closes its sheet.
+  const [sort, setSort] = useState<LineSort | null>(null);
+  // Looked up on every render: a removed row closes its dialog.
   const open = openId === null ? null : (rows.find((row) => row.id === openId) ?? null);
-  const page = paginate(rows, pageNumber, PAGE_SIZE);
   const bankName = (id: string | null) =>
     id === null ? null : (bankAccounts.find((a) => a.id === id)?.name ?? null);
+  const sortValue: Record<string, (row: PaneRow) => SortValue> = {
+    date: (row) => row.date,
+    history: (row) => row.history,
+    contra: (row) => row.contra,
+    lot: (row) => (row.ledger ? (row.ledger.lotName ?? "fazenda") : null),
+    bank: (row) => bankName(row.ledger?.bankAccountId ?? null),
+    amount: (row) => row.amountBrl,
+    status: (row) => (row.ledger ? STATUS_RANK[row.ledger.status] : null),
+  };
+  const sorted = sort ? sortLines(rows, sortValue[sort.key], sort.direction) : rows;
+  const page = paginate(sorted, pageNumber, PAGE_SIZE);
+  const onSort = (key: string) => {
+    setSort((current) => nextLineSort(current, key));
+    onPageChange(1);
+  };
 
   // The Extrato's last column: the saldo after each line on a conta bancária, the saldo devedor on a financiamento.
   const accountId = node.type === "account" ? node.id : null;
@@ -165,22 +187,23 @@ export function PaneRows({ node, rows, view, selectedId, onSelect, page: pageNum
         ? "Saldo devedor"
         : "Status";
   const saldo = last !== "Status";
-  const heads: [string, string][] =
+  // [label, sort key (null: not sortable), width and alignment]
+  const heads: [string, string | null, string][] =
     view === "extrato"
       ? [
-          ["Data", "w-24"],
-          ["Histórico", ""],
-          ["Contra partida", "w-44"],
-          ["Valor (R$)", "w-28 text-right"],
-          [last, cn("w-28 pr-4", saldo && "text-right")],
+          ["Data", "date", "w-24"],
+          ["Histórico", "history", ""],
+          ["Contra partida", "contra", "w-44"],
+          ["Valor (R$)", "amount", "w-28 text-right"],
+          [last, saldo ? null : "status", cn("w-28 pr-4", saldo && "text-right")],
         ]
       : [
-          ["Data", "w-24"],
-          ["Histórico", ""],
-          ["Lote", "w-28"],
-          ["Pago por", "w-32"],
-          ["Valor (R$)", "w-28 text-right"],
-          ["Status", "w-24 pr-4"],
+          ["Data", "date", "w-24"],
+          ["Histórico", "history", ""],
+          ["Lote", "lot", "w-28"],
+          ["Pago por", "bank", "w-32"],
+          ["Valor (R$)", "amount", "w-28 text-right"],
+          ["Status", "status", "w-24 pr-4"],
         ];
 
   return (
@@ -195,11 +218,22 @@ export function PaneRows({ node, rows, view, selectedId, onSelect, page: pageNum
                 <th scope="col" className={cn(HEAD, "w-10 pl-4")}>
                   <span className="sr-only">Selecionar</span>
                 </th>
-                {heads.map(([label, className]) => (
-                  <th key={label} scope="col" className={cn(HEAD, className)}>
-                    {label}
-                  </th>
-                ))}
+                {heads.map(([label, key, className]) =>
+                  key ? (
+                    <SortableHead
+                      key={label}
+                      label={label}
+                      sortKey={key}
+                      sort={sort}
+                      onSort={onSort}
+                      className={cn(HEAD, className)}
+                    />
+                  ) : (
+                    <th key={label} scope="col" className={cn(HEAD, className)}>
+                      {label}
+                    </th>
+                  )
+                )}
               </tr>
             </thead>
             <tbody>
@@ -209,13 +243,17 @@ export function PaneRows({ node, rows, view, selectedId, onSelect, page: pageNum
                   <tr
                     key={row.id}
                     aria-selected={selected || undefined}
-                    onClick={() => onSelect(row.id)}
+                    onClick={() => {
+                      onSelect(row.id);
+                      setOpenId(row.id);
+                    }}
                     className={cn(
                       "cursor-pointer border-t border-hairline text-sm transition-colors",
                       selected ? "bg-brand-soft" : "hover:bg-surface/60"
                     )}
                   >
-                    <td className="py-2 pl-4 align-middle">
+                    {/* The radio picks the row for the toolbar without opening it. */}
+                    <td className="py-2 pl-4 align-middle" onClick={(event) => event.stopPropagation()}>
                       <input
                         type="radio"
                         name="lancamento"
@@ -291,7 +329,7 @@ export function PaneRows({ node, rows, view, selectedId, onSelect, page: pageNum
 
       <div className="flex flex-col gap-3 md:hidden">
         <ul className="divide-y divide-hairline overflow-hidden rounded-lg border border-hairline bg-panel">
-          {rows.slice(0, shown).map((row) => {
+          {sorted.slice(0, shown).map((row) => {
             const expense = row.ledger?.expense ?? null;
             const sub = [
               expense && row.ledger ? `vence ${dayMonth(row.ledger.dueDate)}` : null,
@@ -321,19 +359,20 @@ export function PaneRows({ node, rows, view, selectedId, onSelect, page: pageNum
             );
           })}
         </ul>
-        {rows.length > shown ? (
+        {sorted.length > shown ? (
           <Button variant="outline" className="min-h-11" onClick={() => setShown((n) => n + PAGE_SIZE)}>
             Carregar mais
           </Button>
         ) : null}
-        <RowSheet
-          row={open}
-          node={node}
-          onOpenChange={(next) => {
-            if (!next) setOpenId(null);
-          }}
-        />
       </div>
+
+      <EntryDetailDialog
+        row={open}
+        node={node}
+        onOpenChange={(next) => {
+          if (!next) setOpenId(null);
+        }}
+      />
     </>
   );
 }

@@ -66,6 +66,7 @@ export class SplitExpenseUseCase implements CurrUseCase {
         flow: row.flow,
         category: row.category,
         notes: row.notes,
+        history: row.history,
         counterparty: row.counterparty,
         document: row.document,
         accountId: row.accountId,

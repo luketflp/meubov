@@ -23,6 +23,7 @@ export interface ExpensePatchInput {
   notes?: string | null;
   dueDate?: string | null;
   paidAt?: string | null;
+  history?: string | null;
   counterparty?: string | null;
   document?: string | null;
   accountId?: string | null;
@@ -115,7 +116,7 @@ export class UpdateExpenseUseCase implements CurrUseCase {
 
       // Only the declared fields reach the update, never a stray column like farmId. When
       // normaliseEntry ran, the columns the kind decides are written as it left them.
-      const { category, amountBrl, notes, paidAt, counterparty, document, accountId, lotId } = patch;
+      const { category, amountBrl, notes, paidAt, history, counterparty, document, accountId, lotId } = patch;
       const declared = {
         date: patch.date,
         kind: patch.kind,
@@ -124,6 +125,7 @@ export class UpdateExpenseUseCase implements CurrUseCase {
         notes,
         dueDate: patch.dueDate,
         paidAt,
+        history,
         counterparty,
         document,
         accountId,

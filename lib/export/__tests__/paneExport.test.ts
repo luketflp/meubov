@@ -15,6 +15,7 @@ const ledger: LedgerRow = {
   groupLabel: "Nutrição",
   account: "Ração e suplemento",
   bankAccountId: "b-1",
+  history: null,
   counterparty: "Boleto Nutron",
   document: "NF 20.118",
   lotId: null,

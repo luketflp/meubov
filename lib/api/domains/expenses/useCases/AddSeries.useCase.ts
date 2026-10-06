@@ -34,6 +34,7 @@ interface AddSeriesUseCaseProps {
   /** Paid/received on this day: the first row only. */
   paidAt?: string;
   notes?: string;
+  history?: string;
   counterparty?: string;
   document?: string;
   accountId?: string;
@@ -127,6 +128,7 @@ export class AddSeriesUseCase implements CurrUseCase {
       flow: shape.flow,
       category: shape.category,
       notes: entry.notes ?? null,
+      history: entry.history ?? null,
       counterparty: entry.counterparty ?? null,
       document: entry.document ?? null,
       accountId: shape.accountId,

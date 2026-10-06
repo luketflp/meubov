@@ -64,6 +64,7 @@ export class TopUpSeriesUseCase implements CurrUseCase {
               category: series.category,
               amountBrl: series.amountBrl,
               notes: series.notes,
+              history: series.history,
               counterparty: series.counterparty,
               document: series.document,
               accountId: series.accountId,

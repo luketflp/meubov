@@ -31,6 +31,7 @@ export interface EntryFields {
   paidAt: string;
   /** "Pago por": a conta bancária id, "" when the farm has none. */
   bankAccountId: string;
+  history: string;
   counterparty: string;
   document: string;
   lotId: string;
@@ -59,6 +60,7 @@ export interface EntryValues {
   amountBrl: number;
   dueDate: string;
   paidAt: string | null;
+  history: string | null;
   counterparty: string | null;
   document: string | null;
   accountId: string | null;
@@ -90,10 +92,12 @@ export function initialFields(
       paid: true,
       paidAt: fromLine.date,
       bankAccountId: fromLine.bankAccountId,
+      // The bank's description is what the line was: the histórico.
+      history: fromLine.description,
       counterparty: "",
       document: "",
       lotId: NONE,
-      notes: fromLine.description,
+      notes: "",
     };
   }
   if (expense) {
@@ -111,6 +115,7 @@ export function initialFields(
       // A row paid before the contas existed stays without one until the farmer picks it.
       bankAccountId:
         expense.bankAccountId ?? (expense.paidAt ? "" : defaultPaidBy(bankAccounts, expense.kind, expense.flow)),
+      history: expense.history ?? "",
       counterparty: expense.counterparty ?? "",
       document: expense.document ?? "",
       lotId: expense.lotId ?? NONE,
@@ -135,6 +140,7 @@ export function initialFields(
     paid: !template,
     paidAt: today,
     bankAccountId: initial?.bankAccountId ?? defaultPaidBy(bankAccounts, kind, flow),
+    history: template?.history ?? "",
     counterparty: template?.counterparty ?? "",
     document: template?.document ?? "",
     lotId: template?.lotId ?? NONE,
@@ -186,6 +192,7 @@ export function entryValues(fields: EntryFields, repeating: boolean): EntryValue
     amountBrl,
     dueDate: fields.dueDate,
     paidAt: fields.paid ? fields.paidAt : null,
+    history: fields.history.trim() || null,
     counterparty: fields.counterparty.trim() || null,
     document: fields.document.trim() || null,
     accountId: fields.accountId === NONE ? null : fields.accountId,
@@ -194,3 +201,4 @@ export function entryValues(fields: EntryFields, repeating: boolean): EntryValue
     notes: fields.notes.trim() || null,
   };
 }
+
