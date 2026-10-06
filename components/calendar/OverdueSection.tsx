@@ -1,7 +1,8 @@
 "use client";
 
+import { useId, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Fence, Trash2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Fence, Trash2 } from "lucide-react";
 import type { Treatment } from "@/lib/types";
 import { todayISO, daysBetween, formatDate } from "@/lib/domain/dates";
 import { isFootAndMouth } from "@/lib/domain/status";
@@ -37,6 +38,9 @@ export function OverdueSection({
   const animals = useHerdStore((state) => state.animals);
   const lots = useHerdStore((state) => state.lots);
   const canEdit = useCan("sanitary", "edit");
+  const idPrefix = useId();
+  /** Agendamentos whose heads the farmer opened; all start closed. */
+  const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(() => new Set());
   const animalIdsByEarTag = new Map(animals.map((animal) => [animal.earTag, animal.id]));
   const byLot = overdueByLot(overdue, animals, lots);
   // A deleted lote still names the sold animals' treatments, but has no page to open.
@@ -54,6 +58,15 @@ export function OverdueSection({
     );
   }
 
+  function toggleGroup(key: string) {
+    setOpenGroups((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
   /** Date and how long the treatment has been waiting. */
   function whenColumn(treatment: Treatment) {
     return (
@@ -66,8 +79,8 @@ export function OverdueSection({
     );
   }
 
-  /** A lote's agendamentos: one booked for many animals lists its heads under it. */
-  function agendamentos(treatments: Treatment[]) {
+  /** A lote's agendamentos: one booked for many animals folds its heads under it. */
+  function agendamentos(lotKey: string, treatments: Treatment[]) {
     return (
       <ul className="divide-y divide-hairline">
         {groupTreatments(treatments).map((group) => {
@@ -107,17 +120,29 @@ export function OverdueSection({
               </li>
             );
           }
+          // One batch can span lotes; each lote folds its own share.
+          const openKey = `${lotKey}:${group.key}`;
+          const open = openGroups.has(openKey);
+          const panelId = `${idPrefix}-${openKey}`;
+          const Chevron = open ? ChevronDown : ChevronRight;
           return (
             <li key={group.key} className="py-2.5">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 {whenColumn(first)}
-                <p className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium text-ink">
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  aria-controls={open ? panelId : undefined}
+                  onClick={() => toggleGroup(openKey)}
+                  className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left text-sm font-medium text-ink md:min-h-0"
+                >
+                  <Chevron className="size-4 shrink-0 text-ink-soft" aria-hidden />
                   {isFootAndMouth(first) ? <StatusDot status="fmd" /> : null}
                   <span className="truncate">{first.name}</span>
                   <span className="shrink-0 text-xs font-normal text-ink-soft">
                     {group.treatments.length} animais
                   </span>
-                </p>
+                </button>
                 {canEdit ? (
                   <Button
                     variant="ghost"
@@ -130,34 +155,36 @@ export function OverdueSection({
                   </Button>
                 ) : null}
               </div>
-              <ul className="mt-1 divide-y divide-hairline border-l border-hairline pl-3">
-                {group.treatments.map((t) => (
-                  <li key={t.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2">
-                    <span className="min-w-0 flex-1">{animalLink(t)}</span>
-                    {canEdit ? (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="min-h-11 md:min-h-0"
-                          onClick={() => onMarkDone(t.id)}
-                        >
-                          Marcar como feito
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Excluir tratamento deste animal"
-                          className="size-11 shrink-0 text-ink-soft hover:text-overdue md:size-9"
-                          onClick={() => onDelete(t)}
-                        >
-                          <Trash2 className="size-4" aria-hidden />
-                        </Button>
-                      </>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
+              {open ? (
+                <ul id={panelId} className="mt-1 divide-y divide-hairline border-l border-hairline pl-3">
+                  {group.treatments.map((t) => (
+                    <li key={t.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2">
+                      <span className="min-w-0 flex-1">{animalLink(t)}</span>
+                      {canEdit ? (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="min-h-11 md:min-h-0"
+                            onClick={() => onMarkDone(t.id)}
+                          >
+                            Marcar como feito
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Excluir tratamento deste animal"
+                            className="size-11 shrink-0 text-ink-soft hover:text-overdue md:size-9"
+                            onClick={() => onDelete(t)}
+                          >
+                            <Trash2 className="size-4" aria-hidden />
+                          </Button>
+                        </>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </li>
           );
         })}
@@ -201,7 +228,7 @@ export function OverdueSection({
                   </Link>
                 ) : null}
               </header>
-              {agendamentos(lot.treatments)}
+              {agendamentos(lot.lotId ?? "sem-lote", lot.treatments)}
             </section>
           ))}
         </div>

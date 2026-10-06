@@ -1,6 +1,7 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { useId, useState } from "react";
+import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import type { Treatment } from "@/lib/types";
 import { todayISO } from "@/lib/domain/dates";
 import { deriveTreatmentStatus, isFootAndMouth } from "@/lib/domain/status";
@@ -23,8 +24,8 @@ interface TreatmentGroupListProps {
 
 /**
  * Treatments of a day as the farmer booked them: one action that covered many
- * animals reads as a single agendamento with its heads under it, and can be
- * undone in one go. A treatment standing alone keeps the plain row.
+ * animals reads as a single agendamento with its heads folded under it (closed
+ * until tapped), and can be undone in one go. A treatment standing alone keeps the plain row.
  */
 export function TreatmentGroupList({
   treatments,
@@ -35,6 +36,18 @@ export function TreatmentGroupList({
 }: TreatmentGroupListProps) {
   const canEdit = useCan("sanitary", "edit");
   const groups = groupTreatments(treatments);
+  const idPrefix = useId();
+  /** Agendamentos whose heads the farmer opened; all start closed. */
+  const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(() => new Set());
+
+  function toggleGroup(key: string) {
+    setOpenGroups((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   return (
     <ul className={cn("divide-y divide-hairline", className)}>
@@ -51,16 +64,26 @@ export function TreatmentGroupList({
             />
           );
         }
+        const open = openGroups.has(group.key);
+        const panelId = `${idPrefix}-${group.key}`;
+        const Chevron = open ? ChevronDown : ChevronRight;
         return (
           <li key={group.key} className="py-2.5">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <p className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium text-ink">
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-controls={open ? panelId : undefined}
+                onClick={() => toggleGroup(group.key)}
+                className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left text-sm font-medium text-ink md:min-h-0"
+              >
+                <Chevron className="size-4 shrink-0 text-ink-soft" aria-hidden />
                 {isFootAndMouth(first) ? <StatusDot status="fmd" /> : null}
                 <span className="truncate">{first.name}</span>
                 <span className="shrink-0 text-xs font-normal text-ink-soft">
                   {TYPE_LABEL[first.type]} · {group.treatments.length} animais
                 </span>
-              </p>
+              </button>
               {canEdit ? (
                 <Button
                   variant="ghost"
@@ -73,18 +96,20 @@ export function TreatmentGroupList({
                 </Button>
               ) : null}
             </div>
-            <ul className="mt-1 divide-y divide-hairline border-l border-hairline pl-3">
-              {group.treatments.map((t) => (
-                <TreatmentRow
-                  key={t.id}
-                  treatment={t}
-                  status={deriveTreatmentStatus(t, todayISO())}
-                  onMarkDone={onMarkDone}
-                  onDelete={onDelete}
-                  compact
-                />
-              ))}
-            </ul>
+            {open ? (
+              <ul id={panelId} className="mt-1 divide-y divide-hairline border-l border-hairline pl-3">
+                {group.treatments.map((t) => (
+                  <TreatmentRow
+                    key={t.id}
+                    treatment={t}
+                    status={deriveTreatmentStatus(t, todayISO())}
+                    onMarkDone={onMarkDone}
+                    onDelete={onDelete}
+                    compact
+                  />
+                ))}
+              </ul>
+            ) : null}
           </li>
         );
       })}
