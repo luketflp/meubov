@@ -19,9 +19,13 @@
  * a row of a série says which ("Parcela 2/3", "Recorrente · todo dia 20") and
  * saving asks where the change applies. A rendimento opens the YieldDialog
  * instead. Vendas and compras de gado come from the manejos, never from here.
+ * The form is three columns, O quê · Pagamento · Detalhes, side by side from
+ * lg so it fits a 1366×768 notebook without scrolling, with a line at the foot
+ * saying what will be lançado; below lg they stack and only they scroll, and
+ * on the phone the dialog takes the whole screen.
  */
-import { useState, type FormEvent } from "react";
-import { Info, Repeat } from "lucide-react";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { CircleCheck, Clock, Info, Paperclip, Receipt, Repeat, Wallet, X, type LucideIcon } from "lucide-react";
 import { useHerdStore, type ExpensePatch } from "@/lib/store/useHerdStore";
 import { activeAnimals, activeLots } from "@/lib/store/selectors";
 import { useToast } from "@/components/providers/Toasts";
@@ -46,6 +50,7 @@ import { cn } from "@/lib/utils";
 import { parseAmount } from "@/components/finance/parseAmount";
 import {
   NONE,
+  entrySummary,
   entryValues,
   initialFields,
   withKind,
@@ -61,14 +66,13 @@ import {
 import { SeriesScopeDialog } from "@/components/finance/SeriesScopeDialog";
 import { YieldDialog } from "@/components/finance/YieldDialog";
 import { AttachmentsField, type PendingFile } from "@/components/finance/attachments/AttachmentsField";
-import { PaidByField, paidByOptions } from "@/components/finance/contas/PaidByField";
+import { PaidByField } from "@/components/finance/contas/PaidByField";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -121,6 +125,12 @@ function segmentClass(selected: boolean, className: string) {
   );
 }
 
+/** A column of the form: three side by side from lg, stacked below. */
+const COLUMN = "grid min-w-0 content-start gap-2.5 px-5 py-3.5";
+
+/** The label of a field that is no <Label>: a switch, a fixed value. */
+const FIELD_LABEL = "text-xs leading-4 font-medium text-ink-soft";
+
 /** Whether "Parcelas" holds a count the server takes (2–48). */
 function countInRange(typed: string): boolean {
   const count = Number(typed);
@@ -171,18 +181,19 @@ export function EntryDialog({
         if (!busy) onOpenChange(next);
       }}
     >
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{expense ? "Editar lançamento" : fromLine ? "Criar lançamento" : "Novo lançamento"}</DialogTitle>
-          <DialogDescription>
-            {fromLine
+      <DialogContent
+        showCloseButton={false}
+        className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl lg:max-w-[1040px] max-sm:top-0 max-sm:left-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:ring-0"
+      >
+        <EntryForm
+          title={expense ? "Editar lançamento" : fromLine ? "Criar lançamento" : "Novo lançamento"}
+          description={
+            fromLine
               ? "Preenchido pela linha do banco · confira a conta do plano."
               : initial?.kind || initial?.bankAccountId
                 ? "Começa na conta escolhida no plano de contas. Vendas e compras de gado entram sozinhas pelos manejos."
-                : "Despesas, receitas, investimentos, financiamentos e sócios. Vendas e compras de gado entram sozinhas pelos manejos."}
-          </DialogDescription>
-        </DialogHeader>
-        <EntryForm
+                : "Vendas e compras de gado entram sozinhas pelos manejos."
+          }
           source={{ expense, template, initial, fromLine, defaultKind }}
           onResolved={onResolved}
           onBusyChange={setBusy}
@@ -194,11 +205,16 @@ export function EntryDialog({
 }
 
 function EntryForm({
+  title,
+  description,
   source,
   onResolved,
   onBusyChange,
   onDone,
 }: {
+  title: string;
+  /** Under the title; a kind outside the resultado says why instead. */
+  description: string;
   source: EntrySource;
   onResolved?(resolved: Resolved): void;
   onBusyChange(busy: boolean): void;
@@ -435,15 +451,45 @@ function EntryForm({
     onDone();
   }
 
+  const today = todayISO();
+  // Repetir as chosen (null for Uma vez, and while editing or conciliating), for the line at the foot.
+  const rule = expense || fixed || fields.date === "" ? null : repeatFromFields(repeatFields, fields.date);
+  const summary =
+    typeof rule === "string"
+      ? null
+      : entrySummary(
+          fields,
+          rule,
+          {
+            group: groupOptions.find((g) => g.key === fields.category)?.label,
+            account: currentAccount?.name,
+            bank: bankAccounts.find((a) => a.id === fields.bankAccountId)?.name,
+          },
+          today
+        );
+  const SummaryIcon = rule ? Repeat : fields.paid ? CircleCheck : Clock;
+
   return (
-    <form onSubmit={onSubmit} noValidate className="grid gap-4">
-      {expense || fixed ? null : (
-        // Five segments: on the phone the row scrolls sideways instead of wrapping.
-        <div
-          role="radiogroup"
-          aria-label="Tipo de lançamento"
-          className="flex items-center gap-0.5 overflow-x-auto rounded-lg border border-hairline bg-surface p-0.5"
-        >
+    <form onSubmit={onSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
+      <DialogHeader className="relative gap-3 border-b border-hairline px-5 pt-4 pb-3.5 lg:flex-row lg:items-center lg:gap-5">
+        <div className="grid min-w-0 flex-1 gap-1 pr-10">
+          <DialogTitle className="text-lg leading-[22px] font-semibold">{title}</DialogTitle>
+          {capitalKind ? (
+            <DialogDescription className="flex items-start gap-1.5 text-xs leading-4 text-scheduled">
+              <Info className="mt-px size-3.5 shrink-0" aria-hidden />
+              {CAPITAL_NOTICE[capitalKind]}
+            </DialogDescription>
+          ) : (
+            <DialogDescription className="text-xs leading-4">{description}</DialogDescription>
+          )}
+        </div>
+        {expense || fixed ? null : (
+          // Five segments: on the phone the row scrolls sideways instead of wrapping.
+          <div
+            role="radiogroup"
+            aria-label="Tipo de lançamento"
+            className="flex items-center gap-0.5 overflow-x-auto rounded-lg border border-hairline bg-surface p-0.5 lg:mr-10 lg:shrink-0"
+          >
           {KINDS.map((kind) => {
             const selected = fields.kind === kind;
             return (
@@ -462,230 +508,291 @@ function EntryForm({
               </button>
             );
           })}
-        </div>
-      )}
+          </div>
+        )}
+        <DialogClose asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Fechar"
+            disabled={saving}
+            className="absolute top-3 right-3 max-md:top-1.5 max-md:right-1.5 max-md:size-11 lg:top-1/2 lg:-translate-y-1/2"
+          >
+            <X aria-hidden />
+          </Button>
+        </DialogClose>
+      </DialogHeader>
 
-      {capitalKind ? (
-        <p className="flex items-start gap-2.5 rounded-lg bg-scheduled-soft px-3 py-2.5 text-[13px] leading-[18px] text-scheduled">
-          <Info className="mt-px size-4 shrink-0" aria-hidden />
-          {CAPITAL_NOTICE[capitalKind]}
-        </p>
-      ) : null}
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-1.5">
-          <Label htmlFor="entry-date">Data</Label>
-          <Input
-            id="entry-date"
-            type="date"
-            value={fields.date}
-            onChange={(e) => onDateChange(e.target.value)}
-            className="min-h-11 font-mono md:min-h-0"
-          />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="entry-amount">
-            {repeatFields.choice === "installments" && !expense ? "Valor total (R$)" : "Valor (R$)"}
-          </Label>
-          <Input
-            id="entry-amount"
-            type="text"
-            inputMode="decimal"
-            placeholder="0,00"
-            value={fields.amount}
-            readOnly={fixed}
-            onChange={(e) => set({ amount: e.target.value })}
-            className="min-h-11 font-mono md:min-h-0"
-          />
-        </div>
-
-        {capitalKind ? null : (
+      {/* The columns' labels (Repetir's and Pago por's too) read small and soft. */}
+      <div className="grid min-h-0 flex-1 divide-y divide-hairline overflow-y-auto **:data-[slot=label]:text-xs **:data-[slot=label]:leading-4 **:data-[slot=label]:text-ink-soft lg:grid-cols-3 lg:divide-x lg:divide-y-0">
+        <section aria-labelledby="entry-what" className={COLUMN}>
+          <ColumnTitle id="entry-what" icon={Receipt} note={capitalKind ? "fora do custo (COE)" : undefined}>
+            O quê
+          </ColumnTitle>
           <div className="grid gap-1.5">
-            {fields.kind === "revenue" ? (
-              <>
-                <span className="text-sm leading-none font-medium">Grupo</span>
-                <p className="flex min-h-11 items-center rounded-lg border border-input bg-surface px-2.5 text-sm text-ink-soft">
-                  Receitas
-                </p>
-              </>
-            ) : (
-              <>
-                <Label htmlFor="entry-category">Grupo</Label>
-                <Select
-                  value={fields.category}
-                  onValueChange={(category) => {
-                    set({ category: category as ExpenseCategory, accountId: NONE });
-                    setNewAccountName(null);
-                  }}
+            <Label htmlFor="entry-amount">
+              {repeatFields.choice === "installments" && !expense ? "Valor total" : "Valor"}
+              <span className="sr-only"> (R$)</span>
+            </Label>
+            <div className="relative">
+              <span
+                aria-hidden
+                className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-[15px] font-medium text-ink-soft"
+              >
+                R$
+              </span>
+              <Input
+                id="entry-amount"
+                type="text"
+                inputMode="decimal"
+                placeholder="0,00"
+                value={fields.amount}
+                readOnly={fixed}
+                onChange={(e) => set({ amount: e.target.value })}
+                className="h-12 pl-11 font-mono text-[22px] font-medium md:h-[46px] md:text-[22px]"
+              />
+            </div>
+          </div>
+          <div className="grid gap-1.5">
+            <span className="flex items-baseline justify-between gap-2">
+              <Label htmlFor="entry-history">Histórico</Label>
+              <span className="text-[11px] text-ink-soft">o que foi · aparece primeiro na lista</span>
+            </span>
+            <Input
+              id="entry-history"
+              value={fields.history}
+              maxLength={200}
+              placeholder="Ex.: Trator MF 4275"
+              onChange={(e) => set({ history: e.target.value })}
+              className="min-h-11 md:min-h-9"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid content-start gap-1.5">
+              <Label htmlFor="entry-date">Data</Label>
+              <Input
+                id="entry-date"
+                type="date"
+                value={fields.date}
+                onChange={(e) => onDateChange(e.target.value)}
+                className="min-h-11 font-mono md:min-h-9"
+              />
+            </div>
+            <div className="grid content-start gap-1.5">
+              <Label htmlFor="entry-due">Vencimento</Label>
+              {repeating ? (
+                <Input
+                  key="follows"
+                  id="entry-due"
+                  disabled
+                  placeholder={repeatFields.choice === "installments" ? "segue a 1ª parcela" : "segue a recorrência"}
+                  className="min-h-11 md:min-h-9"
+                />
+              ) : (
+                <Input
+                  id="entry-due"
+                  type="date"
+                  value={fields.dueDate}
+                  onChange={(e) => set({ dueDate: e.target.value, dueTouched: true })}
+                  className="min-h-11 font-mono md:min-h-9"
+                />
+              )}
+            </div>
+          </div>
+          {capitalKind ? null : (
+            <div className="grid gap-1.5">
+              {fields.kind === "revenue" ? (
+                <>
+                  <span className={FIELD_LABEL}>Grupo</span>
+                  <p className="flex min-h-11 items-center rounded-lg border border-input bg-surface px-2.5 text-sm text-ink-soft md:min-h-9">
+                    Receitas
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Label htmlFor="entry-category">Grupo</Label>
+                  <Select
+                    value={fields.category}
+                    onValueChange={(category) => {
+                      set({ category: category as ExpenseCategory, accountId: NONE });
+                      setNewAccountName(null);
+                    }}
+                  >
+                    <SelectTrigger id="entry-category" className="min-h-11 w-full md:min-h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {groupOptions
+                        .filter((g) => !g.custom)
+                        .map((g) => (
+                          <SelectItem key={g.key} value={g.key}>
+                            {g.label}
+                          </SelectItem>
+                        ))}
+                      {farmGroups.length > 0 ? (
+                        <>
+                          <SelectSeparator />
+                          <SelectGroup className="p-0">
+                            <SelectLabel className="text-[11px] font-medium tracking-wide text-ink-soft uppercase">
+                              da fazenda
+                            </SelectLabel>
+                            {farmGroups.map((g) => (
+                              <SelectItem key={g.key} value={g.key}>
+                                {g.label}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </>
+                      ) : null}
+                    </SelectContent>
+                  </Select>
+                </>
+              )}
+            </div>
+          )}
+          <div className="grid gap-1.5">
+            <span className="flex items-center justify-between gap-2">
+              <Label htmlFor="entry-account">Conta do plano</Label>
+              {newAccountName === null ? (
+                <button
+                  type="button"
+                  onClick={() => setNewAccountName("")}
+                  className="-my-3.5 inline-flex min-h-11 items-center text-xs font-medium text-brand hover:underline md:my-0 md:min-h-0"
                 >
-                  <SelectTrigger id="entry-category" className="min-h-11 w-full">
-                    <SelectValue />
+                  + nova conta
+                </button>
+              ) : null}
+            </span>
+            {newAccountName === null ? (
+              <>
+                {/* A capital kind has no "Sem conta": "" shows the placeholder until one is picked. */}
+                <Select
+                  value={capitalKind && fields.accountId === NONE ? "" : fields.accountId}
+                  onValueChange={(accountId) => set({ accountId })}
+                >
+                  <SelectTrigger
+                    id="entry-account"
+                    className="min-h-11 w-full md:min-h-9"
+                    aria-required={capitalKind ? true : undefined}
+                  >
+                    <SelectValue placeholder="Escolha a conta" />
                   </SelectTrigger>
                   <SelectContent>
-                    {groupOptions
-                      .filter((g) => !g.custom)
-                      .map((g) => (
-                        <SelectItem key={g.key} value={g.key}>
-                          {g.label}
-                        </SelectItem>
-                      ))}
-                    {farmGroups.length > 0 ? (
-                      <>
-                        <SelectSeparator />
-                        <SelectGroup className="p-0">
-                          <SelectLabel className="text-[11px] font-medium tracking-wide text-ink-soft uppercase">
-                            da fazenda
-                          </SelectLabel>
-                          {farmGroups.map((g) => (
-                            <SelectItem key={g.key} value={g.key}>
-                              {g.label}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </>
-                    ) : null}
+                    {capitalKind ? null : <SelectItem value={NONE}>Sem conta</SelectItem>}
+                    {accountOptions.map((account) => (
+                      <SelectItem key={account.id} value={account.id}>
+                        {account.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </>
+            ) : (
+              <div className="flex gap-2">
+                <Input
+                  id="entry-account"
+                  autoFocus
+                  value={newAccountName}
+                  placeholder="Nome da conta"
+                  onChange={(e) => setNewAccountName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void onCreateAccount();
+                    }
+                  }}
+                  className="min-h-11 md:min-h-9"
+                />
+                <Button
+                  type="button"
+                  className="min-h-11 md:min-h-9"
+                  disabled={creatingAccount}
+                  onClick={() => void onCreateAccount()}
+                >
+                  Criar
+                </Button>
+              </div>
             )}
           </div>
-        )}
-        <div className="grid gap-1.5">
-          <Label htmlFor="entry-account">Conta do plano</Label>
-          {newAccountName === null ? (
-            <>
-              {/* A capital kind has no "Sem conta": "" shows the placeholder until one is picked. */}
-              <Select
-                value={capitalKind && fields.accountId === NONE ? "" : fields.accountId}
-                onValueChange={(accountId) => set({ accountId })}
+          {capitalKind ? (
+            <div className="grid content-start gap-1.5">
+              <span id="entry-flow" className={FIELD_LABEL}>
+                Movimento
+              </span>
+              <div
+                role="radiogroup"
+                aria-labelledby="entry-flow"
+                className="flex items-center gap-0.5 rounded-lg border border-hairline bg-surface p-0.5"
               >
-                <SelectTrigger id="entry-account" className="min-h-11 w-full" aria-required={capitalKind ? true : undefined}>
-                  <SelectValue placeholder="Escolha a conta" />
-                </SelectTrigger>
-                <SelectContent>
-                  {capitalKind ? null : <SelectItem value={NONE}>Sem conta</SelectItem>}
-                  {accountOptions.map((account) => (
-                    <SelectItem key={account.id} value={account.id}>
-                      {account.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <button
-                type="button"
-                onClick={() => setNewAccountName("")}
-                className="inline-flex min-h-11 items-center self-start text-xs font-medium text-brand hover:underline md:min-h-0"
-              >
-                + nova conta
-              </button>
-            </>
-          ) : (
-            <div className="flex gap-2">
-              <Input
-                id="entry-account"
-                autoFocus
-                value={newAccountName}
-                placeholder="Nome da conta"
-                onChange={(e) => setNewAccountName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void onCreateAccount();
-                  }
-                }}
-                className="min-h-11"
-              />
-              <Button
-                type="button"
-                className="min-h-11"
-                disabled={creatingAccount}
-                onClick={() => void onCreateAccount()}
-              >
-                Criar
-              </Button>
+                {FLOWS.map((flow) => {
+                  const selected = fields.flow === flow;
+                  return (
+                    <button
+                      key={flow}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setFields((f) => withKind(f, f.kind, flow, bankAccounts))}
+                      className={segmentClass(selected, "flex-1")}
+                    >
+                      {FLOW_LABEL[capitalKind][flow]}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          )}
-        </div>
-        {capitalKind ? (
-          <div className="grid content-start gap-1.5">
-            <span id="entry-flow" className="text-sm leading-none font-medium">
-              Movimento
+          ) : null}
+        </section>
+
+        <section aria-labelledby="entry-pay" className={COLUMN}>
+          <ColumnTitle id="entry-pay" icon={Wallet}>
+            {inflow ? "Recebimento" : "Pagamento"}
+          </ColumnTitle>
+          <div className="grid gap-1.5">
+            <span className="flex items-baseline justify-between gap-2">
+              <span id="entry-paid" className={FIELD_LABEL}>
+                Situação
+              </span>
+              {repeating && fields.paid ? (
+                <span className="text-[11px] text-ink-soft">
+                  {repeatFields.choice === "installments" ? "só a 1ª parcela" : "só a 1ª conta"}
+                </span>
+              ) : null}
             </span>
-            <div
-              role="radiogroup"
-              aria-labelledby="entry-flow"
-              className="flex items-center gap-0.5 rounded-lg border border-hairline bg-surface p-0.5"
-            >
-              {FLOWS.map((flow) => {
-                const selected = fields.flow === flow;
-                return (
+            <div className="flex gap-2">
+              <div
+                role="radiogroup"
+                aria-labelledby="entry-paid"
+                className="flex min-w-0 flex-1 items-center gap-0.5 rounded-lg border border-hairline bg-surface p-0.5"
+              >
+                {[false, true].map((paid) => (
                   <button
-                    key={flow}
+                    key={String(paid)}
                     type="button"
                     role="radio"
-                    aria-checked={selected}
-                    onClick={() => setFields((f) => withKind(f, f.kind, flow, bankAccounts))}
-                    className={segmentClass(selected, "flex-1")}
+                    aria-checked={fields.paid === paid}
+                    disabled={fixed}
+                    onClick={() => set({ paid })}
+                    className={segmentClass(fields.paid === paid, "flex-1 disabled:pointer-events-none disabled:opacity-60")}
                   >
-                    {FLOW_LABEL[capitalKind][flow]}
+                    {paid ? (inflow ? "Já recebido" : "Já pago") : inflow ? "A receber" : "A pagar"}
                   </button>
-                );
-              })}
+                ))}
+              </div>
+              {fields.paid ? (
+                <Input
+                  type="date"
+                  aria-label={inflow ? "Data do recebimento" : "Data do pagamento"}
+                  value={fields.paidAt}
+                  disabled={fixed}
+                  onChange={(e) => set({ paidAt: e.target.value })}
+                  className="min-h-11 w-36 shrink-0 font-mono md:min-h-9"
+                />
+              ) : null}
             </div>
           </div>
-        ) : null}
-
-        <div className="grid gap-1.5">
-          <Label htmlFor="entry-due">Vencimento</Label>
-          <Input
-            id="entry-due"
-            type="date"
-            value={repeating ? "" : fields.dueDate}
-            disabled={repeating}
-            onChange={(e) => set({ dueDate: e.target.value, dueTouched: true })}
-            className="min-h-11 font-mono md:min-h-0"
-          />
-          {repeating ? (
-            <p className="text-xs text-ink-soft">
-              {repeatFields.choice === "installments"
-                ? "segue a 1ª parcela, abaixo"
-                : "segue a recorrência, abaixo"}
-            </p>
-          ) : null}
-        </div>
-        <div className="grid gap-1.5">
-          <span className="text-sm leading-none font-medium">{inflow ? "Recebimento" : "Pagamento"}</span>
-          <div className="flex min-h-11 items-center gap-2">
-            <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-ink">
-              <input
-                type="checkbox"
-                checked={fields.paid}
-                disabled={fixed}
-                onChange={(e) => set({ paid: e.target.checked })}
-                className="size-4 shrink-0 accent-brand"
-              />
-              {inflow ? "Já recebido" : "Já pago"}
-              {fields.paid ? " em" : ""}
-            </label>
-            {fields.paid ? (
-              <Input
-                type="date"
-                aria-label={inflow ? "Data do recebimento" : "Data do pagamento"}
-                value={fields.paidAt}
-                disabled={fixed}
-                onChange={(e) => set({ paidAt: e.target.value })}
-                className="min-h-11 min-w-0 flex-1 font-mono md:min-h-9"
-              />
-            ) : null}
-          </div>
-          {repeating ? (
-            <p className="text-xs text-ink-soft">
-              {repeatFields.choice === "installments" ? "só a 1ª parcela" : "só a 1ª conta"}
-            </p>
-          ) : null}
-        </div>
-        {fields.paid && paidByOptions(bankAccounts, fields.kind, fields.bankAccountId, fields.flow).length > 0 ? (
-          <div className="sm:col-start-2">
+          {fields.paid ? (
             <PaidByField
               id="entry-paid-by"
               accounts={bankAccounts}
@@ -695,140 +802,132 @@ function EntryForm({
               disabled={fixed}
               onChange={(bankAccountId) => set({ bankAccountId })}
             />
-          </div>
-        ) : null}
-      </div>
-
-      {fixed ? null : expense ? (
-        seriesLine ? (
-          <p className="flex items-center gap-1.5 border-t border-hairline pt-4 text-sm text-ink">
-            <Repeat className="size-4 text-ink-soft" aria-hidden />
-            {seriesLine}
-          </p>
-        ) : null
-      ) : (
-        <RepeatSection
-          fields={repeatFields}
-          onChange={(patch) =>
-            setRepeatFields((r) => ({
-              ...r,
-              ...patch,
-              // Parcelado picks up a Vencimento the user already set.
-              ...(patch.choice === "installments" && r.choice !== "installments" && fields.dueTouched && fields.dueDate
-                ? { firstDue: fields.dueDate }
-                : {}),
-            }))
-          }
-          date={fields.date}
-          amount={parseAmount(fields.amount)}
-        />
-      )}
-
-      <div className="grid gap-1.5">
-        <Label htmlFor="entry-history">Histórico</Label>
-        <Input
-          id="entry-history"
-          value={fields.history}
-          maxLength={200}
-          placeholder="Ex.: Trator MF 4275"
-          onChange={(e) => set({ history: e.target.value })}
-          className="min-h-11"
-        />
-        <p className="text-xs text-ink-soft">o que foi: aparece em primeiro na lista</p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        {/* Without Lote, Pago para and Documento share the row. */}
-        <div className={cn("grid gap-1.5", capitalKind ? null : "sm:col-span-2")}>
-          <Label htmlFor="entry-counterparty">{inflow ? "Recebido de" : "Pago para"}</Label>
-          <Input
-            id="entry-counterparty"
-            list="entry-counterparty-list"
-            value={fields.counterparty}
-            onChange={(e) => set({ counterparty: e.target.value })}
-            className="min-h-11"
-          />
-          <datalist id="entry-counterparty-list">
-            {suggestions.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
-          {suggestions.length > 0 ? (
-            <p className="text-xs text-ink-soft">sugestões dos lançamentos anteriores</p>
           ) : null}
-        </div>
-        <div className="grid content-start gap-1.5">
-          <Label htmlFor="entry-document">Documento</Label>
-          <Input
-            id="entry-document"
-            value={fields.document}
-            placeholder="NF 4.812"
-            onChange={(e) => set({ document: e.target.value })}
-            className="min-h-11 font-mono md:min-h-0"
+          {fixed ? null : expense ? (
+            seriesLine ? (
+              <p className="flex items-center gap-1.5 text-sm text-ink">
+                <Repeat className="size-4 text-ink-soft" aria-hidden />
+                {seriesLine}
+              </p>
+            ) : null
+          ) : (
+          <RepeatSection
+            fields={repeatFields}
+            onChange={(patch) =>
+              setRepeatFields((r) => ({
+                ...r,
+                ...patch,
+                // Parcelado picks up a Vencimento the user already set.
+                ...(patch.choice === "installments" && r.choice !== "installments" && fields.dueTouched && fields.dueDate
+                  ? { firstDue: fields.dueDate }
+                  : {}),
+              }))
+            }
+            date={fields.date}
+            amount={parseAmount(fields.amount)}
           />
-        </div>
-        {capitalKind ? null : (
-          <div className="grid gap-1.5">
-            <Label htmlFor="entry-lot">Lote (centro de custo)</Label>
-            <Select value={fields.lotId} onValueChange={(lotId) => set({ lotId })}>
-              <SelectTrigger id="entry-lot" className="min-h-11 w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE}>Fazenda toda (rateio por cabeça)</SelectItem>
-                {lotOptions.map((lot) => (
-                  <SelectItem key={lot.id} value={lot.id}>
-                    {lot.name} · {heads.filter((a) => a.lotId === lot.id).length} cab
-                  </SelectItem>
+          )}
+        </section>
+
+        <section aria-labelledby="entry-details" className={COLUMN}>
+          <ColumnTitle id="entry-details" icon={Paperclip}>
+            Detalhes
+          </ColumnTitle>
+          <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-3">
+            <div className="grid content-start gap-1.5">
+              <Label htmlFor="entry-counterparty">{inflow ? "Recebido de" : "Pago para"}</Label>
+              <Input
+                id="entry-counterparty"
+                list="entry-counterparty-list"
+                value={fields.counterparty}
+                onChange={(e) => set({ counterparty: e.target.value })}
+                className="min-h-11 md:min-h-9"
+              />
+              <datalist id="entry-counterparty-list">
+                {suggestions.map((name) => (
+                  <option key={name} value={name} />
                 ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-ink-soft">Sem lote = fazenda toda, rateado por cabeça</p>
+              </datalist>
+            </div>
+            <div className="grid content-start gap-1.5">
+              <Label htmlFor="entry-document">Documento</Label>
+              <Input
+                id="entry-document"
+                value={fields.document}
+                placeholder="NF 4.812"
+                onChange={(e) => set({ document: e.target.value })}
+                className="min-h-11 font-mono md:min-h-9"
+              />
+            </div>
           </div>
-        )}
+          {capitalKind ? null : (
+            <div className="grid gap-1.5">
+              <Label htmlFor="entry-lot">Lote (centro de custo)</Label>
+              <Select value={fields.lotId} onValueChange={(lotId) => set({ lotId })}>
+                <SelectTrigger id="entry-lot" className="min-h-11 w-full md:min-h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>Fazenda toda (rateio por cabeça)</SelectItem>
+                  {lotOptions.map((lot) => (
+                    <SelectItem key={lot.id} value={lot.id}>
+                      {lot.name} · {heads.filter((a) => a.lotId === lot.id).length} cab
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <AttachmentsField expenseId={expense?.id} pending={pending} onPendingChange={setPending} busy={saving} />
+          <div className="grid gap-1.5">
+            <Label htmlFor="entry-notes">Observação</Label>
+            <Textarea
+              id="entry-notes"
+              rows={2}
+              value={fields.notes}
+              onChange={(e) => set({ notes: e.target.value })}
+              placeholder="Ex.: reforço de aftosa, 2ª dose"
+              className="min-h-14"
+            />
+          </div>
+        </section>
       </div>
 
-      <AttachmentsField
-        expenseId={expense?.id}
-        pending={pending}
-        onPendingChange={setPending}
-        busy={saving}
-      />
-
-      <div className="grid gap-1.5">
-        <Label htmlFor="entry-notes">Observação</Label>
-        <Textarea
-          id="entry-notes"
-          value={fields.notes}
-          onChange={(e) => set({ notes: e.target.value })}
-          placeholder="Ex.: reforço de aftosa, 2ª dose"
-        />
-      </div>
-
-      {error ? (
-        <p role="alert" className="text-xs text-overdue">
-          {error}
-        </p>
-      ) : null}
-
-      <DialogFooter>
-        <DialogClose asChild>
-          <Button type="button" variant="outline" className="min-h-11" disabled={saving}>
-            Cancelar
+      <div className="flex flex-col gap-3 border-t border-hairline bg-muted/50 px-5 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:flex-row sm:items-center">
+        {error ? (
+          <p role="alert" className="text-[13px] leading-[18px] text-overdue">
+            {error}
+          </p>
+        ) : summary ? (
+          <p className="flex min-w-0 items-start gap-2 text-[13px] leading-[18px] text-ink">
+            <SummaryIcon
+              className={cn("mt-px size-4 shrink-0", fields.paid ? "text-healthy" : "text-ink-soft")}
+              aria-hidden
+            />
+            <span>
+              {summary.lead} <strong className="font-mono font-semibold">{summary.value}</strong> {summary.rest}
+            </span>
+          </p>
+        ) : null}
+        <div className="flex gap-2 sm:ml-auto sm:shrink-0">
+          <DialogClose asChild>
+            <Button type="button" variant="outline" className="min-h-11 max-sm:hidden md:min-h-10" disabled={saving}>
+              Cancelar
+            </Button>
+          </DialogClose>
+          <Button type="submit" className="min-h-12 flex-1 sm:min-h-11 sm:flex-none md:min-h-10" disabled={saving}>
+            {expense
+              ? "Salvar"
+              : fixed
+                ? "Salvar e conciliar"
+                : repeatFields.choice === "installments"
+                  ? `Lançar ${countInRange(repeatFields.count) ? `${repeatFields.count} ` : ""}parcelas`
+                  : repeatFields.choice === "recurring"
+                    ? "Lançar recorrência"
+                    : "Lançar"}
           </Button>
-        </DialogClose>
-        <Button type="submit" className="min-h-11" disabled={saving}>
-          {expense
-            ? "Salvar"
-            : fixed
-              ? "Salvar e conciliar"
-              : repeatFields.choice === "installments"
-                ? `Lançar ${countInRange(repeatFields.count) ? `${repeatFields.count} ` : ""}parcelas`
-                : repeatFields.choice === "recurring"
-                  ? "Lançar recorrência"
-                  : "Lançar"}
-        </Button>
-      </DialogFooter>
+        </div>
+      </div>
 
       {expense && scopePatch ? (
         <SeriesScopeDialog
@@ -848,5 +947,28 @@ function EntryForm({
         />
       ) : null}
     </form>
+  );
+}
+
+/** The heading of a column: an icon tile and the question it answers. */
+function ColumnTitle({
+  id,
+  icon: Icon,
+  note,
+  children,
+}: {
+  id: string;
+  icon: LucideIcon;
+  note?: string;
+  children: ReactNode;
+}) {
+  return (
+    <h3 id={id} className="flex items-center gap-2 text-[13px] leading-5 font-semibold text-ink">
+      <span aria-hidden className="flex size-[22px] items-center justify-center rounded-[7px] bg-brand-soft text-brand">
+        <Icon className="size-3.5" />
+      </span>
+      {children}
+      {note ? <span className="ml-auto text-[11px] font-normal text-ink-soft">{note}</span> : null}
+    </h3>
   );
 }

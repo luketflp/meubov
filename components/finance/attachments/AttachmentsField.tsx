@@ -136,11 +136,13 @@ export function AttachmentsField({ expenseId, pending, onPendingChange, busy = f
   }
 
   return (
-    <fieldset className="grid min-w-0 gap-3 border-t border-hairline pt-4">
+    <fieldset className="grid min-w-0 gap-2">
       <legend className="float-left w-full">
         <span className="flex items-baseline justify-between gap-2">
-          <span className="text-sm font-semibold text-ink">Anexos</span>
-          {total > 0 ? <span className="text-xs text-ink-soft">{fileCountLabel(total)}</span> : null}
+          <span className="text-xs leading-4 font-medium text-ink-soft">Anexos</span>
+          {enabled === false ? null : (
+            <span className="text-[11px] text-ink-soft">{total > 0 ? fileCountLabel(total) : "foto ou PDF, até 5 MB"}</span>
+          )}
         </span>
       </legend>
       {enabled === false ? (
@@ -148,7 +150,7 @@ export function AttachmentsField({ expenseId, pending, onPendingChange, busy = f
       ) : (
         <>
           {total > 0 ? (
-            <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+            <ul className="grid grid-cols-4 gap-2.5 lg:grid-cols-5">
               {saved.map((attachment) => (
                 <SavedAttachmentTile
                   key={attachment.id}
@@ -173,7 +175,7 @@ export function AttachmentsField({ expenseId, pending, onPendingChange, busy = f
               ))}
             </ul>
           ) : null}
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-1">
             <Button
               type="button"
               variant="outline"
@@ -197,7 +199,7 @@ export function AttachmentsField({ expenseId, pending, onPendingChange, busy = f
             <Button
               type="button"
               variant="outline"
-              className="hidden md:inline-flex"
+              className="hidden w-full border-dashed text-brand md:inline-flex"
               disabled={!canAdd}
               onClick={() => fileRef.current?.click()}
             >
@@ -214,9 +216,7 @@ export function AttachmentsField({ expenseId, pending, onPendingChange, busy = f
             onChange={(e) => void onChoose(e)}
           />
           <input ref={fileRef} type="file" accept={ATTACHMENT_ACCEPT} multiple hidden onChange={(e) => void onChoose(e)} />
-          <p className="text-xs text-ink-soft">
-            {offline || enabled === null ? "precisa de sinal" : "até 5 MB · fotos são reduzidas no celular"}
-          </p>
+          {offline || enabled === null ? <p className="text-xs text-ink-soft">precisa de sinal</p> : null}
           {error ? (
             <p role="alert" className="text-xs text-overdue">
               {error}

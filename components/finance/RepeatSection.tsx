@@ -111,8 +111,8 @@ export function RepeatSection({
   const valid = repeat !== null && typeof repeat !== "string" ? repeat : null;
 
   return (
-    <fieldset className="grid min-w-0 gap-3 border-t border-hairline pt-4">
-      <legend className="float-left w-full text-sm font-semibold text-ink">Repetir</legend>
+    <fieldset className="grid min-w-0 gap-2">
+      <legend className="float-left w-full text-xs leading-4 font-medium text-ink-soft">Repetir</legend>
       <div
         role="radiogroup"
         aria-label="Repetir"
@@ -137,9 +137,15 @@ export function RepeatSection({
         ))}
       </div>
 
+      {fields.choice === "once" ? (
+        <p className="text-[11px] leading-[14px] text-ink-soft">
+          Parcelado divide o valor; Recorrente repete todo mês ou semana.
+        </p>
+      ) : null}
+
       {fields.choice === "installments" ? (
         <>
-          <div className="grid grid-cols-[88px_minmax(0,1fr)] gap-3 sm:grid-cols-[88px_minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2.5 sm:grid-cols-[64px_minmax(0,1fr)_92px]">
             <div className="grid gap-1.5">
               <Label htmlFor="repeat-count">Parcelas</Label>
               <Input
@@ -150,23 +156,23 @@ export function RepeatSection({
                 max={MAX_INSTALLMENTS}
                 value={fields.count}
                 onChange={(e) => onChange({ count: e.target.value })}
-                className="min-h-11 font-mono md:min-h-0"
+                className="min-h-11 font-mono md:min-h-9"
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="repeat-first">Primeira parcela vence</Label>
+              <Label htmlFor="repeat-first">1ª parcela vence</Label>
               <Input
                 id="repeat-first"
                 type="date"
                 value={fields.firstDue}
                 onChange={(e) => onChange({ firstDue: e.target.value })}
-                className="min-h-11 font-mono md:min-h-0"
+                className="min-h-11 font-mono md:min-h-9"
               />
             </div>
             <div className="col-span-2 grid gap-1.5 sm:col-span-1">
               <Label htmlFor="repeat-interval">Intervalo</Label>
               <Select value={fields.frequency} onValueChange={(v) => onChange({ frequency: v as SeriesFrequency })}>
-                <SelectTrigger id="repeat-interval" className="min-h-11 w-full">
+                <SelectTrigger id="repeat-interval" className="min-h-11 w-full md:min-h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -177,18 +183,18 @@ export function RepeatSection({
             </div>
           </div>
           {valid?.mode === "installments" ? (
-            <InstallmentPreview repeat={valid} amount={amount} />
+            <InstallmentPreview repeat={valid} amount={amount} compact />
           ) : null}
         </>
       ) : null}
 
       {fields.choice === "recurring" ? (
         <>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2.5">
             <div className="grid gap-1.5">
               <Label htmlFor="repeat-frequency">Repete a cada</Label>
               <Select value={fields.frequency} onValueChange={(v) => onChange({ frequency: v as SeriesFrequency })}>
-                <SelectTrigger id="repeat-frequency" className="min-h-11 w-full">
+                <SelectTrigger id="repeat-frequency" className="min-h-11 w-full md:min-h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -208,7 +214,7 @@ export function RepeatSection({
                   max={31}
                   value={fields.day}
                   onChange={(e) => onChange({ day: e.target.value })}
-                  className="min-h-11 font-mono md:min-h-0"
+                  className="min-h-11 font-mono md:min-h-9"
                 />
               </div>
             ) : null}
@@ -222,7 +228,7 @@ export function RepeatSection({
                 value={fields.until}
                 disabled={fields.noEnd}
                 onChange={(e) => onChange({ until: e.target.value })}
-                className="min-h-11 w-auto min-w-0 flex-1 font-mono md:min-h-0"
+                className="min-h-11 w-auto min-w-0 flex-1 font-mono md:min-h-9"
               />
               <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-ink md:min-h-0">
                 <input
@@ -247,8 +253,20 @@ export function RepeatSection({
   );
 }
 
-/** The parcelas with their vencimentos and values; Parcelar shows the same list. */
-export function InstallmentPreview({ repeat, amount }: { repeat: SeriesRepeat; amount: number }) {
+/**
+ * The parcelas with their vencimentos and values; Parcelar shows the same list.
+ * `compact` (Novo lançamento): no sentence, no total row, shorter rows, and
+ * from lg three rows show before the list scrolls, so the dialog never has to.
+ */
+export function InstallmentPreview({
+  repeat,
+  amount,
+  compact = false,
+}: {
+  repeat: SeriesRepeat;
+  amount: number;
+  compact?: boolean;
+}) {
   const count = repeat.count ?? 0;
   const typed = Number.isFinite(amount) && amount > 0;
   const total = typed ? amount : 0;
@@ -257,15 +275,17 @@ export function InstallmentPreview({ repeat, amount }: { repeat: SeriesRepeat; a
   const money = (value: number) => (typed ? formatCurrency(value) : "—");
   return (
     <>
-      <p className="text-xs text-ink-soft">
-        O valor total é dividido em {count} parcelas, cada uma com seu vencimento em Contas.
-      </p>
+      {compact ? null : (
+        <p className="text-xs text-ink-soft">
+          O valor total é dividido em {count} parcelas, cada uma com seu vencimento em Contas.
+        </p>
+      )}
       <div className="overflow-hidden rounded-lg border border-hairline">
-        <ol aria-label="Parcelas" className="max-h-56 overflow-y-auto">
+        <ol aria-label="Parcelas" className={cn("max-h-56 overflow-y-auto", compact && "lg:max-h-[84px]")}>
           {plan.map((line) => (
             <li
               key={line.index}
-              className={cn("flex min-h-9 items-center gap-2.5 px-3", line.index > 1 && "border-t border-hairline")}
+              className={cn("flex items-center gap-2.5 px-3", compact ? "min-h-7" : "min-h-9", line.index > 1 && "border-t border-hairline")}
             >
               <span className="inline-flex shrink-0 items-center rounded-md border border-hairline bg-surface px-1.5 font-mono text-[11px] leading-4 font-medium text-ink">
                 {line.index}/{count}
@@ -278,12 +298,15 @@ export function InstallmentPreview({ repeat, amount }: { repeat: SeriesRepeat; a
             </li>
           ))}
         </ol>
-        <div className="flex items-center justify-between gap-2 border-t border-hairline bg-surface px-3 py-2">
-          <span className="text-xs text-ink-soft">a última parcela absorve os centavos</span>
-          <span className="text-[13px] font-semibold text-ink">
-            Total <span className="font-mono">{money(total)}</span>
-          </span>
-        </div>
+        {/* Novo lançamento shows each parcela's value and the total above it. */}
+        {compact ? null : (
+          <div className="flex items-center justify-between gap-2 border-t border-hairline bg-surface px-3 py-2">
+            <span className="text-xs text-ink-soft">a última parcela absorve os centavos</span>
+            <span className="text-[13px] font-semibold text-ink">
+              Total <span className="font-mono">{money(total)}</span>
+            </span>
+          </div>
+        )}
       </div>
     </>
   );
@@ -303,7 +326,7 @@ function RecurringPreview({ repeat }: { repeat: SeriesRepeat }) {
       <span className="basis-full">
         {until
           ? `${recurringDates(rule, 1, until).length} contas até ${monthYear(until)}, cada uma aparece em Contas perto do vencimento`
-          : "sem fim · Contas mostra as contas dos próximos 12 meses"}
+          : "sem fim · Contas mostra os próximos 12 meses"}
       </span>
     </p>
   );

@@ -62,7 +62,7 @@ export function PaidByField({
         onValueChange={(next) => onChange(next === NO_ACCOUNT ? "" : next)}
         disabled={disabled}
       >
-        <SelectTrigger id={id} className="min-h-11 w-full">
+        <SelectTrigger id={id} className="min-h-11 w-full md:min-h-9">
           <SelectValue placeholder="Escolha a conta" />
         </SelectTrigger>
         <SelectContent>

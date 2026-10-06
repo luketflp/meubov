@@ -4,10 +4,23 @@
  * a linha do extrato), `withKind` keeps it sound when the type or the
  * movimento changes, and `entryValues` turns it into the row the API takes: a
  * receita and the capital kinds write category "other"; the capital kinds
- * need a conta and a movimento and take no lote. Pure.
+ * need a conta and a movimento and take no lote. `entrySummary` is the line
+ * at the foot of the dialog that says what will be lançado. Pure.
  */
-import type { BankAccount, EntryFlow, EntryKind, Expense, ExpenseCategory, ExpenseGroup, StatementLine } from "@/lib/types";
-import { isCapitalKind, isInflow, mayPayFrom } from "@/lib/domain/entries";
+import type {
+  BankAccount,
+  EntryFlow,
+  EntryKind,
+  Expense,
+  ExpenseCategory,
+  ExpenseGroup,
+  SeriesRepeat,
+  StatementLine,
+} from "@/lib/types";
+import { ENTRY_KIND_LABEL, FLOW_LABEL, isCapitalKind, isInflow, mayPayFrom } from "@/lib/domain/entries";
+import { formatDate } from "@/lib/domain/dates";
+import { formatCurrency } from "@/lib/domain/format";
+import { installmentPlan } from "@/lib/domain/series";
 import { despesaGroups } from "@/lib/domain/groups";
 import type { EntryInitial } from "@/lib/domain/planTree";
 import { parseAmount } from "@/components/finance/parseAmount";
@@ -202,3 +215,51 @@ export function entryValues(fields: EntryFields, repeating: boolean): EntryValue
   };
 }
 
+/** "Despesa de" · "R$ 3.840,00" · "em Máquinas e veículos › Diesel · pago hoje · Sicredi". */
+export interface EntrySummary {
+  lead: string;
+  value: string;
+  rest: string;
+}
+
+/**
+ * What the form will lançar, in one line; null while it would not save.
+ * `repeat`: the parcelamento or recorrência chosen, null for Uma vez.
+ */
+export function entrySummary(
+  fields: EntryFields,
+  repeat: SeriesRepeat | null,
+  names: { group?: string; account?: string; bank?: string },
+  today: string
+): EntrySummary | null {
+  if (typeof entryValues(fields, repeat !== null) === "string") return null;
+  const amount = parseAmount(fields.amount);
+  const capital = isCapitalKind(fields.kind);
+  const what = isCapitalKind(fields.kind) ? FLOW_LABEL[fields.kind][fields.flow] : ENTRY_KIND_LABEL[fields.kind];
+  const where =
+    fields.kind === "expense"
+      ? [names.group, names.account].filter(Boolean).join(" › ")
+      : (names.account ?? (fields.kind === "revenue" ? "Receitas" : ""));
+  const day = (iso: string) => (iso === today ? "hoje" : formatDate(iso).slice(0, 5));
+  const inflow = isInflow(fields);
+  const rest = [where ? `em ${where}` : "", capital ? "fora do custo" : ""];
+  // "a 1ª" is the first parcela or conta of a série; "Já pago" belongs to it alone.
+  const first = (startsOn: string) =>
+    fields.paid ? `a 1ª ${inflow ? "recebida" : "paga"} ${day(fields.paidAt)}` : `a 1ª vence ${day(startsOn)}`;
+  let lead = `${what} de`;
+  let value = formatCurrency(amount);
+  if (repeat?.mode === "installments") {
+    const plan = installmentPlan(amount, repeat.count ?? 0, repeat.startsOn, repeat.frequency);
+    lead = `${plan.length} parcelas de`;
+    value = formatCurrency(plan[0].amountBrl);
+    rest.push(first(repeat.startsOn));
+  } else if (repeat) {
+    lead = `${what} recorrente de`;
+    rest.push(first(repeat.startsOn));
+  } else if (fields.paid) {
+    rest.push(`${inflow ? "recebido" : "pago"} ${day(fields.paidAt)}`, names.bank ?? "");
+  } else {
+    rest.push(`vence ${day(fields.dueDate)}`);
+  }
+  return { lead, value, rest: rest.filter(Boolean).join(" · ") };
+}

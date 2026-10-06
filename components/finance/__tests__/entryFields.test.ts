@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BankAccount, Expense } from "@/lib/types";
-import { NONE, entryValues, initialFields, withKind, type EntryFields } from "@/components/finance/entryFields";
+import { NONE, entrySummary, entryValues, initialFields, withKind, type EntryFields } from "@/components/finance/entryFields";
 
 const TODAY = "2026-10-01";
 
@@ -197,5 +197,41 @@ describe("entryValues", () => {
   it("reads Vencimento only when Repetir does not set it", () => {
     expect(entryValues(form({ dueDate: "" }), false)).toBe("Informe o vencimento.");
     expect(entryValues(form({ dueDate: "" }), true)).not.toBeTypeOf("string");
+  });
+});
+
+describe("entrySummary", () => {
+  const NAMES = { group: "Máquinas e veículos", account: "Diesel", bank: "Sicredi" };
+  const brl = (text: string) => text.replace(" ", "\u00a0");
+
+  it("says what, how much, where and that it was paid today, by which conta", () => {
+    expect(entrySummary(form(), null, NAMES, TODAY)).toEqual({
+      lead: "Despesa de",
+      value: brl("R$ 1.500,00"),
+      rest: "em Máquinas e veículos › Diesel · pago hoje · Sicredi",
+    });
+  });
+
+  it("gives the vencimento of a pending lançamento and the movimento of a capital one", () => {
+    const compra = form({ kind: "investment", paid: false, dueDate: "2026-10-15", accountId: "maq" });
+    expect(entrySummary(compra, null, { account: "Máquinas e implementos" }, TODAY)).toEqual({
+      lead: "Compra de",
+      value: brl("R$ 1.500,00"),
+      rest: "em Máquinas e implementos · fora do custo · vence 15/10",
+    });
+  });
+
+  it("counts the parcelas and gives the first one's value and vencimento", () => {
+    const rule = { mode: "installments", count: 3, frequency: "monthly", startsOn: "2026-11-05" } as const;
+    expect(entrySummary(form({ amount: "100,00", paid: false }), rule, NAMES, TODAY)).toEqual({
+      lead: "3 parcelas de",
+      value: brl("R$ 33,33"),
+      rest: "em Máquinas e veículos › Diesel · a 1ª vence 05/11",
+    });
+  });
+
+  it("says nothing while the form would not save", () => {
+    expect(entrySummary(form({ amount: "" }), null, NAMES, TODAY)).toBeNull();
+    expect(entrySummary(form({ kind: "partners", accountId: NONE }), null, {}, TODAY)).toBeNull();
   });
 });
