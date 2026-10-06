@@ -15,8 +15,17 @@ export type AnimalStatus = "healthy" | "attention" | "overdue";
 /** Status derived from a health treatment. */
 export type TreatmentStatus = "scheduled" | "overdue" | "done";
 
-/** Health treatment type. */
-export type TreatmentType = "vaccine" | "deworming" | "medication" | "exam";
+/**
+ * Health treatment type. Inseminação and ultrassom are calendar reminders only:
+ * the brete records the real coberturas and diagnoses.
+ */
+export type TreatmentType =
+  | "vaccine"
+  | "deworming"
+  | "medication"
+  | "exam"
+  | "insemination"
+  | "ultrasound";
 
 /** Breeding type. */
 export type BreedingType = "timedAI" | "naturalMating";

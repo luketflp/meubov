@@ -4,7 +4,7 @@
  * scheduledTreatmentsInWindow, herdAverageAdg) live in lib/domain.
  */
 import type { Category, Invernada, TreatmentType } from "@/lib/types";
-import { pluralCategory } from "@/lib/domain/labels";
+import { isMasculineTreatment, pluralCategory } from "@/lib/domain/labels";
 import { daysBetween, parseISODate } from "@/lib/domain/dates";
 
 /**
@@ -52,11 +52,11 @@ const inDays = (days: number): string => (days === 1 ? "1 dia" : `${days} dias`)
 
 /**
  * When a treatment batch is due, as its pill reads: "Atrasada há 6 dias",
- * "Hoje" or "25/09 · em 3 dias". An exame is masculine ("Atrasado").
+ * "Hoje" or "25/09 · em 3 dias".
  */
 export function treatmentDueText(date: string, type: TreatmentType, todayIso: string): string {
   const late = daysBetween(date, todayIso);
-  if (late > 0) return `${type === "exam" ? "Atrasado" : "Atrasada"} há ${inDays(late)}`;
+  if (late > 0) return `${isMasculineTreatment(type) ? "Atrasado" : "Atrasada"} há ${inDays(late)}`;
   if (late === 0) return "Hoje";
   return `${dayMonth(date)} · em ${inDays(-late)}`;
 }

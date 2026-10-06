@@ -14,6 +14,7 @@ const ACTION_STYLES: Record<ManejoAction, string> = {
   exam: "bg-fmd-soft text-fmd",
   weighing: "bg-brand-soft text-brand",
   insemination: "bg-scheduled-soft text-scheduled",
+  ultrasound: "bg-scheduled-soft text-scheduled",
   // Carried over from the old movement pills, so the colors farmers already
   // read as entrada/saída/transferência survive the move into Manejo.
   entry: "bg-healthy-soft text-healthy",

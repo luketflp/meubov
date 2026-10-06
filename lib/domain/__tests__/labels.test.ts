@@ -67,6 +67,8 @@ describe("TREATMENT_TYPE_LABEL", () => {
       deworming: "Vermifugação",
       medication: "Medicação",
       exam: "Exame",
+      insemination: "Inseminação",
+      ultrasound: "Ultrassom",
     };
     expect(TREATMENT_TYPE_LABEL).toEqual(expected);
   });

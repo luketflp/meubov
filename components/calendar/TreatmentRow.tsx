@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { StatusDot } from "@/components/ui/status-dot";
 import { StatusPill } from "@/components/ui/status-pill";
 import { TYPE_LABEL } from "@/components/calendar/helpers";
+import { ReproShortcut } from "@/components/calendar/ReproShortcut";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { animalByEarTag } from "@/lib/store/selectors";
 import { useCan } from "@/lib/store/usePermissions";
@@ -58,6 +59,7 @@ export function TreatmentRow({
         </p>
       </div>
       <StatusPill status={status} />
+      {compact || status === "done" ? null : <ReproShortcut treatments={[treatment]} />}
       {canEdit && status !== "done" ? (
         <Button
           variant="outline"

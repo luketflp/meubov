@@ -73,6 +73,8 @@ const TYPE_SHORT_NAME: Record<TreatmentType, string> = {
   deworming: "Vermíf.",
   medication: "Medic.",
   exam: "Exame",
+  insemination: "Insem.",
+  ultrasound: "Ultrass.",
 };
 
 /** Full label of the treatment type (canonical from lib/domain). */

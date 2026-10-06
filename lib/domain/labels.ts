@@ -58,7 +58,14 @@ export const TREATMENT_TYPE_LABEL: Record<TreatmentType, string> = {
   deworming: "Vermifugação",
   medication: "Medicação",
   exam: "Exame",
+  insemination: "Inseminação",
+  ultrasound: "Ultrassom",
 };
+
+/** Exame and ultrassom are masculine: "atrasado", where the rest read "atrasada". */
+export function isMasculineTreatment(type: TreatmentType): boolean {
+  return type === "exam" || type === "ultrasound";
+}
 
 /** Label of each breeding type, e.g.: "Monta natural". */
 export const BREEDING_TYPE_LABEL: Record<BreedingType, string> = {

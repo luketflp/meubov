@@ -60,4 +60,6 @@ export const TreatmentTypeModel = t.Union([
   t.Literal("deworming"),
   t.Literal("medication"),
   t.Literal("exam"),
+  t.Literal("insemination"),
+  t.Literal("ultrasound"),
 ]);

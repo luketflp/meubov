@@ -175,11 +175,17 @@ interface RegisterManejoDialogProps {
    * it, and the choice of type is not offered.
    */
   initialAction?: ManejoAction;
+  /** Lotes picked when the dialog opens (an agendamento's); closed lotes are dropped. */
+  initialLotIds?: string[];
   /** Button that opens the dialog; "Iniciar manejo" by default. */
   trigger?: ReactNode;
 }
 
-export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoDialogProps) {
+export function RegisterManejoDialog({
+  initialAction,
+  initialLotIds,
+  trigger,
+}: RegisterManejoDialogProps) {
   const router = useRouter();
   const lots = useHerdStore((s) => s.lots);
   const invernadas = useHerdStore((s) => s.invernadas);
@@ -239,7 +245,9 @@ export function RegisterManejoDialog({ initialAction, trigger }: RegisterManejoD
     if (next) {
       setFields(createInitialFields(initialAction ?? "vaccine"));
       setErrors({});
-      setLotIds([]);
+      setLotIds(
+        (initialLotIds ?? []).filter((id) => filterLots.some((lot) => lot.id === id))
+      );
       setCategories([]);
       setSearch("");
     }

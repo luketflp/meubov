@@ -25,9 +25,11 @@ describe("dayMonth", () => {
 });
 
 describe("treatmentDueText", () => {
-  it("counts the days late, an exame in the masculine", () => {
+  it("counts the days late, an exame or ultrassom in the masculine", () => {
     expect(treatmentDueText("2026-09-16", "vaccine", TODAY)).toBe("Atrasada há 6 dias");
     expect(treatmentDueText("2026-09-21", "exam", TODAY)).toBe("Atrasado há 1 dia");
+    expect(treatmentDueText("2026-09-21", "ultrasound", TODAY)).toBe("Atrasado há 1 dia");
+    expect(treatmentDueText("2026-09-21", "insemination", TODAY)).toBe("Atrasada há 1 dia");
   });
 
   it("says today, or the date and the days ahead", () => {

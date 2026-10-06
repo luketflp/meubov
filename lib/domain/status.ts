@@ -2,6 +2,7 @@
  * Derivation of treatment and animal status.
  */
 import type { Animal, AnimalStatus, TreatmentStatus, Treatment } from "@/lib/types";
+import { isMasculineTreatment } from "@/lib/domain/labels";
 import { daysBetween } from "@/lib/domain/dates";
 import { currentDiagnosis } from "@/lib/domain/reproduction";
 
@@ -85,7 +86,7 @@ export function deriveAnimalStatus(
 
 /** Gender suffix to agree with the treatment type. */
 function overdueSuffix(t: Treatment): "atrasado" | "atrasada" {
-  return t.type === "exam" ? "atrasado" : "atrasada";
+  return isMasculineTreatment(t.type) ? "atrasado" : "atrasada";
 }
 
 function plural(days: number): string {

@@ -61,6 +61,8 @@ export const treatmentTypeEnum = pgEnum("treatment_type", [
   "deworming",
   "medication",
   "exam",
+  "insemination",
+  "ultrasound",
 ]);
 
 /** Status derived from a health treatment (persisted on the record). */

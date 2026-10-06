@@ -38,6 +38,8 @@ const RESUMO_TITLE: Record<TreatmentType, string> = {
   deworming: "Resumo da vermifugação",
   medication: "Resumo da medicação",
   exam: "Resumo do exame",
+  insemination: "Resumo da inseminação",
+  ultrasound: "Resumo do ultrassom",
 };
 
 export function TreatmentDetail({ session }: { session: ManejoSession }) {

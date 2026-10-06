@@ -13,7 +13,7 @@ import type {
 } from "@/lib/types";
 import { daysBetween } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/domain/format";
-import { TREATMENT_TYPE_LABEL } from "@/lib/domain/labels";
+import { TREATMENT_TYPE_LABEL, isMasculineTreatment } from "@/lib/domain/labels";
 import { deriveTreatmentStatus, isFootAndMouth } from "@/lib/domain/status";
 import { missedBrete } from "@/lib/domain/manejoDetail";
 import type { SaleRow } from "@/lib/domain/movements";
@@ -131,7 +131,7 @@ export function pendingActivities(treatments: Treatment[], todayIso: string): Ma
 /** "atrasada há N dias" / "hoje" / "em N dias" for an activity. */
 export function activityDueLabel(activity: ManejoActivity, todayIso: string): string {
   const days = daysBetween(activity.date, todayIso);
-  const suffix = activity.type === "exam" ? "atrasado" : "atrasada";
+  const suffix = isMasculineTreatment(activity.type) ? "atrasado" : "atrasada";
   if (days > 0) return `${suffix} há ${days === 1 ? "1 dia" : `${days} dias`}`;
   if (days === 0) return "hoje";
   const ahead = -days;

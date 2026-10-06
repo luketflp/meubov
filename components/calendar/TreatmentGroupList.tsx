@@ -8,6 +8,7 @@ import { deriveTreatmentStatus, isFootAndMouth } from "@/lib/domain/status";
 import { useCan } from "@/lib/store/usePermissions";
 import { Button } from "@/components/ui/button";
 import { StatusDot } from "@/components/ui/status-dot";
+import { ReproShortcut } from "@/components/calendar/ReproShortcut";
 import { TreatmentRow } from "@/components/calendar/TreatmentRow";
 import { TYPE_LABEL, groupTreatments } from "@/components/calendar/helpers";
 import { cn } from "@/lib/utils";
@@ -84,6 +85,9 @@ export function TreatmentGroupList({
                   {TYPE_LABEL[first.type]} · {group.treatments.length} animais
                 </span>
               </button>
+              {group.treatments.some((t) => t.status !== "done") ? (
+                <ReproShortcut treatments={group.treatments} />
+              ) : null}
               {canEdit ? (
                 <Button
                   variant="ghost"

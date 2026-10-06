@@ -101,6 +101,8 @@ const TREATED_LABEL: Record<TreatmentType, string> = {
   deworming: "vermifugadas",
   medication: "medicadas",
   exam: "examinadas",
+  insemination: "inseminadas",
+  ultrasound: "examinadas",
 };
 
 /* -------------------------------------------------------------------------- */

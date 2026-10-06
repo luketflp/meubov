@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusDot } from "@/components/ui/status-dot";
 import { daysAgoLabel, groupTreatments, overdueByLot } from "@/components/calendar/helpers";
+import { ReproShortcut } from "@/components/calendar/ReproShortcut";
 import { activeLots } from "@/lib/store/selectors";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
@@ -96,6 +97,7 @@ export function OverdueSection({
                   </p>
                   {animalLink(first)}
                 </div>
+                <ReproShortcut treatments={group.treatments} />
                 {canEdit ? (
                   <>
                     <Button
@@ -143,6 +145,7 @@ export function OverdueSection({
                     {group.treatments.length} animais
                   </span>
                 </button>
+                <ReproShortcut treatments={group.treatments} />
                 {canEdit ? (
                   <Button
                     variant="ghost"
