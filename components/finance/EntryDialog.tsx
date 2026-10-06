@@ -901,7 +901,10 @@ function EntryForm({
         ) : summary ? (
           <p className="flex min-w-0 items-start gap-2 text-[13px] leading-[18px] text-ink">
             <SummaryIcon
-              className={cn("mt-px size-4 shrink-0", fields.paid ? "text-healthy" : "text-ink-soft")}
+              className={cn(
+                "mt-px size-4 shrink-0",
+                fields.paid ? (inflow ? "text-healthy" : "text-fmd") : "text-ink-soft"
+              )}
               aria-hidden
             />
             <span>

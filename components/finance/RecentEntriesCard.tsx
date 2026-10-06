@@ -13,7 +13,8 @@ const RECENT = 5;
 
 /** StatusPill's colors with the ledger's words (StatusPill's own labels are fixed). */
 const STATUS: Record<LedgerStatus, { label: string; pill: string; dot: string }> = {
-  paid: { label: "pago", pill: "bg-healthy-soft text-healthy", dot: "bg-healthy" },
+  // Money out in the terracotta of Custo; the deeper red stays for vencida.
+  paid: { label: "pago", pill: "bg-fmd-soft text-fmd", dot: "bg-fmd" },
   received: { label: "recebido", pill: "bg-healthy-soft text-healthy", dot: "bg-healthy" },
   payable: { label: "a pagar", pill: "bg-attention-soft text-attention", dot: "bg-attention" },
   receivable: { label: "a receber", pill: "bg-scheduled-soft text-scheduled", dot: "bg-scheduled" },

@@ -3,7 +3,8 @@ import type { LedgerStatus } from "@/lib/domain/ledger";
 import { cn } from "@/lib/utils";
 
 const STATUS_PILL: Record<LedgerStatus, { label: string; className: string }> = {
-  paid: { label: "pago", className: "bg-healthy-soft text-healthy" },
+  // Money out in the terracotta of Custo; the deeper red stays for vencida.
+  paid: { label: "pago", className: "bg-fmd-soft text-fmd" },
   received: { label: "recebido", className: "bg-healthy-soft text-healthy" },
   payable: { label: "a pagar", className: "bg-attention-soft text-attention" },
   receivable: { label: "a receber", className: "bg-scheduled-soft text-scheduled" },
