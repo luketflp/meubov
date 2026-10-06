@@ -32,7 +32,7 @@ export const HeadquartersBody = t.Object({
 
 /**
  * Body of POST /farms: a new farm, optionally started from the open farm's
- * raças, categorias and protocolos. Trimming and limits are the use case's.
+ * raças and categorias. Trimming and limits are the use case's.
  */
 export const NewFarmBody = t.Object({
   name: t.String(),

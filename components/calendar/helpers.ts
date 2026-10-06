@@ -5,7 +5,6 @@
  */
 import type {
   Animal,
-  HealthProtocol,
   Lot,
   Treatment,
   TreatmentStatus,
@@ -223,24 +222,6 @@ export function dayChips(treatments: Treatment[], todayIso: string): DayChip[] {
     }
   }
   return [...map.values()];
-}
-
-/**
- * Next foot-and-mouth campaign month: last dose done + interval of the
- * mandatory protocol. Null if there is no protocol or history.
- */
-export function nextFootAndMouthCampaign(
-  treatments: Treatment[],
-  protocols: HealthProtocol[]
-): YearMonth | null {
-  const protocol = protocols.find((p) => p.mandatory && isFootAndMouth(p));
-  if (!protocol) return null;
-  const done = treatments.filter((t) => isFootAndMouth(t) && t.status === "done");
-  if (done.length === 0) return null;
-  const last = done.reduce((max, t) => (t.date > max.date ? t : max));
-  const d = parseISODate(last.date);
-  const monthIndex = d.getMonth() + protocol.intervalMonths;
-  return { year: d.getFullYear() + Math.floor(monthIndex / 12), month: (monthIndex % 12) + 1 };
 }
 
 /** "há 1 dia" / "há N dias" for overdue. */

@@ -20,7 +20,6 @@ import {
   expenseSeries,
   expenses,
   farm,
-  healthProtocols,
   invernadas,
   lotPlacements,
   lots,
@@ -58,7 +57,6 @@ import {
   toManejoSession,
   toManejoSessionAnimal,
   toMovement,
-  toProtocol,
   toSemenBull,
   toSemenPurchase,
   toTransfer,
@@ -103,7 +101,6 @@ export class LoadHerdUseCase implements CurrUseCase {
       lotPlacementRows,
       breedRows,
       movementRows,
-      protocolRows,
       sessionRows,
       expenseRows,
       customCategoryRows,
@@ -143,11 +140,6 @@ export class LoadHerdUseCase implements CurrUseCase {
         ),
       this.repository.select().from(breeds).where(eq(breeds.farmId, farmId)).orderBy(asc(breeds.name)),
       this.repository.select().from(movements).where(eq(movements.farmId, farmId)).orderBy(asc(movements.date)),
-      this.repository
-        .select()
-        .from(healthProtocols)
-        .where(eq(healthProtocols.farmId, farmId))
-        .orderBy(asc(healthProtocols.id)),
       this.repository
         .select()
         .from(manejoSessions)
@@ -338,7 +330,6 @@ export class LoadHerdUseCase implements CurrUseCase {
         new Map(herdLots.map((lot) => [lot.id, lot.name]))
       ),
       breeds: breedRows.map((row) => row.name),
-      protocols: protocolRows.map(toProtocol),
       manejoSessions: sessions,
       expenses: expenseRows.map((row) =>
         toExpense(

@@ -952,19 +952,6 @@ export const budgets = pgTable(
   ]
 );
 
-/** Recurring health protocol of the farm. */
-export const healthProtocols = pgTable("health_protocols", {
-  id: text("id").primaryKey(),
-  farmId: integer("farm_id")
-    .notNull()
-    .references(() => farm.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  type: treatmentTypeEnum("type").notNull(),
-  intervalMonths: integer("interval_months").notNull(),
-  withdrawalDays: integer("withdrawal_days").notNull(),
-  mandatory: boolean("mandatory").notNull(),
-});
-
 /**
  * Manejo session: a curral working session. The optional sanitary plan
  * (ManejoTreatmentPlan) is flattened into nullable `plan*` columns; the plan
@@ -1093,7 +1080,6 @@ export type StatementImportRow = typeof statementImports.$inferSelect;
 export type StatementLineRow = typeof statementLines.$inferSelect;
 export type BudgetRow = typeof budgets.$inferSelect;
 export type CustomCategoryRow = typeof customCategories.$inferSelect;
-export type HealthProtocolRow = typeof healthProtocols.$inferSelect;
 export type ManejoSessionRow = typeof manejoSessions.$inferSelect;
 export type ManejoSessionAnimalRow = typeof manejoSessionAnimals.$inferSelect;
 

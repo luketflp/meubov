@@ -77,11 +77,6 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
       "manejo",
     ],
   },
-  "DELETE /api/herd/protocols/:id": {
-    "edit": [
-      "sanitary",
-    ],
-  },
   "DELETE /api/herd/semen-bulls/:id": {
     "edit": [
       "reproduction",
@@ -389,11 +384,6 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
   "POST /api/herd/manejo/:id/close": {
     "edit": [
       "manejo",
-    ],
-  },
-  "POST /api/herd/protocols": {
-    "edit": [
-      "sanitary",
     ],
   },
   "POST /api/herd/semen-bulls": {

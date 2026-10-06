@@ -13,7 +13,6 @@ export function makeData(overrides: Partial<HerdData> = {}): HerdData {
     lotPlacements: [],
     movements: [],
     breeds: [],
-    protocols: [],
     manejoSessions: [],
     expenses: [],
     accounts: [],

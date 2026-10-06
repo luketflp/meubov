@@ -2,37 +2,25 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import {
-  animals,
-  healthProtocols,
-  treatments,
-} from "@/lib/db/schema";
+import { animals, treatments } from "@/lib/db/schema";
 import {
   toTreatment,
 } from "@/lib/api/mappers";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
-import type {
-  HealthProtocol,
-  ScheduleTreatmentsInput,
-  Treatment,
-} from "@/lib/types";
+import type { ScheduleTreatmentsInput, Treatment } from "@/lib/types";
 
 interface ScheduleTreatmentsUseCaseProps {
   farmId: number;
   input: ScheduleTreatmentsInput;
 }
 
-type ScheduleTreatmentsUseCaseResponse = { treatments: Treatment[] } | "protocol_not_found" | "animals_not_found";
+type ScheduleTreatmentsUseCaseResponse = { treatments: Treatment[] } | "animals_not_found";
 
 type CurrUseCase = _UseCase<ScheduleTreatmentsUseCaseProps, ScheduleTreatmentsUseCaseResponse>;
 
-/**
- * Creates one scheduled calendar entry per selected active animal. Protocol
- * details are resolved on the server so another farm's protocol cannot be
- * used and stale client-side template values are never persisted.
- */
+/** Creates one scheduled calendar entry per selected active animal. */
 export class ScheduleTreatmentsUseCase implements CurrUseCase {
   private repository: RepositoryType;
 
@@ -58,27 +46,11 @@ export class ScheduleTreatmentsUseCase implements CurrUseCase {
 
       if (selectedAnimals.length !== animalIds.length) return "animals_not_found";
 
-      let details: Pick<HealthProtocol, "name" | "type" | "withdrawalDays">;
-      if (input.source.kind === "protocol") {
-        const [protocol] = await tx
-          .select()
-          .from(healthProtocols)
-          .where(
-            and(
-              eq(healthProtocols.farmId, farmId),
-              eq(healthProtocols.id, input.source.protocolId)
-            )
-          )
-          .limit(1);
-        if (!protocol) return "protocol_not_found";
-        details = protocol;
-      } else {
-        details = {
-          name: input.source.name.trim(),
-          type: input.source.type,
-          withdrawalDays: input.source.withdrawalDays,
-        };
-      }
+      const details = {
+        name: input.source.name.trim(),
+        type: input.source.type,
+        withdrawalDays: input.source.withdrawalDays,
+      };
 
       // One id for the whole action: deleting any of these removes them all.
       const batchId = randomUUID();

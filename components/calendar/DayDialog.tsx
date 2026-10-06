@@ -95,7 +95,7 @@ export function DayDialog({
                   <EmptyState
                     icon={CalendarPlus}
                     title="Nenhum tratamento neste dia"
-                    description="Crie um agendamento usando um protocolo ou um tratamento avulso."
+                    description="Crie um agendamento de tratamento para este dia."
                     className="py-7"
                   />
                 ) : (

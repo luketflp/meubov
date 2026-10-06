@@ -17,7 +17,6 @@ import { activeAnimals } from "@/lib/store/selectors";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import type { Category, TreatmentType } from "@/lib/types";
 
-const STANDALONE = "__standalone";
 const CATEGORY_LIST = Object.keys(CATEGORY_LABEL) as Category[];
 const TREATMENT_TYPES = Object.keys(TREATMENT_TYPE_LABEL) as TreatmentType[];
 
@@ -29,7 +28,7 @@ interface ScheduleTreatmentFormProps {
   onScheduled: (count: number) => void;
 }
 
-/** Schedules a protocol or a one-off treatment for an explicit herd target. */
+/** Schedules a treatment for an explicit herd target. */
 export function ScheduleTreatmentForm({
   date,
   onCancel,
@@ -37,7 +36,6 @@ export function ScheduleTreatmentForm({
 }: ScheduleTreatmentFormProps) {
   const animals = useHerdStore((state) => state.animals);
   const lots = useHerdStore((state) => state.lots);
-  const protocols = useHerdStore((state) => state.protocols);
   const scheduleTreatments = useHerdStore((state) => state.scheduleTreatments);
 
   const herd = useMemo(() => activeAnimals(animals), [animals]);
@@ -46,7 +44,6 @@ export function ScheduleTreatmentForm({
     return lots.filter((lot) => lot.deletedAt == null && occupied.has(lot.id));
   }, [herd, lots]);
 
-  const [sourceId, setSourceId] = useState(protocols[0]?.id ?? STANDALONE);
   const [targetMode, setTargetMode] = useState<TargetMode>("all");
   const [lotId, setLotId] = useState(activeLots[0]?.id ?? "");
   const [category, setCategory] = useState<Category>("calf");
@@ -58,7 +55,6 @@ export function ScheduleTreatmentForm({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const chosenProtocol = protocols.find((protocol) => protocol.id === sourceId);
   const visibleAnimals = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (term === "") return herd;
@@ -92,16 +88,12 @@ export function ScheduleTreatmentForm({
 
     const cleanName = name.trim();
     const withdrawal = Number(withdrawalDays);
-    if (sourceId === STANDALONE && cleanName === "") {
-      setError("Informe o nome do tratamento avulso.");
+    if (cleanName === "") {
+      setError("Informe o nome do tratamento.");
       return;
     }
-    if (sourceId === STANDALONE && (!Number.isInteger(withdrawal) || withdrawal < 0)) {
+    if (!Number.isInteger(withdrawal) || withdrawal < 0) {
       setError("Carência deve ser um número inteiro de dias (zero ou mais).");
-      return;
-    }
-    if (sourceId !== STANDALONE && !chosenProtocol) {
-      setError("Selecione um protocolo válido.");
       return;
     }
 
@@ -110,10 +102,7 @@ export function ScheduleTreatmentForm({
       const count = await scheduleTreatments({
         date,
         animalIds: targetAnimals.map((animal) => animal.id),
-        source:
-          sourceId === STANDALONE
-            ? { kind: "standalone", name: cleanName, type, withdrawalDays: withdrawal }
-            : { kind: "protocol", protocolId: sourceId },
+        source: { kind: "standalone", name: cleanName, type, withdrawalDays: withdrawal },
       });
       onScheduled(count);
     } catch {
@@ -125,74 +114,49 @@ export function ScheduleTreatmentForm({
 
   return (
     <form onSubmit={onSubmit} className="grid gap-4">
-      <div className="grid gap-1.5">
-        <Label htmlFor="schedule-source">Tratamento</Label>
-        <Select value={sourceId} onValueChange={setSourceId}>
-          <SelectTrigger id="schedule-source" className="min-h-11 w-full md:min-h-8">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {protocols.map((protocol) => (
-              <SelectItem key={protocol.id} value={protocol.id}>
-                {protocol.name}
-              </SelectItem>
-            ))}
-            <SelectItem value={STANDALONE}>Tratamento avulso</SelectItem>
-          </SelectContent>
-        </Select>
-        {chosenProtocol ? (
-          <p className="text-xs text-ink-soft">
-            {TREATMENT_TYPE_LABEL[chosenProtocol.type]} · carência de {chosenProtocol.withdrawalDays}{" "}
-            {chosenProtocol.withdrawalDays === 1 ? "dia" : "dias"}
-          </p>
-        ) : null}
-      </div>
-
-      {sourceId === STANDALONE ? (
-        <div className="grid gap-3 rounded-lg border border-hairline p-3 sm:grid-cols-2">
-          <div className="grid gap-1.5 sm:col-span-2">
-            <Label htmlFor="schedule-name">Nome</Label>
-            <Input
-              id="schedule-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Ex.: Reforço de vacina"
-              className="min-h-11 md:min-h-8"
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="schedule-type">Tipo</Label>
-            <Select
-              value={type}
-              onValueChange={(value) => setType(value as TreatmentType)}
-            >
-              <SelectTrigger id="schedule-type" className="min-h-11 w-full md:min-h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TREATMENT_TYPES.map((treatmentType) => (
-                  <SelectItem key={treatmentType} value={treatmentType}>
-                    {TREATMENT_TYPE_LABEL[treatmentType]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="schedule-withdrawal">Carência (dias)</Label>
-            <Input
-              id="schedule-withdrawal"
-              type="number"
-              min={0}
-              step={1}
-              inputMode="numeric"
-              value={withdrawalDays}
-              onChange={(event) => setWithdrawalDays(event.target.value)}
-              className="min-h-11 font-mono md:min-h-8"
-            />
-          </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-1.5 sm:col-span-2">
+          <Label htmlFor="schedule-name">Tratamento</Label>
+          <Input
+            id="schedule-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Ex.: Vacina aftosa"
+            className="min-h-11 md:min-h-8"
+          />
         </div>
-      ) : null}
+        <div className="grid gap-1.5">
+          <Label htmlFor="schedule-type">Tipo</Label>
+          <Select
+            value={type}
+            onValueChange={(value) => setType(value as TreatmentType)}
+          >
+            <SelectTrigger id="schedule-type" className="min-h-11 w-full md:min-h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TREATMENT_TYPES.map((treatmentType) => (
+                <SelectItem key={treatmentType} value={treatmentType}>
+                  {TREATMENT_TYPE_LABEL[treatmentType]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="schedule-withdrawal">Carência (dias)</Label>
+          <Input
+            id="schedule-withdrawal"
+            type="number"
+            min={0}
+            step={1}
+            inputMode="numeric"
+            value={withdrawalDays}
+            onChange={(event) => setWithdrawalDays(event.target.value)}
+            className="min-h-11 font-mono md:min-h-8"
+          />
+        </div>
+      </div>
 
       <fieldset className="grid gap-2">
         <legend className="mb-1 text-sm font-medium text-ink">Aplicar a</legend>

@@ -1,9 +1,6 @@
 /**
  * The sanitary calendar — scheduling treatments onto animals, marking them
  * done, and undoing a scheduling mistake.
- *
- * Protocol details are resolved server-side, so another farm's protocol can
- * never be used and stale client-side template values are never persisted.
  */
 import { Elysia } from "elysia";
 
@@ -24,7 +21,6 @@ export const treatmentsController = new Elysia({ prefix: "/treatments" })
     "/schedule",
     async ({ farmId, body, status }) => {
       const result = await new ScheduleTreatmentsUseCase().run({ farmId, input: body });
-      if (result === "protocol_not_found") return status(404, { error: result });
       if (result === "animals_not_found") return status(404, { error: result });
       return result;
     },

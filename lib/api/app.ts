@@ -33,7 +33,6 @@ import { herdController } from "@/lib/api/domains/herd/herd.controller";
 import { invernadasController } from "@/lib/api/domains/invernadas/invernadas.controller";
 import { lotsController } from "@/lib/api/domains/lots/lots.controller";
 import { manejoController } from "@/lib/api/domains/manejo/manejo.controller";
-import { protocolsController } from "@/lib/api/domains/protocols/protocols.controller";
 import { teamController } from "@/lib/api/domains/team/team.controller";
 import { invitesController } from "@/lib/api/domains/invites/invites.controller";
 import { birthsController } from "@/lib/api/domains/reproduction/births.controller";
@@ -58,14 +57,13 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
 
   .use(herdController)
 
-  /* ---- Settings: breeds, lots, invernadas, farm, protocols --------------- */
+  /* ---- Settings: breeds, lots, invernadas, farm ------------------------- */
   .use(breedsController)
   .use(lotsController)
   .use(invernadasController)
   .use(farmController)
   .use(teamController)
   .use(invitesController)
-  .use(protocolsController)
 
   /* ---- Animals, weighings, treatments ----------------------------------- */
   .use(animalsController)

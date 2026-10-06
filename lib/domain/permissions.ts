@@ -96,7 +96,7 @@ export const AREA_DESCRIPTION: Record<Area, string> = {
   herd: "Animais, pesagens, raças e categorias",
   manejo: "Sessões no brete, trocas de lote, vendas e entradas",
   reproduction: "Coberturas, diagnósticos e partos",
-  sanitary: "Calendário, tratamentos e protocolos",
+  sanitary: "Calendário e tratamentos",
   lots: "Lotes, invernadas e a sede no mapa",
   finance: "Despesas e todos os valores em R$",
   farm: "Nome, município e responsável",

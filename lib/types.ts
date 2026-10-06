@@ -183,14 +183,12 @@ export interface Treatment {
 }
 
 /** Template or one-off details used to create scheduled calendar treatments. */
-export type TreatmentScheduleSource =
-  | { kind: "protocol"; protocolId: string }
-  | {
-      kind: "standalone";
-      name: string;
-      type: TreatmentType;
-      withdrawalDays: number;
-    };
+export interface TreatmentScheduleSource {
+  kind: "standalone";
+  name: string;
+  type: TreatmentType;
+  withdrawalDays: number;
+}
 
 /** One calendar action can schedule the same treatment for several animals. */
 export interface ScheduleTreatmentsInput {
@@ -628,16 +626,6 @@ export interface Budget {
   distribution: BudgetDistribution;
 }
 
-/** Recurring health protocol of the farm. */
-export interface HealthProtocol {
-  id: string;
-  name: string;
-  type: TreatmentType;
-  intervalMonths: number;
-  withdrawalDays: number;
-  mandatory: boolean;
-}
-
 /** Farm registration data. */
 export interface FarmData {
   name: string;
@@ -667,7 +655,6 @@ export interface HerdData {
   lotPlacements: LotPlacement[];
   movements: Movement[];
   breeds: string[];
-  protocols: HealthProtocol[];
   manejoSessions: ManejoSession[];
   expenses: Expense[];
   /** Plano de contas: the farm's contas, archived ones included. */

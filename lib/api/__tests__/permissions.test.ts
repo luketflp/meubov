@@ -23,7 +23,6 @@ const { state, getSession, HERD } = vi.hoisted(() => ({
     lotPlacements: [],
     movements: [],
     breeds: [],
-    protocols: [],
     manejoSessions: [],
     expenses: [{ id: "e-1", date: "2026-09-01", category: "labor", amountBrl: 1200 }],
     customCategories: [],

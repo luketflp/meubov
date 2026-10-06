@@ -21,11 +21,10 @@ export function useNewFarm(): {
   const activeFarmId = useHerdStore((s) => s.activeFarmId);
   const breeds = useHerdStore((s) => s.breeds.length);
   const categories = useHerdStore((s) => s.customCategories.length);
-  const protocols = useHerdStore((s) => s.protocols.length);
   const createFarm = useHerdStore((s) => s.createFarm);
 
   const active = farms.find((farm) => farm.id === activeFarmId);
-  const summary = copySummary({ breeds, categories, protocols });
+  const summary = copySummary({ breeds, categories });
   // A superuser viewing a farm they don't belong to has joinedAt null: there is
   // no membership to copy from, so the copy switch must not be offered.
   const source =

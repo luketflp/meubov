@@ -2,7 +2,7 @@
 
 /**
  * "Nova fazenda": nome and município, and — when the open farm has any — the
- * switch that starts the new farm from its raças, categorias and protocolos.
+ * switch that starts the new farm from its raças and categorias.
  * The form mounts with each opening, so every time it starts empty.
  */
 import { useState, type FormEvent } from "react";

@@ -11,7 +11,7 @@ const ATTENTION_WINDOW_DAYS = 30;
 
 /**
  * Identifies a foot-and-mouth campaign item by name (contains "aftosa",
- * case-insensitive). Accepts any record with `name` (treatment or health protocol).
+ * case-insensitive). Accepts any record with a `name`.
  */
 export function isFootAndMouth(item: Pick<Treatment, "name">): boolean {
   return item.name.toLocaleLowerCase("pt-BR").includes("aftosa");

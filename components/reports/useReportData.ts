@@ -16,7 +16,6 @@ export function useReportData(): HerdData {
   const lotPlacements = useHerdStore((s) => s.lotPlacements);
   const movements = useHerdStore((s) => s.movements);
   const breeds = useHerdStore((s) => s.breeds);
-  const protocols = useHerdStore((s) => s.protocols);
   const manejoSessions = useHerdStore((s) => s.manejoSessions);
   const expenses = useHerdStore((s) => s.expenses);
   const accounts = useHerdStore((s) => s.accounts);
@@ -32,7 +31,6 @@ export function useReportData(): HerdData {
       lotPlacements,
       movements,
       breeds,
-      protocols,
       manejoSessions,
       expenses,
       accounts,
@@ -48,7 +46,6 @@ export function useReportData(): HerdData {
       lotPlacements,
       movements,
       breeds,
-      protocols,
       manejoSessions,
       expenses,
       accounts,

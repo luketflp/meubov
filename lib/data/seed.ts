@@ -19,7 +19,6 @@ import type {
   ManejoSession,
   Movement,
   Weighing,
-  HealthProtocol,
   Sex,
   TreatmentStatus,
   BreedingType,
@@ -128,12 +127,15 @@ const LOT_PLACEMENTS: readonly LotPlacement[] = [
   },
 ];
 
-const PROTOCOLS: readonly HealthProtocol[] = [
-  { id: "protocol-1", name: "Vacina aftosa", type: "vaccine", intervalMonths: 6, withdrawalDays: 0, mandatory: true },
-  { id: "protocol-2", name: "Vermifugação", type: "deworming", intervalMonths: 6, withdrawalDays: 30, mandatory: false },
-  { id: "protocol-3", name: "Vacina clostridiose", type: "vaccine", intervalMonths: 12, withdrawalDays: 21, mandatory: false },
-  { id: "protocol-4", name: "Vacina botulismo", type: "vaccine", intervalMonths: 12, withdrawalDays: 21, mandatory: false },
-  { id: "protocol-5", name: "Controle de ectoparasitas", type: "medication", intervalMonths: 4, withdrawalDays: 15, mandatory: false },
+/** What the seeded treatments apply: name, type and carência. */
+type TreatmentTemplate = Pick<Treatment, "name" | "type" | "withdrawalDays">;
+
+const TREATMENT_TEMPLATES: readonly TreatmentTemplate[] = [
+  { name: "Vacina aftosa", type: "vaccine", withdrawalDays: 0 },
+  { name: "Vermifugação", type: "deworming", withdrawalDays: 30 },
+  { name: "Vacina clostridiose", type: "vaccine", withdrawalDays: 21 },
+  { name: "Vacina botulismo", type: "vaccine", withdrawalDays: 21 },
+  { name: "Controle de ectoparasitas", type: "medication", withdrawalDays: 15 },
 ];
 
 const FARM: FarmData = {
@@ -558,12 +560,12 @@ export function generateInitialData(): HerdData {
   });
 
   // ---- Health treatments ------------------------------------------------
-  const [protFmd, protDeworming, protClostridiose, protBotulism, protEctoparasites] = PROTOCOLS;
+  const [protFmd, protDeworming, protClostridiose, protBotulism, protEctoparasites] = TREATMENT_TEMPLATES;
   const treatments: Treatment[] = [];
   let treatmentSequence = 0;
   const recordTreatment = (
     animal: Animal,
-    protocol: HealthProtocol,
+    template: TreatmentTemplate,
     date: string,
     status: TreatmentStatus,
     notes?: string
@@ -571,8 +573,8 @@ export function generateInitialData(): HerdData {
     treatmentSequence += 1;
     treatments.push({
       id: `treatment-${treatmentSequence}`, animalEarTag: animal.earTag,
-      type: protocol.type, name: protocol.name, date, status,
-      withdrawalDays: protocol.withdrawalDays,
+      type: template.type, name: template.name, date, status,
+      withdrawalDays: template.withdrawalDays,
       ...(notes === undefined ? {} : { notes }),
     });
   };
@@ -600,19 +602,19 @@ export function generateInitialData(): HerdData {
   recordTreatment(heifers[2], protDeworming, "2026-07-05", "scheduled");
 
   // 10 scheduled in the next 45 days (6 of them within 30 days -> "attention").
-  const schedule: readonly { animal: Animal; protocol: HealthProtocol; date: string }[] = [
-    { animal: weanedCalves[2], protocol: protDeworming, date: "2026-08-03" },
-    { animal: weanedCalves[3], protocol: protDeworming, date: "2026-08-06" },
-    { animal: steers[2], protocol: protDeworming, date: "2026-08-11" },
-    { animal: calfOffspring[3], protocol: protClostridiose, date: "2026-08-16" },
-    { animal: heifers[5], protocol: protClostridiose, date: "2026-08-19" },
-    { animal: cows[0], protocol: protEctoparasites, date: "2026-08-21" },
-    { animal: steers[3], protocol: protClostridiose, date: "2026-08-27" },
-    { animal: steers[4], protocol: protClostridiose, date: "2026-08-30" },
-    { animal: cows[1], protocol: protEctoparasites, date: "2026-09-03" },
-    { animal: cows[2], protocol: protEctoparasites, date: "2026-09-05" },
+  const schedule: readonly { animal: Animal; template: TreatmentTemplate; date: string }[] = [
+    { animal: weanedCalves[2], template: protDeworming, date: "2026-08-03" },
+    { animal: weanedCalves[3], template: protDeworming, date: "2026-08-06" },
+    { animal: steers[2], template: protDeworming, date: "2026-08-11" },
+    { animal: calfOffspring[3], template: protClostridiose, date: "2026-08-16" },
+    { animal: heifers[5], template: protClostridiose, date: "2026-08-19" },
+    { animal: cows[0], template: protEctoparasites, date: "2026-08-21" },
+    { animal: steers[3], template: protClostridiose, date: "2026-08-27" },
+    { animal: steers[4], template: protClostridiose, date: "2026-08-30" },
+    { animal: cows[1], template: protEctoparasites, date: "2026-09-03" },
+    { animal: cows[2], template: protEctoparasites, date: "2026-09-05" },
   ];
-  for (const item of schedule) recordTreatment(item.animal, item.protocol, item.date, "scheduled");
+  for (const item of schedule) recordTreatment(item.animal, item.template, item.date, "scheduled");
 
   // ---- Manejo sessions that moved the herd (last 6 months) ---------------
   // Compras, vendas e transferências are closed sessions of the curral: every
@@ -720,7 +722,6 @@ export function generateInitialData(): HerdData {
     lotPlacements: LOT_PLACEMENTS.map((placement) => ({ ...placement })),
     movements,
     breeds: [...BREEDS],
-    protocols: PROTOCOLS.map((p) => ({ ...p })),
     manejoSessions: movementSessions,
     expenses: buildExpenses(),
     accounts: SEED_ACCOUNTS.map((account) => ({ ...account })),

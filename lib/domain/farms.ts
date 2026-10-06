@@ -68,19 +68,13 @@ function counted(count: number, singular: string, plural: string): string | null
 }
 
 /**
- * The hint under "Usar o cadastro da …": "Traz 8 raças, 3 categorias e 5
- * protocolos sanitários." Null when the open farm has nothing to copy, which
- * is what hides the switch.
+ * The hint under "Usar o cadastro da …": "Traz 8 raças e 3 categorias." Null
+ * when the open farm has nothing to copy, which is what hides the switch.
  */
-export function copySummary(counts: {
-  breeds: number;
-  categories: number;
-  protocols: number;
-}): string | null {
+export function copySummary(counts: { breeds: number; categories: number }): string | null {
   const parts = [
     counted(counts.breeds, "raça", "raças"),
     counted(counts.categories, "categoria", "categorias"),
-    counted(counts.protocols, "protocolo sanitário", "protocolos sanitários"),
   ].filter((part): part is string => part !== null);
   if (parts.length === 0) return null;
   return `Traz ${listPt(parts)}.`;

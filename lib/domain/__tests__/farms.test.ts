@@ -101,29 +101,21 @@ describe("confirmsFarmName", () => {
 });
 
 describe("copySummary", () => {
-  it("lists all three kinds", () => {
-    expect(copySummary({ breeds: 8, categories: 3, protocols: 5 })).toBe(
-      "Traz 8 raças, 3 categorias e 5 protocolos sanitários."
-    );
+  it("lists both kinds", () => {
+    expect(copySummary({ breeds: 8, categories: 3 })).toBe("Traz 8 raças e 3 categorias.");
   });
 
   it("uses the singular", () => {
-    expect(copySummary({ breeds: 1, categories: 1, protocols: 1 })).toBe(
-      "Traz 1 raça, 1 categoria e 1 protocolo sanitário."
-    );
+    expect(copySummary({ breeds: 1, categories: 1 })).toBe("Traz 1 raça e 1 categoria.");
   });
 
   it("leaves out the kinds at zero", () => {
-    expect(copySummary({ breeds: 2, categories: 0, protocols: 4 })).toBe(
-      "Traz 2 raças e 4 protocolos sanitários."
-    );
-    expect(copySummary({ breeds: 0, categories: 0, protocols: 1 })).toBe(
-      "Traz 1 protocolo sanitário."
-    );
+    expect(copySummary({ breeds: 2, categories: 0 })).toBe("Traz 2 raças.");
+    expect(copySummary({ breeds: 0, categories: 1 })).toBe("Traz 1 categoria.");
   });
 
   it("is null when there is nothing to copy", () => {
-    expect(copySummary({ breeds: 0, categories: 0, protocols: 0 })).toBeNull();
+    expect(copySummary({ breeds: 0, categories: 0 })).toBeNull();
   });
 });
 

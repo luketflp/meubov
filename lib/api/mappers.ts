@@ -18,7 +18,6 @@ import type {
   Expense,
   ExpenseGroup,
   FarmData,
-  HealthProtocol,
   Invernada,
   Lot,
   LotPlacement,
@@ -49,7 +48,6 @@ import type {
   ExpenseSeriesRow,
   FarmAccountRow,
   FarmRow,
-  HealthProtocolRow,
   InvernadaRow,
   LotRow,
   LotPlacementRow,
@@ -381,17 +379,6 @@ export function toBudget(row: BudgetRow): Budget {
     month: row.month,
     amountBrl: row.amountBrl,
     distribution: row.distribution,
-  };
-}
-
-export function toProtocol(row: HealthProtocolRow): HealthProtocol {
-  return {
-    id: row.id,
-    name: row.name,
-    type: row.type,
-    intervalMonths: row.intervalMonths,
-    withdrawalDays: row.withdrawalDays,
-    mandatory: row.mandatory,
   };
 }
 

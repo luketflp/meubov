@@ -22,16 +22,10 @@ export const DeleteTreatmentQuery = t.Object({
 export const ScheduleTreatmentsBody = t.Object({
   date: DateString,
   animalIds: t.Array(t.String({ minLength: 1 }), { minItems: 1 }),
-  source: t.Union([
-    t.Object({
-      kind: t.Literal("protocol"),
-      protocolId: t.String({ minLength: 1 }),
-    }),
-    t.Object({
-      kind: t.Literal("standalone"),
-      name: NonBlankString,
-      type: TreatmentTypeModel,
-      withdrawalDays: t.Integer({ minimum: 0 }),
-    }),
-  ]),
+  source: t.Object({
+    kind: t.Literal("standalone"),
+    name: NonBlankString,
+    type: TreatmentTypeModel,
+    withdrawalDays: t.Integer({ minimum: 0 }),
+  }),
 });

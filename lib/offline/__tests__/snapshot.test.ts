@@ -18,7 +18,6 @@ const herd = (name: string): HerdData => ({
   lotPlacements: [],
   movements: [],
   breeds: [],
-  protocols: [],
   manejoSessions: [],
   expenses: [],
   accounts: [],

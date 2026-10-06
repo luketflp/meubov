@@ -56,12 +56,11 @@ describe("createFarm", () => {
     expect(source.params).toEqual(expect.arrayContaining([7, "u-lucas"]));
   });
 
-  it("copies raças, categorias and protocolos with fresh ids", async () => {
+  it("copies raças and categorias with fresh ids", async () => {
     state.selectResults = [
       [{ farmId: 7 }],
       [{ name: "Nelore" }, { name: "Angus" }],
       [{ name: "Matriz", baseCategory: "cow" }],
-      [{ name: "Aftosa", type: "vaccine", intervalMonths: 6, withdrawalDays: 0, mandatory: true }],
     ];
     state.returning = [[{ id: 42 }]];
 
@@ -74,22 +73,11 @@ describe("createFarm", () => {
         { farmId: 42, name: "Angus" },
       ],
       [{ id: expect.any(String), farmId: 42, name: "Matriz", baseCategory: "cow" }],
-      [
-        {
-          id: expect.any(String),
-          farmId: 42,
-          name: "Aftosa",
-          type: "vaccine",
-          intervalMonths: 6,
-          withdrawalDays: 0,
-          mandatory: true,
-        },
-      ],
     ]);
   });
 
   it("skips a kind the source does not have", async () => {
-    state.selectResults = [[{ farmId: 7 }], [{ name: "Nelore" }], [], []];
+    state.selectResults = [[{ farmId: 7 }], [{ name: "Nelore" }], []];
     state.returning = [[{ id: 42 }]];
     await new CreateFarmUseCase().run({ ...input, copyFromFarmId: 7 });
     expect(state.inserts).toHaveLength(3);

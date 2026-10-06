@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { breeds, customCategories, farm, farmUsers, healthProtocols } from "@/lib/db/schema";
+import { breeds, customCategories, farm, farmUsers } from "@/lib/db/schema";
 import { validateNewFarm, type NewFarmProblem } from "@/lib/domain/farms";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
 
@@ -12,7 +12,7 @@ interface CreateFarmUseCaseProps {
   userId: string;
   name: string;
   municipality: string;
-  /** The open farm whose raças, categorias and protocolos the new farm starts with. */
+  /** The open farm whose raças and categorias the new farm starts with. */
   copyFromFarmId?: number;
 }
 
@@ -25,8 +25,7 @@ type CurrUseCase = _UseCase<CreateFarmUseCaseProps, CreateFarmUseCaseResponse>;
 
 /**
  * A new farm owned by the caller, named at creation. With a source farm it
- * starts with that farm's raças, categorias and protocolos sanitários under
- * fresh ids — never its animals, lotes, invernadas, touros or equipe. The
+ * starts with that farm's raças and categorias under fresh ids — never its animals, lotes, invernadas, touros or equipe. The
  * caller must still belong to the live source; any role will do, since every
  * member already sees those lists.
  *
@@ -97,21 +96,5 @@ async function copySetup(tx: RepositoryType, from: number, to: number): Promise<
     await tx
       .insert(customCategories)
       .values(categoryRows.map((row) => ({ id: randomUUID(), farmId: to, ...row })));
-  }
-
-  const protocolRows = await tx
-    .select({
-      name: healthProtocols.name,
-      type: healthProtocols.type,
-      intervalMonths: healthProtocols.intervalMonths,
-      withdrawalDays: healthProtocols.withdrawalDays,
-      mandatory: healthProtocols.mandatory,
-    })
-    .from(healthProtocols)
-    .where(eq(healthProtocols.farmId, from));
-  if (protocolRows.length > 0) {
-    await tx
-      .insert(healthProtocols)
-      .values(protocolRows.map((row) => ({ id: randomUUID(), farmId: to, ...row })));
   }
 }

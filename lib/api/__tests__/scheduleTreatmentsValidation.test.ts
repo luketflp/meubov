@@ -2,6 +2,8 @@ import { Elysia } from "elysia";
 import { describe, expect, it, vi } from "vitest";
 import { ScheduleTreatmentsBody } from "@/lib/api/domains/treatments/schemas/treatment.schema";
 
+const VACCINE = { kind: "standalone", name: "Vacina aftosa", type: "vaccine", withdrawalDays: 0 };
+
 const jsonRequest = (body: unknown) =>
   new Request("http://localhost/api/herd/treatments/schedule", {
     method: "POST",
@@ -20,20 +22,6 @@ function validationApi() {
 }
 
 describe("scheduled treatment validation", () => {
-  it("accepts a protocol-based schedule", async () => {
-    const { app, schedule } = validationApi();
-    const response = await app.handle(
-      jsonRequest({
-        date: "2026-09-18",
-        animalIds: ["animal-1", "animal-2"],
-        source: { kind: "protocol", protocolId: "protocol-1" },
-      })
-    );
-
-    expect(response.status).toBe(200);
-    expect(schedule).toHaveBeenCalledOnce();
-  });
-
   it("accepts a valid one-off treatment", async () => {
     const { app, schedule } = validationApi();
     const response = await app.handle(
@@ -54,16 +42,10 @@ describe("scheduled treatment validation", () => {
   });
 
   it.each([
-    {
-      date: "2026-02-30",
-      animalIds: ["animal-1"],
-      source: { kind: "protocol", protocolId: "protocol-1" },
-    },
-    {
-      date: "2026-09-18",
-      animalIds: [],
-      source: { kind: "protocol", protocolId: "protocol-1" },
-    },
+    { date: "2026-02-30", animalIds: ["animal-1"], source: VACCINE },
+    { date: "2026-09-18", animalIds: [], source: VACCINE },
+    // Protocolos are gone: a source naming one is refused.
+    { date: "2026-09-18", animalIds: ["animal-1"], source: { kind: "protocol", protocolId: "protocol-1" } },
     {
       date: "2026-09-18",
       animalIds: ["animal-1"],

@@ -1,7 +1,6 @@
 "use client";
 
-import { use, useMemo, useState } from "react";
-import Link from "next/link";
+import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Treatment } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
@@ -18,22 +17,15 @@ import { DayDialog } from "@/components/calendar/DayDialog";
 import { MonthlyGrid } from "@/components/calendar/MonthlyGrid";
 import { MonthList } from "@/components/calendar/MonthList";
 import { OverdueSection } from "@/components/calendar/OverdueSection";
-import { HealthProtocols } from "@/components/calendar/HealthProtocols";
 import { ExportMenu } from "@/components/export/ExportMenu";
 import { calendarTreatments, treatmentsExportTable } from "@/lib/export/datasets/calendar";
-import { cn } from "@/lib/utils";
 import {
   yearMonthOf,
   previousMonth,
-  nextFootAndMouthCampaign,
   nextMonth,
   monthLabel,
   type YearMonth,
 } from "@/components/calendar/helpers";
-
-interface CalendarPageProps {
-  searchParams: Promise<{ tab?: string | string[] }>;
-}
 
 /** Warns that a delete also erases an application already on the record. */
 function alreadyAppliedWarning(treatment: Treatment): string {
@@ -42,11 +34,8 @@ function alreadyAppliedWarning(treatment: Treatment): string {
     : "";
 }
 
-export default function CalendarPage({ searchParams }: CalendarPageProps) {
-  const query = use(searchParams);
-  const activeTab = query.tab === "protocolos" ? "protocolos" : "agenda";
+export default function CalendarPage() {
   const treatments = useHerdStore((s) => s.treatments);
-  const protocols = useHerdStore((s) => s.protocols);
   const animals = useHerdStore((s) => s.animals);
   const lots = useHerdStore((s) => s.lots);
   const markTreatmentDone = useHerdStore((s) => s.markTreatmentDone);
@@ -106,14 +95,7 @@ export default function CalendarPage({ searchParams }: CalendarPageProps) {
       ),
     [treatments]
   );
-  const campaign = useMemo(
-    () => nextFootAndMouthCampaign(treatments, protocols),
-    [treatments, protocols]
-  );
-
-  const showBanner =
-    ofMonth.some(isFootAndMouth) ||
-    (campaign !== null && campaign.year === yearMonth.year && campaign.month === yearMonth.month);
+  const showBanner = ofMonth.some(isFootAndMouth);
   const ofOpenDay = openDay === null ? [] : ofMonth.filter((t) => t.date === openDay);
 
   const month = monthLabel(yearMonth);
@@ -151,118 +133,74 @@ export default function CalendarPage({ searchParams }: CalendarPageProps) {
       <PageHeader
         title="Calendário Sanitário"
         badges={canEdit ? undefined : <ReadOnlyPill />}
-        subtitle={
-          activeTab === "agenda"
-            ? "Vacinas, vermifugações e manejos do rebanho"
-            : "Regras sanitárias usadas para organizar os agendamentos"
-        }
+        subtitle="Vacinas, vermifugações e manejos do rebanho"
         actions={
-          activeTab === "agenda" ? (
-            <div className="flex flex-wrap items-center gap-1">
-              <Button
-                variant="outline"
-                size="icon"
-                aria-label="Mês anterior"
-                className="size-11 md:size-8"
-                onClick={() => navigateTo(previousMonth(yearMonth))}
-              >
-                <ChevronLeft />
-              </Button>
-              <span className="min-w-40 text-center font-heading text-base font-semibold text-ink">
-                {monthLabel(yearMonth)}
-              </span>
-              <Button
-                variant="outline"
-                size="icon"
-                aria-label="Próximo mês"
-                className="size-11 md:size-8"
-                onClick={() => navigateTo(nextMonth(yearMonth))}
-              >
-                <ChevronRight />
-              </Button>
-              <Button
-                variant="outline"
-                className="ml-1 min-h-11 md:min-h-0"
-                onClick={() => navigateTo(yearMonthOf(todayISO()))}
-              >
-                Hoje
-              </Button>
-              <div className="ml-1">{exportMenu}</div>
-            </div>
-          ) : undefined
+          <div className="flex flex-wrap items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Mês anterior"
+              className="size-11 md:size-8"
+              onClick={() => navigateTo(previousMonth(yearMonth))}
+            >
+              <ChevronLeft />
+            </Button>
+            <span className="min-w-40 text-center font-heading text-base font-semibold text-ink">
+              {monthLabel(yearMonth)}
+            </span>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Próximo mês"
+              className="size-11 md:size-8"
+              onClick={() => navigateTo(nextMonth(yearMonth))}
+            >
+              <ChevronRight />
+            </Button>
+            <Button
+              variant="outline"
+              className="ml-1 min-h-11 md:min-h-0"
+              onClick={() => navigateTo(yearMonthOf(todayISO()))}
+            >
+              Hoje
+            </Button>
+            <div className="ml-1">{exportMenu}</div>
+          </div>
         }
       />
 
-      <nav
-        aria-label="Seções do calendário sanitário"
-        className="flex gap-1 border-b border-hairline"
-      >
-        <Link
-          href="/calendar"
-          scroll={false}
-          aria-current={activeTab === "agenda" ? "page" : undefined}
-          className={cn(
-            "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-            activeTab === "agenda"
-              ? "border-brand text-brand"
-              : "border-transparent text-ink-soft hover:text-ink"
-          )}
-        >
-          Agenda
-        </Link>
-        <Link
-          href="/calendar?tab=protocolos"
-          scroll={false}
-          aria-current={activeTab === "protocolos" ? "page" : undefined}
-          className={cn(
-            "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-            activeTab === "protocolos"
-              ? "border-brand text-brand"
-              : "border-transparent text-ink-soft hover:text-ink"
-          )}
-        >
-          Protocolos
-        </Link>
-      </nav>
+      <MonthList
+        yearMonth={yearMonth}
+        treatments={ofMonth}
+        onMarkDone={onMarkDone}
+        onDelete={onDelete}
+        onDeleteGroup={onDeleteGroup}
+      />
 
-      {activeTab === "agenda" ? (
-        <>
-          <MonthList
-            yearMonth={yearMonth}
-            treatments={ofMonth}
-            onMarkDone={onMarkDone}
-            onDelete={onDelete}
-            onDeleteGroup={onDeleteGroup}
-          />
+      {showBanner ? <FootAndMouthBanner /> : null}
 
-          {showBanner ? <FootAndMouthBanner /> : null}
+      <MonthlyGrid
+        yearMonth={yearMonth}
+        monthTreatments={ofMonth}
+        todayIso={todayISO()}
+        onOpenDay={setOpenDay}
+      />
 
-          <MonthlyGrid
-            yearMonth={yearMonth}
-            monthTreatments={ofMonth}
-            todayIso={todayISO()}
-            onOpenDay={setOpenDay}
-          />
+      <OverdueSection
+        overdue={overdue}
+        onMarkDone={onMarkDone}
+        onDelete={onDelete}
+        onDeleteGroup={onDeleteGroup}
+      />
 
-          <OverdueSection
-            overdue={overdue}
-            onMarkDone={onMarkDone}
-            onDelete={onDelete}
-            onDeleteGroup={onDeleteGroup}
-          />
-
-          <DayDialog
-            iso={openDay}
-            treatments={ofOpenDay}
-            onClose={() => setOpenDay(null)}
-            onMarkDone={onMarkDone}
-            onDelete={onDelete}
-            onDeleteGroup={onDeleteGroup}
-          />
-        </>
-      ) : (
-        <HealthProtocols />
-      )}
+      <DayDialog
+        iso={openDay}
+        treatments={ofOpenDay}
+        onClose={() => setOpenDay(null)}
+        onMarkDone={onMarkDone}
+        onDelete={onDelete}
+        onDeleteGroup={onDeleteGroup}
+      />
     </div>
   );
 }

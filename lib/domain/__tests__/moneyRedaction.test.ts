@@ -69,7 +69,6 @@ const herd: HerdData = {
     { id: "m-1", type: "sale", date: "2026-09-02", origin: "Fazenda", destination: "Frigorífico", amountBrl: 5300, bankAccountId: "b-1" },
   ],
   breeds: [],
-  protocols: [],
   manejoSessions: [sale, vaccination],
   expenses: [{ id: "e-1", kind: "expense", date: "2026-09-01", category: "labor", amountBrl: 1200 }],
   accounts: [{ id: "acc-1", group: "labor", name: "Salários" }],

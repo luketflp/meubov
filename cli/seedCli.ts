@@ -310,27 +310,13 @@ async function seed(email: string, force: boolean): Promise<void> {
         );
       }
 
-      if (data.protocols.length > 0) {
-        await tx.insert(schema.healthProtocols).values(
-          data.protocols.map((p) => ({
-            id: randomUUID(),
-            farmId,
-            name: p.name,
-            type: p.type,
-            intervalMonths: p.intervalMonths,
-            withdrawalDays: p.withdrawalDays,
-            mandatory: p.mandatory,
-          }))
-        );
-      }
-
       console.log(
         `Seeded farm "${data.farm.name}" (id ${farmId}) for ${email}: ` +
           `${data.animals.length} animals, ${weighingRows.length} weighings, ` +
           `${data.treatments.length} treatments, ${data.lots.length} lots, ` +
           `${data.invernadas.length} invernadas, ${data.lotPlacements.length} placements, ` +
           `${data.manejoSessions.length} manejo sessions, ` +
-          `${data.movements.length} legacy movements, ${data.protocols.length} protocols, ` +
+          `${data.movements.length} legacy movements, ` +
           `${data.accounts.length} accounts, ` +
           `${data.expenses.length} expenses.`
       );

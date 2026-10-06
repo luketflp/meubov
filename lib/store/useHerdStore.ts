@@ -41,7 +41,6 @@ import type {
   StatementLine,
   Transfer,
   Weighing,
-  HealthProtocol,
   Treatment,
 } from "@/lib/types";
 import { toast } from "sonner";
@@ -340,9 +339,9 @@ export interface HerdStore extends HerdData {
   /** Re-reads the farm list and the herd after the caller's access changed. */
   refreshAccess: () => Promise<void>;
   /**
-   * Creates a farm the caller owns, starting from the open farm's raças,
-   * categorias and protocolos when `copy` is on, and opens it. Resolves the new
-   * id; throws after a toast when the server refused.
+   * Creates a farm the caller owns, starting from the open farm's raças and
+   * categorias when `copy` is on, and opens it. Resolves the new id; throws
+   * after a toast when the server refused.
    */
   createFarm: (input: NewFarmInput) => Promise<number>;
   /**
@@ -464,8 +463,6 @@ export interface HerdStore extends HerdData {
   saveHeadquarters: (
     view: NonNullable<FarmData["headquarters"]>
   ) => Promise<void>;
-  addProtocol: (p: Omit<HealthProtocol, "id">, generateSchedule: boolean) => Promise<void>;
-  removeProtocol: (id: string) => Promise<void>;
   /**
    * Lança a despesa or receita — with `repeat`, the whole parcelamento or
    * recorrência — and resolves every row created, first position first.
@@ -776,7 +773,6 @@ function herdDataOf(s: HerdStore): HerdData {
     lotPlacements: s.lotPlacements,
     movements: s.movements,
     breeds: s.breeds,
-    protocols: s.protocols,
     manejoSessions: s.manejoSessions,
     expenses: s.expenses,
     accounts: s.accounts,
@@ -1377,7 +1373,6 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   lotPlacements: [],
   movements: [],
   breeds: [],
-  protocols: [],
   manejoSessions: [],
   expenses: [],
   accounts: [],
@@ -2192,25 +2187,6 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     const { data, error } = await api.farm.headquarters.put({ headquarters: view });
     if (error) apiFail("salvar a sede no mapa", error);
     set({ farm: { ...(data as FarmData) } });
-  },
-
-  addProtocol: async (p, generateSchedule) => {
-    const { data, error } = await api.protocols.post({ protocol: p, generateSchedule });
-    if (error) apiFail("criar o protocolo", error);
-    const { protocol, treatments } = data as {
-      protocol: HealthProtocol;
-      treatments: Treatment[];
-    };
-    set((s) => ({
-      protocols: [...s.protocols, protocol],
-      treatments: [...s.treatments, ...treatments],
-    }));
-  },
-
-  removeProtocol: async (id) => {
-    const { error } = await api.protocols({ id }).delete();
-    if (error) apiFail("remover o protocolo", error);
-    set((s) => ({ protocols: s.protocols.filter((p) => p.id !== id) }));
   },
 
   addExpense: async (e, repeat) => {
