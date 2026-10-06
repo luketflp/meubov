@@ -11,7 +11,7 @@ import type {
   SemenBull,
   Treatment,
 } from "@/lib/types";
-import { makeAnimal, makeTreatment } from "@/lib/domain/__tests__/fixtures";
+import { makeAnimal, makeManejoSession, makeTreatment } from "@/lib/domain/__tests__/fixtures";
 import {
   animalById,
   animalsByBreed,
@@ -244,6 +244,7 @@ describe("lot and invernada summaries", () => {
 });
 
 describe("recentBirths", () => {
+  const SINCE = "2025-10-01";
   const calf = (earTag: string, overrides: Partial<Animal> = {}): Animal =>
     makeAnimal({ id: `calf-${earTag}`, earTag, category: "calf", ...overrides });
 
@@ -269,7 +270,7 @@ describe("recentBirths", () => {
       calf("BR-103"),
     ];
 
-    expect(recentBirths(animals).map((b) => b.calfEarTag)).toEqual([
+    expect(recentBirths(animals, [], SINCE).map((b) => b.calfEarTag)).toEqual([
       "BR-103",
       "BR-102",
       "BR-101",
@@ -288,9 +289,9 @@ describe("recentBirths", () => {
       }),
     ];
 
-    const [birth] = recentBirths(animals);
+    const [birth] = recentBirths(animals, [], SINCE);
 
-    expect(birth.dam.id).toBe("dam-1");
+    expect(birth.dam?.id).toBe("dam-1");
     expect(birth.calf?.sex).toBe("female");
     expect(birth.birthWeightKg).toBe(32);
   });
@@ -301,13 +302,13 @@ describe("recentBirths", () => {
       calf("BR-103", { weighings: [{ date: "2026-06-02", weightKg: 120 }] }),
     ];
 
-    expect(recentBirths(animals)[0].birthWeightKg).toBeNull();
+    expect(recentBirths(animals, [], SINCE)[0].birthWeightKg).toBeNull();
   });
 
   it("keeps the birth when the calf's ear tag no longer resolves", () => {
     const animals = [dam("dam-1", [{ date: "2026-03-02", calfEarTag: "BR-103" }])];
 
-    const [birth] = recentBirths(animals);
+    const [birth] = recentBirths(animals, [], SINCE);
 
     expect(birth.calfEarTag).toBe("BR-103");
     expect(birth.calf).toBeNull();
@@ -321,11 +322,36 @@ describe("recentBirths", () => {
       }),
     ];
 
-    expect(recentBirths(animals)).toHaveLength(1);
+    expect(recentBirths(animals, [], SINCE)).toHaveLength(1);
+  });
+
+  it("adds the calves that joined with no parto and no entrada, born since the window opened", () => {
+    const animals = [
+      dam("dam-1", [{ date: "2026-03-02", calfEarTag: "BR-103" }]),
+      calf("BR-103", { birthDate: "2026-03-02" }),
+      calf("SEM-MAE", {
+        birthDate: "2026-04-15",
+        weighings: [{ date: "2026-04-15", weightKg: 30 }],
+      }),
+      calf("COMPRADO", { birthDate: "2026-05-01" }),
+      calf("ANTIGO", { birthDate: "2025-09-30" }),
+      calf("SEM-DATA", { birthDate: "" }),
+    ];
+    const entry = makeManejoSession({
+      kind: "entry",
+      date: "2026-06-01",
+      animals: [{ earTag: "COMPRADO", outcome: "done", createdAnimal: true }],
+    });
+
+    const births = recentBirths(animals, [entry], SINCE);
+
+    expect(births.map((b) => b.calfEarTag)).toEqual(["SEM-MAE", "BR-103"]);
+    expect(births[0]).toMatchObject({ date: "2026-04-15", dam: null, birthWeightKg: 30 });
+    expect(births[0].calf?.id).toBe("calf-SEM-MAE");
   });
 
   it("ignores animals with no reproduction record", () => {
-    expect(recentBirths([makeAnimal(), dam("dam-1", [])])).toEqual([]);
+    expect(recentBirths([makeAnimal(), dam("dam-1", [])], [], SINCE)).toEqual([]);
   });
 });
 

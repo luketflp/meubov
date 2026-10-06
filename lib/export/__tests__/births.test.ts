@@ -32,7 +32,7 @@ const calf = makeAnimal({
 describe("birthsExportTable", () => {
   it("writes the table's rows in the screen's sort, with the dam's lote", () => {
     const lotNames = new Map([["l1", "Maternidade"]]);
-    const births = sortBirths(recentBirths([dam, calf]), DEFAULT_BIRTH_SORT, lotNames);
+    const births = sortBirths(recentBirths([dam, calf], [], "2025-10-01"), DEFAULT_BIRTH_SORT, lotNames);
     const table = birthsExportTable(births, lotNames);
     expect(table.title).toBe("Nascimentos");
     expect(table.columns.map((c) => c.header)).toEqual([

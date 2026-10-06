@@ -40,9 +40,12 @@ function compareByColumn(
         b.calf ? SEX_LABEL[b.calf.sex] : ""
       );
     case "dam":
-      return collator.compare(a.dam.earTag, b.dam.earTag);
+      return collator.compare(a.dam?.earTag ?? "", b.dam?.earTag ?? "");
     case "lot":
-      return collator.compare(lotNames.get(a.dam.lotId) ?? "", lotNames.get(b.dam.lotId) ?? "");
+      return collator.compare(
+        lotNames.get(a.dam?.lotId ?? "") ?? "",
+        lotNames.get(b.dam?.lotId ?? "") ?? ""
+      );
     case "breed":
       return collator.compare(a.calf?.breed ?? "", b.calf?.breed ?? "");
     case "weight":

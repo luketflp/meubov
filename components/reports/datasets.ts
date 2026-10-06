@@ -8,6 +8,7 @@ import type { HerdData } from "@/lib/types";
 import { activeAnimals, lotsByInvernada, recentBirths, recentBreedings, withStatus } from "@/lib/store/selectors";
 import { DEFAULT_SORT, sortHerd } from "@/components/herd/filters";
 import { recentBaixas } from "@/components/baixas/baixas";
+import { herdFlowSince } from "@/lib/store/dashboard";
 import { withoutMoney, type ExportTable } from "@/lib/export/table";
 import { herdExportTable } from "@/lib/export/datasets/herd";
 import { currentInvernadaNames, lotsExportTable, weighingsExportTable } from "@/lib/export/datasets/lots";
@@ -81,7 +82,7 @@ export function reportDatasets(data: HerdData, todayIso: string, seeMoney: boole
       "Coberturas e diagnósticos",
       breedingsExportTable(recentBreedings(data.animals, data.semenBulls), lotNames, "Coberturas")
     ),
-    one("births", "Nascimentos", birthsExportTable(recentBirths(data.animals), lotNames)),
+    one("births", "Nascimentos", birthsExportTable(recentBirths(data.animals, data.manejoSessions, herdFlowSince(todayIso)), lotNames)),
     one(
       "baixas",
       "Baixas",

@@ -22,6 +22,7 @@ import { breedingOutcome, type BreedingOutcome } from "@/lib/domain/reproduction
 import { calculateAdg, herdAdgSamples } from "@/lib/domain/adg";
 import { ageInMonths, daysBetween } from "@/lib/domain/dates";
 import { FLOORS, type Permissions } from "@/lib/domain/permissions";
+import { entryDatesByEarTag, hasBirthDate } from "@/lib/reports/declaration";
 import type { FarmOption } from "@/lib/store/useHerdStore";
 import { kgToArroba, currentWeight, totalWeightKg } from "@/lib/domain/weights";
 import {
@@ -56,7 +57,8 @@ export interface Birth {
   key: string;
   /** The calving date, which is also the calf's birth date. */
   date: string;
-  dam: Animal;
+  /** Null for a calf that joined with no parto: imported without a mãe or registered by hand. */
+  dam: Animal | null;
   calfEarTag: string;
   /** The calf in the herd, or null when its ear tag no longer resolves. */
   calf: Animal | null;
@@ -806,32 +808,58 @@ export function herdStockingRateAuPerHa(animals: Animal[], invernadas: Invernada
 }
 
 /**
- * One calving as the Nascimentos screen shows it: the dam's record, the calf's
+ * One birth as the Nascimentos screen shows it: the dam's record, the calf's
  * when the ear tag still resolves, and the weight taken on the day of birth.
+ * Besides the partos recorded on the dams, a calf that joined with no parto and
+ * no entrada counts as born on its birth date, when that is on or after
+ * `unrecordedSince`.
  */
-export function recentBirths(animals: Animal[]): Birth[] {
+export function recentBirths(
+  animals: Animal[],
+  sessions: readonly ManejoSession[],
+  unrecordedSince: string
+): Birth[] {
   const byEarTag = new Map(animals.map((animal) => [animal.earTag, animal]));
-  return animals
-    .flatMap((dam) =>
-      (dam.reproduction?.calvings ?? []).map((calving) => {
-        const calf = byEarTag.get(calving.calfEarTag) ?? null;
-        // The birth weight is the weighing dated the calving itself — a later
-        // weighing of the same calf is growth, not how it was born.
-        const birthWeighing = calf?.weighings.find((w) => w.date === calving.date);
-        return {
-          key: `${dam.id}-${calving.date}-${calving.calfEarTag}`,
-          date: calving.date,
-          dam,
-          calfEarTag: calving.calfEarTag,
-          calf,
-          birthWeightKg: birthWeighing?.weightKg ?? null,
-        };
-      })
+  const recorded = animals.flatMap((dam) =>
+    (dam.reproduction?.calvings ?? []).map((calving) => {
+      const calf = byEarTag.get(calving.calfEarTag) ?? null;
+      // The birth weight is the weighing dated the calving itself — a later
+      // weighing of the same calf is growth, not how it was born.
+      const birthWeighing = calf?.weighings.find((w) => w.date === calving.date);
+      return {
+        key: `${dam.id}-${calving.date}-${calving.calfEarTag}`,
+        date: calving.date,
+        dam,
+        calfEarTag: calving.calfEarTag,
+        calf,
+        birthWeightKg: birthWeighing?.weightKg ?? null,
+      };
+    })
+  );
+  const withParto = new Set(recorded.map((birth) => birth.calfEarTag));
+  const entered = entryDatesByEarTag(sessions);
+  // ponytail: an animal bought before entradas existed (or registered by hand
+  // with no entrada) and born in the window also counts; an origin field on the
+  // animal would tell them apart.
+  const unrecorded = animals
+    .filter(
+      (calf) =>
+        hasBirthDate(calf) &&
+        calf.birthDate >= unrecordedSince &&
+        !withParto.has(calf.earTag) &&
+        !entered.has(calf.earTag)
     )
-    .sort(
-      (a, b) =>
-        compareDate(b.date, a.date) || a.calfEarTag.localeCompare(b.calfEarTag)
-    );
+    .map((calf) => ({
+      key: `calf-${calf.id}`,
+      date: calf.birthDate,
+      dam: null,
+      calfEarTag: calf.earTag,
+      calf,
+      birthWeightKg: calf.weighings.find((w) => w.date === calf.birthDate)?.weightKg ?? null,
+    }));
+  return [...recorded, ...unrecorded].sort(
+    (a, b) => compareDate(b.date, a.date) || a.calfEarTag.localeCompare(b.calfEarTag)
+  );
 }
 
 /**

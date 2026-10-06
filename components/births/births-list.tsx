@@ -2,7 +2,8 @@
 
 /**
  * Births log: every calving on the farm, newest first, joining the calf to the
- * dam that bore it and the lot the dam is in. The table headers sort it the way
+ * dam that bore it and the lot the dam is in, plus the calves of the last 12
+ * months that joined with no parto (no mãe to show). The table headers sort it the way
  * the Rebanho table does. Table on desktop, stacked cards on mobile — the same shape
  * the manejo history uses.
  *
@@ -14,7 +15,8 @@ import Link from "next/link";
 import { ArrowDown, ArrowUp, Baby, ChevronsUpDown } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { recentBirths, type Birth } from "@/lib/store/selectors";
-import { formatDate } from "@/lib/domain/dates";
+import { herdFlowSince } from "@/lib/store/dashboard";
+import { formatDate, todayISO } from "@/lib/domain/dates";
 import { formatKg } from "@/lib/domain/format";
 import { SEX_LABEL } from "@/lib/domain/labels";
 import { cn } from "@/lib/utils";
@@ -117,13 +119,16 @@ export function BirthsList({
 }) {
   const animals = useHerdStore((s) => s.animals);
   const lots = useHerdStore((s) => s.lots);
+  const manejoSessions = useHerdStore((s) => s.manejoSessions);
+  const today = todayISO();
 
   const lotNames = useMemo(() => new Map(lots.map((lot) => [lot.id, lot.name])), [lots]);
   const births = useMemo(
-    () => sortBirths(recentBirths(animals), sort, lotNames),
-    [animals, sort, lotNames]
+    () => sortBirths(recentBirths(animals, manejoSessions, herdFlowSince(today)), sort, lotNames),
+    [animals, manejoSessions, today, sort, lotNames]
   );
-  const lotName = (birth: Birth): string => lotNames.get(birth.dam.lotId) ?? "—";
+  const lotName = (birth: Birth): string =>
+    birth.dam ? (lotNames.get(birth.dam.lotId) ?? "—") : "—";
 
   return (
     <SectionCard title="Nascimentos registrados">
@@ -161,9 +166,13 @@ export function BirthsList({
                     </TableCell>
                     <TableCell className="text-ink-soft">{sexLabel(birth)}</TableCell>
                     <TableCell>
-                      <Link href={`/herd/${birth.dam.id}`} className={linkClass}>
-                        {birth.dam.earTag}
-                      </Link>
+                      {birth.dam ? (
+                        <Link href={`/herd/${birth.dam.id}`} className={linkClass}>
+                          {birth.dam.earTag}
+                        </Link>
+                      ) : (
+                        <span className="text-ink-soft">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-ink-soft">{lotName(birth)}</TableCell>
                     <TableCell className="text-ink-soft">
@@ -198,12 +207,16 @@ export function BirthsList({
                 </p>
                 <p className="mt-1 text-xs text-ink-soft">
                   Mãe:{" "}
-                  <Link
-                    href={`/herd/${birth.dam.id}`}
-                    className="font-mono text-ink underline-offset-2 hover:underline"
-                  >
-                    {birth.dam.earTag}
-                  </Link>{" "}
+                  {birth.dam ? (
+                    <Link
+                      href={`/herd/${birth.dam.id}`}
+                      className="font-mono text-ink underline-offset-2 hover:underline"
+                    >
+                      {birth.dam.earTag}
+                    </Link>
+                  ) : (
+                    "—"
+                  )}{" "}
                   · lote {lotName(birth)}
                 </p>
               </li>

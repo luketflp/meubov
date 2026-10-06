@@ -8,6 +8,7 @@ import type {
   Invernada,
   Lot,
   LotPlacement,
+  ManejoSession,
   Movement,
   Treatment,
   TreatmentType,
@@ -24,7 +25,7 @@ import {
 } from "@/lib/domain/reproduction";
 import { deriveTreatmentStatus } from "@/lib/domain/status";
 import { awaitsDiagnosis } from "@/lib/domain/ultrasound";
-import { activeAnimals, currentPlacementForLot } from "@/lib/store/selectors";
+import { activeAnimals, currentPlacementForLot, recentBirths } from "@/lib/store/selectors";
 
 /** Days ahead the agenda looks for scheduled work. */
 export const AGENDA_DAYS_AHEAD = 7;
@@ -268,24 +269,33 @@ export interface HerdFlow {
   end: number;
 }
 
-/**
- * How the herd got from the start of the window to today: calvings recorded,
- * head bought (purchase movements, the entradas included), and animals that
- * left by reason. The start is derived, so an animal registered by hand with no
- * entrada counts as already there.
- */
-export function herdFlow(animals: Animal[], movements: Movement[], todayIso: string): HerdFlow {
+/** First day of the herd flow's window: the first of the month 11 months before today's. */
+export function herdFlowSince(todayIso: string): string {
   const today = parseISODate(todayIso);
-  const since = toISO(new Date(today.getFullYear(), today.getMonth() - 11, 1));
+  return toISO(new Date(today.getFullYear(), today.getMonth() - 11, 1));
+}
+
+/**
+ * How the herd got from the start of the window to today: the births (see
+ * recentBirths), head bought (purchase movements, the entradas included), and
+ * animals that left by reason. The start is derived, so an animal born before
+ * the window and registered by hand with no entrada counts as already there.
+ */
+export function herdFlow(
+  animals: Animal[],
+  movements: Movement[],
+  sessions: readonly ManejoSession[],
+  todayIso: string
+): HerdFlow {
+  const since = herdFlowSince(todayIso);
   const inWindow = (iso: string | undefined): boolean =>
     iso !== undefined && iso >= since && iso <= todayIso;
 
-  let births = 0;
+  const births = recentBirths(animals, sessions, since).filter((birth) => inWindow(birth.date)).length;
   let sales = 0;
   let deaths = 0;
   let others = 0;
   for (const animal of animals) {
-    births += (animal.reproduction?.calvings ?? []).filter((c) => inWindow(c.date)).length;
     if (animal.active || !inWindow(animal.inactiveDate)) continue;
     if (animal.inactiveReason === "sale") sales += 1;
     else if (animal.inactiveReason === "death" || animal.inactiveReason === "loss") deaths += 1;

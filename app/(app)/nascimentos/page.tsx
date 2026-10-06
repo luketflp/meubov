@@ -15,17 +15,21 @@ import { RegisterBirthDialog } from "@/components/births/register-birth-dialog";
 import { DEFAULT_BIRTH_SORT, sortBirths, type BirthSort } from "@/components/births/sort-births";
 import { ExportMenu } from "@/components/export/ExportMenu";
 import { birthsExportTable } from "@/lib/export/datasets/births";
+import { herdFlowSince } from "@/lib/store/dashboard";
 import { recentBirths } from "@/lib/store/selectors";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
+import { todayISO } from "@/lib/domain/dates";
 
 export default function NascimentosPage() {
   const canEdit = useCan("reproduction", "edit");
   const animals = useHerdStore((s) => s.animals);
   const lots = useHerdStore((s) => s.lots);
+  const manejoSessions = useHerdStore((s) => s.manejoSessions);
   const [sort, setSort] = useState<BirthSort>(DEFAULT_BIRTH_SORT);
 
-  const count = recentBirths(animals).length;
+  const births = recentBirths(animals, manejoSessions, herdFlowSince(todayISO()));
+  const count = births.length;
   const exportMenu = (
     <ExportMenu
       title="Nascimentos"
@@ -34,7 +38,7 @@ export default function NascimentosPage() {
         detail: count === 1 ? "1 nascimento" : `${count} nascimentos`,
         build: () => {
           const lotNames = new Map(lots.map((lot) => [lot.id, lot.name]));
-          return [birthsExportTable(sortBirths(recentBirths(animals), sort, lotNames), lotNames)];
+          return [birthsExportTable(sortBirths(births, sort, lotNames), lotNames)];
         },
       }}
       hint="Mesmas colunas e ordem da tabela."

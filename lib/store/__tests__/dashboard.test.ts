@@ -257,7 +257,7 @@ describe("herdFlow", () => {
       { id: "m3", type: "sale", date: "2026-05-02", quantity: 1, origin: "Garrotes", destination: "Frigorífico" },
     ];
 
-    expect(herdFlow(animals, movements, TODAY)).toEqual({
+    expect(herdFlow(animals, movements, [], TODAY)).toEqual({
       since: "2025-10-01",
       start: 5,
       births: 1,
@@ -269,12 +269,21 @@ describe("herdFlow", () => {
     });
   });
 
+  it("counts a calf that joined with no parto and no entrada as born on its birth date", () => {
+    const animals = [
+      makeAnimal({ id: "c1", earTag: "C1", category: "cow" }),
+      makeAnimal({ id: "b1", earTag: "B1", category: "calf", birthDate: "2026-08-01" }),
+    ];
+
+    expect(herdFlow(animals, [], [], TODAY)).toMatchObject({ start: 1, births: 1, end: 2 });
+  });
+
   it("never starts below zero", () => {
     const movements: Movement[] = [
       { id: "m1", type: "purchase", date: "2026-04-01", quantity: 3, origin: "Leilão", destination: "Garrotes" },
     ];
 
-    expect(herdFlow([makeAnimal()], movements, TODAY).start).toBe(0);
+    expect(herdFlow([makeAnimal()], movements, [], TODAY).start).toBe(0);
   });
 });
 

@@ -78,6 +78,7 @@ export default function DashboardPage() {
   const lotPlacements = useHerdStore((s) => s.lotPlacements);
   const treatments = useHerdStore((s) => s.treatments);
   const movements = useHerdStore((s) => s.movements);
+  const manejoSessions = useHerdStore((s) => s.manejoSessions);
   const expenses = useHerdStore((s) => s.expenses);
   const farm = useHerdStore((s) => s.farm);
   const completeTreatments = useHerdStore((s) => s.completeTreatments);
@@ -119,7 +120,10 @@ export default function DashboardPage() {
   const agenda = useMemo(() => farmAgenda(agendaInput, today), [agendaInput, today]);
   const quietLots = useMemo(() => lotsUpToDate(agendaInput, agenda), [agendaInput, agenda]);
 
-  const flow = useMemo(() => herdFlow(animals, movements, today), [animals, movements, today]);
+  const flow = useMemo(
+    () => herdFlow(animals, movements, manejoSessions, today),
+    [animals, movements, manejoSessions, today]
+  );
   const byCategory = useMemo(() => countByCategory(active), [active]);
   const adgSeries = useMemo(() => monthlyAdg(active, ADG_CHART_MONTHS), [active]);
   const averageAdg = useMemo(() => herdAverageAdg(active, today), [active, today]);
