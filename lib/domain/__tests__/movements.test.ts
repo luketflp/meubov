@@ -95,10 +95,10 @@ describe("saleSummary", () => {
     expect(summary?.totalCarcassKg).toBeCloseTo(1891.985, 3);
     expect(summary?.totalCarcassArrobas).toBeCloseTo(126.1323, 3);
     expect(summary?.grossBrl).toBeCloseTo(37839.7, 2);
-    expect(summary?.funruralBrl).toBeCloseTo(567.6, 1);
-    expect(summary?.netBrl).toBeCloseTo(37272.1, 1);
+    expect(summary?.funruralBrl).toBeCloseTo(616.79, 2);
+    expect(summary?.netBrl).toBeCloseTo(37222.91, 2);
     expect(summary?.grossPerHeadBrl).toBeCloseTo(4729.96, 2);
-    expect(summary?.netPerHeadBrl).toBeCloseTo(4659.01, 2);
+    expect(summary?.netPerHeadBrl).toBeCloseTo(4652.86, 2);
   });
 
   it("assumes the 50% yield on per-arroba sessions that never set one", () => {
@@ -123,7 +123,7 @@ describe("saleSummary", () => {
     expect(summary?.carcassYieldPct).toBeNull();
     expect(summary?.totalCarcassArrobas).toBeNull();
     expect(summary?.grossBrl).toBe(9800);
-    expect(summary?.funruralBrl).toBeCloseTo(147, 6);
+    expect(summary?.funruralBrl).toBeCloseTo(159.74, 6);
     expect(summary?.grossPerHeadBrl).toBe(4900);
   });
 

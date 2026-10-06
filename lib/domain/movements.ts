@@ -66,7 +66,7 @@ export function passYieldPct(
 }
 
 /** FUNRURAL withheld on the gross value of a venda (pessoa física). */
-export const FUNRURAL_RATE = 0.015;
+export const FUNRURAL_RATE = 0.0163;
 
 /**
  * Final numbers of a venda: the batch totals and the per-head averages shown
