@@ -4,6 +4,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* The desktop rail (and anything in it) open: hovered, reached by keyboard, or
+   while its farm menu is open, so moving into that menu does not fold it. The
+   menu's trigger is left out of the keyboard case: closing the menu hands it a
+   :focus-visible focus even after a click, which would hold the rail open. */
+@custom-variant rail-open (&:is(.rail:hover, .rail:hover *, .rail:has(:focus-visible:not([aria-haspopup])), .rail:has(:focus-visible:not([aria-haspopup])) *, .rail:has([aria-expanded="true"]), .rail:has([aria-expanded="true"]) *));
+
 /*
  * MeuBov palette — the single source of truth for color.
  * Components NEVER use loose hex values: always these tokens.

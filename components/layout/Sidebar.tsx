@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { SyncBadge } from "@/components/offline/SyncBadge";
 import { NELORE_HEAD_VIEWBOX, NeloreMark } from "@/components/ui/nelore-mark";
 import { FarmSwitcher } from "@/components/farms/FarmSwitcher";
+import { railLabelClass as labelClass } from "@/components/layout/rail";
 
 /**
  * Brand-green rail: the only dark surface in the app, so navigation reads as
@@ -23,7 +24,7 @@ import { FarmSwitcher } from "@/components/farms/FarmSwitcher";
  * rail, which is what "you are here" deserves.
  */
 const rowClass =
-  "flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm text-sidebar-ink transition-colors hover:bg-sidebar-hover";
+  "flex items-center gap-2.5 overflow-hidden rounded-lg px-2.5 py-1.5 text-sm text-sidebar-ink transition-colors hover:bg-sidebar-hover";
 
 /** Highlight shared by an active parent row and an active child row. */
 const activeClass = "bg-sidebar-active font-medium text-sidebar-active-ink";
@@ -50,7 +51,9 @@ export function Sidebar() {
   const items = visibleNav(NAV_ITEMS, useActivePermissions());
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col bg-sidebar md:flex">
+    // Folded to its icons so the page keeps the width; it slides open over the
+    // page on hover, after a beat so passing the mouse across does not open it.
+    <aside className="rail fixed inset-y-0 left-0 z-40 hidden w-16 flex-col overflow-hidden bg-sidebar transition-[width,box-shadow] duration-300 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none md:flex rail-open:w-60 rail-open:shadow-xl rail-open:delay-100">
       <div className="flex items-center gap-2 px-4 pt-4 pb-3">
         {/* The mark keeps its own dark ink and green ear tag, so on a green
             rail it needs a light ground of its own: a cream tile, the same
@@ -66,14 +69,19 @@ export function Sidebar() {
             style={{ display: "block", overflow: "hidden" }}
           />
         </span>
-        <p className="font-heading text-lg leading-none font-semibold text-sidebar-ink">MeuBov</p>
+        <p className={cn("font-heading text-lg leading-none font-semibold text-sidebar-ink", labelClass)}>
+          MeuBov
+        </p>
       </div>
 
       <div className="px-2.5 pb-3">
         <FarmSwitcher variant="rail" />
       </div>
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5" aria-label="Navegação principal">
+      <nav
+        className="flex-1 space-y-0.5 overflow-x-hidden overflow-y-auto px-2.5"
+        aria-label="Navegação principal"
+      >
         {items.map((item) => {
           const child = activeChild(pathname, item);
           // On a child route the child row takes the cream pill and the
@@ -100,31 +108,44 @@ export function Sidebar() {
                   )}
                   aria-hidden
                 />
-                {item.label}
+                <span className={cn("truncate", labelClass)}>{item.label}</span>
                 {/* Brand on the cream active pill; cream on the green rail. */}
                 {item.href === "/manejo" ? (
                   <SyncBadge
-                    className={cn("ml-auto", !active && "bg-sidebar-active text-sidebar-active-ink")}
+                    className={cn(
+                      "ml-auto",
+                      labelClass,
+                      !active && "bg-sidebar-active text-sidebar-active-ink"
+                    )}
                   />
                 ) : null}
               </Link>
+              {/* Folded with the rail; the grid row animates the height. The
+                  -mt/pt pair keeps the first elbow inside the clip. */}
               {item.children && (
-                <div className="ml-[18px] space-y-0.5 pl-2.5">
-                  {item.children.map((sub, index, all) => (
-                    <Link
-                      key={sub.href}
-                      href={sub.href}
-                      aria-current={sub === child ? "page" : undefined}
-                      className={cn(
-                        childClass,
-                        index < all.length - 1 && childTrunkClass,
-                        sub === child && activeClass
-                      )}
-                    >
-                      {sub.icon && <sub.icon className="size-3.5 shrink-0" aria-hidden />}
-                      {sub.label}
-                    </Link>
-                  ))}
+                <div className="-mt-0.5 grid grid-rows-[0fr] transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none rail-open:grid-rows-[1fr]">
+                  <div
+                    className={cn(
+                      "ml-[18px] min-h-0 space-y-0.5 overflow-hidden pt-0.5 pl-2.5",
+                      labelClass
+                    )}
+                  >
+                    {item.children.map((sub, index, all) => (
+                      <Link
+                        key={sub.href}
+                        href={sub.href}
+                        aria-current={sub === child ? "page" : undefined}
+                        className={cn(
+                          childClass,
+                          index < all.length - 1 && childTrunkClass,
+                          sub === child && activeClass
+                        )}
+                      >
+                        {sub.icon && <sub.icon className="size-3.5 shrink-0" aria-hidden />}
+                        {sub.label}
+                      </Link>
+                    ))}
+                  </div>
                 </div>
               )}
             </Fragment>
@@ -133,7 +154,7 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-sidebar-line/40 px-2.5 py-2.5">
-        <div className="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
+        <div className="flex items-center gap-2.5 overflow-hidden rounded-lg px-2 py-1.5">
           <span
             aria-hidden
             className="relative flex size-7 shrink-0 items-center justify-center rounded-full bg-sidebar-active text-[11px] font-semibold text-sidebar-active-ink"
@@ -144,7 +165,7 @@ export function Sidebar() {
               <span className="absolute -top-px -right-px size-2.5 rounded-full bg-attention ring-2 ring-sidebar" />
             ) : null}
           </span>
-          <div className="min-w-0 flex-1">
+          <div className={cn("min-w-0 flex-1", labelClass)}>
             <p className="truncate text-sm font-medium text-sidebar-ink">
               {isPending ? "Carregando…" : displayName(user?.name, user?.email)}
             </p>
@@ -157,7 +178,10 @@ export function Sidebar() {
             onClick={signOut}
             aria-label="Sair"
             title="Sair"
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-sidebar-ink-soft transition-colors hover:bg-sidebar-hover hover:text-sidebar-ink"
+            className={cn(
+              "pointer-events-none flex size-7 shrink-0 items-center justify-center rounded-md text-sidebar-ink-soft hover:bg-sidebar-hover hover:text-sidebar-ink rail-open:pointer-events-auto",
+              labelClass
+            )}
           >
             <LogOut className="size-4" aria-hidden />
           </button>

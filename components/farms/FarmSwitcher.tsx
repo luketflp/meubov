@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { NewFarmDialog } from "@/components/farms/NewFarmDialog";
 import { useNewFarm } from "@/components/farms/useNewFarm";
+import { railLabelClass } from "@/components/layout/rail";
 
 interface FarmSwitcherProps {
   /** "rail": the green sidebar trigger. "field": the 44px field inside "Mais". */
@@ -33,7 +34,7 @@ interface FarmSwitcherProps {
 }
 
 const TRIGGER_CLASS: Record<FarmSwitcherProps["variant"], string> = {
-  rail: "flex h-8 w-full items-center justify-between gap-1.5 rounded-lg border border-sidebar-line/60 bg-sidebar-hover py-2 pr-2 pl-2.5 text-sm text-sidebar-ink outline-none focus-visible:ring-3 focus-visible:ring-sidebar-active/35",
+  rail: "flex h-8 w-full items-center justify-between gap-1.5 overflow-hidden rounded-lg border border-sidebar-line/60 bg-sidebar-hover py-2 pr-2 pl-2.5 text-sm text-sidebar-ink outline-none focus-visible:ring-3 focus-visible:ring-sidebar-active/35",
   field:
     "flex min-h-11 w-full items-center justify-between gap-1.5 rounded-lg border border-input bg-transparent py-2 pr-2 pl-2.5 text-sm text-ink outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
 };
@@ -63,12 +64,14 @@ export function FarmSwitcher({ variant, id, onNavigate }: FarmSwitcherProps) {
           {/* One flex child so justify-between only separates it from the chevron. */}
           <span className="flex min-w-0 items-center gap-2">
             <Tractor className={cn("size-4 shrink-0", variant === "field" && "text-ink-soft")} aria-hidden />
-            <span className="truncate">{active ? farmLabel(active) : "Fazenda"}</span>
+            <span className={cn("truncate", variant === "rail" && railLabelClass)}>
+              {active ? farmLabel(active) : "Fazenda"}
+            </span>
           </span>
           <ChevronDown
             className={cn(
               "size-4 shrink-0",
-              variant === "rail" ? "text-sidebar-ink-soft" : "text-muted-foreground"
+              variant === "rail" ? cn("text-sidebar-ink-soft", railLabelClass) : "text-muted-foreground"
             )}
             aria-hidden
           />

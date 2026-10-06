@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="print:hidden">
         <Sidebar />
       </div>
-      <main className={cn("pb-28 md:pb-10 md:pl-60 print:p-0", printing && "print:hidden")}>{children}</main>
+      <main className={cn("pb-28 md:pb-10 md:pl-16 print:p-0", printing && "print:hidden")}>{children}</main>
       <div className="print:hidden">
         <MobileTabBar />
       </div>

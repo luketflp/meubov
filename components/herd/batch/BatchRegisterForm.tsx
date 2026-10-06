@@ -366,7 +366,7 @@ export function BatchRegisterForm() {
         )}
       </section>
 
-      <div className="fixed inset-x-0 bottom-[calc(3.125rem+env(safe-area-inset-bottom))] z-30 border-t border-hairline bg-panel/95 backdrop-blur-sm md:bottom-0 md:left-60">
+      <div className="fixed inset-x-0 bottom-[calc(3.125rem+env(safe-area-inset-bottom))] z-30 border-t border-hairline bg-panel/95 backdrop-blur-sm md:bottom-0 md:left-16">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between md:px-8 md:py-3">
           <div className="min-w-0 text-center sm:text-left">
             {count === 0 ? (
