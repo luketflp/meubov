@@ -227,8 +227,9 @@ export default function CalendarPage({ searchParams }: CalendarPageProps) {
 
       {activeTab === "agenda" ? (
         <>
-          <OverdueSection
-            overdue={overdue}
+          <MonthList
+            yearMonth={yearMonth}
+            treatments={ofMonth}
             onMarkDone={onMarkDone}
             onDelete={onDelete}
             onDeleteGroup={onDeleteGroup}
@@ -243,9 +244,8 @@ export default function CalendarPage({ searchParams }: CalendarPageProps) {
             onOpenDay={setOpenDay}
           />
 
-          <MonthList
-            yearMonth={yearMonth}
-            treatments={ofMonth}
+          <OverdueSection
+            overdue={overdue}
             onMarkDone={onMarkDone}
             onDelete={onDelete}
             onDeleteGroup={onDeleteGroup}
