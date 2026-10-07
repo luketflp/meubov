@@ -2,9 +2,8 @@
 
 /**
  * The lançamentos of the nó picked, newest first. md+: a table of 50 rows a
- * page with a radio per row that picks the lançamento the toolbar acts on;
- * "Extrato" shows the contra partida and the saldo (or the status),
- * "Detalhado" the vencimento, lote and conta bancária. The headers sort it
+ * page with a radio per row that picks the lançamento the toolbar acts on,
+ * with the contra partida and the saldo (or the status). The headers sort it
  * like the other tables (the saldo follows the date, so it does not sort). A
  * click on a row opens the lançamento in full; the radio only picks it. Phone:
  * a list that grows by 50, a tap opening the same lançamento as a sheet.
@@ -112,62 +111,26 @@ function ExtratoCells({ row, saldo }: { row: PaneRow; saldo: boolean }) {
   );
 }
 
-function DetalhadoCells({ row, bank }: { row: PaneRow; bank: string | null }) {
-  const ledger = row.ledger;
-  return (
-    <>
-      <td className={CELL}>
-        <span className="block font-mono text-xs text-ink">{formatDate(row.date)}</span>
-        {ledger?.expense ? (
-          <span
-            className={cn(
-              "block text-[11px] whitespace-nowrap",
-              ledger.paidAt === null ? "text-attention" : "text-ink-soft"
-            )}
-          >
-            vence {dayMonth(ledger.dueDate)}
-          </span>
-        ) : null}
-      </td>
-      <HistoryCell row={row} />
-      <td className={cn(CELL, "truncate")}>
-        {ledger ? (ledger.lotName ?? <span className="text-xs text-ink-soft">fazenda</span>) : <Dash />}
-      </td>
-      <td className={cn(CELL, "truncate")}>{bank ?? <Dash />}</td>
-      <td className={cn(CELL, "text-right")}>
-        <Amount value={row.amountBrl} />
-      </td>
-      <td className={cn(CELL, "pr-4")}>{ledger ? <LedgerStatusPill status={ledger.status} /> : <Dash />}</td>
-    </>
-  );
-}
-
 interface PaneRowsProps {
   node: PlanNode;
   rows: PaneRow[];
-  view: "extrato" | "detalhado";
   selectedId: string | null;
   onSelect(id: string | null): void;
   page: number;
   onPageChange(page: number): void;
 }
 
-export function PaneRows({ node, rows, view, selectedId, onSelect, page: pageNumber, onPageChange }: PaneRowsProps) {
+export function PaneRows({ node, rows, selectedId, onSelect, page: pageNumber, onPageChange }: PaneRowsProps) {
   const accounts = useHerdStore((s) => s.accounts);
-  const bankAccounts = useHerdStore((s) => s.bankAccounts);
   const [shown, setShown] = useState(PAGE_SIZE);
   const [openId, setOpenId] = useState<string | null>(null);
   const [sort, setSort] = useState<LineSort | null>(null);
   // Looked up on every render: a removed row closes its dialog.
   const open = openId === null ? null : (rows.find((row) => row.id === openId) ?? null);
-  const bankName = (id: string | null) =>
-    id === null ? null : (bankAccounts.find((a) => a.id === id)?.name ?? null);
   const sortValue: Record<string, (row: PaneRow) => SortValue> = {
     date: (row) => row.date,
     history: (row) => row.history,
     contra: (row) => row.contra,
-    lot: (row) => (row.ledger ? (row.ledger.lotName ?? "fazenda") : null),
-    bank: (row) => bankName(row.ledger?.bankAccountId ?? null),
     amount: (row) => row.amountBrl,
     status: (row) => (row.ledger ? STATUS_RANK[row.ledger.status] : null),
   };
@@ -178,7 +141,7 @@ export function PaneRows({ node, rows, view, selectedId, onSelect, page: pageNum
     onPageChange(1);
   };
 
-  // The Extrato's last column: the saldo after each line on a conta bancária, the saldo devedor on a financiamento.
+  // The last column: the saldo after each line on a conta bancária, the saldo devedor on a financiamento.
   const accountId = node.type === "account" ? node.id : null;
   const last =
     node.type === "bank"
@@ -188,23 +151,13 @@ export function PaneRows({ node, rows, view, selectedId, onSelect, page: pageNum
         : "Status";
   const saldo = last !== "Status";
   // [label, sort key (null: not sortable), width and alignment]
-  const heads: [string, string | null, string][] =
-    view === "extrato"
-      ? [
-          ["Data", "date", "w-24"],
-          ["Histórico", "history", ""],
-          ["Contra partida", "contra", "w-44"],
-          ["Valor (R$)", "amount", "w-28 text-right"],
-          [last, saldo ? null : "status", cn("w-28 pr-4", saldo && "text-right")],
-        ]
-      : [
-          ["Data", "date", "w-24"],
-          ["Histórico", "history", ""],
-          ["Lote", "lot", "w-28"],
-          ["Pago por", "bank", "w-32"],
-          ["Valor (R$)", "amount", "w-28 text-right"],
-          ["Status", "status", "w-24 pr-4"],
-        ];
+  const heads: [string, string | null, string][] = [
+    ["Data", "date", "w-24"],
+    ["Histórico", "history", ""],
+    ["Contra partida", "contra", "w-44"],
+    ["Valor (R$)", "amount", "w-28 text-right"],
+    [last, saldo ? null : "status", cn("w-28 pr-4", saldo && "text-right")],
+  ];
 
   return (
     <>
@@ -263,11 +216,7 @@ export function PaneRows({ node, rows, view, selectedId, onSelect, page: pageNum
                         className="block size-4 accent-brand"
                       />
                     </td>
-                    {view === "extrato" ? (
-                      <ExtratoCells row={row} saldo={saldo} />
-                    ) : (
-                      <DetalhadoCells row={row} bank={bankName(row.ledger?.bankAccountId ?? null)} />
-                    )}
+                    <ExtratoCells row={row} saldo={saldo} />
                   </tr>
                 );
               })}

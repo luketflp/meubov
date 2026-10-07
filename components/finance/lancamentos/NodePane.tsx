@@ -4,7 +4,7 @@
  * The right column of Lançamentos: where the nó sits, its name and kind, its
  * own actions (a conta bancária transfers and imports its extrato, an
  * aplicação takes its rendimento), the strip of four figures, the "% quitado"
- * of a financiamento, then Extrato | Detalhado, the filters and the rows. On a
+ * of a financiamento, then the filters and the rows. On a
  * phone it drops the card and the filters.
  */
 import { useEffect, useState } from "react";
@@ -38,16 +38,11 @@ const PILL_TONE: Record<NodeSummary["pills"][number]["tone"], string> = {
   fmd: "bg-fmd-soft text-fmd",
 };
 
-const VIEWS = [
-  { view: "extrato", label: "Extrato" },
-  { view: "detalhado", label: "Detalhado" },
-] as const;
-
 const SEARCH_DELAY_MS = 300;
 const ACTION = "min-h-11 md:min-h-8";
 
 /** The URL keys the pane writes. */
-type PaneKey = "visao" | "lote" | "status" | "q" | "pagina";
+type PaneKey = "lote" | "status" | "q" | "pagina";
 
 interface NodePaneProps {
   node: PlanNode;
@@ -56,7 +51,6 @@ interface NodePaneProps {
   rows: PaneRow[];
   /** The nó's rows in the window before the filters. */
   total: number;
-  view: "extrato" | "detalhado";
   lotId: string;
   pendingOnly: boolean;
   search: string;
@@ -76,7 +70,6 @@ export function NodePane({
   summary,
   rows,
   total,
-  view,
   lotId,
   pendingOnly,
   search,
@@ -184,31 +177,8 @@ export function NodePane({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-3 md:border-b md:border-hairline md:px-4 md:py-2.5">
-        <div
-          role="radiogroup"
-          aria-label="Visão"
-          className="flex flex-1 items-center gap-0.5 rounded-lg border border-hairline bg-surface p-0.5 md:flex-none"
-        >
-          {VIEWS.map((option) => (
-            <button
-              key={option.view}
-              type="button"
-              role="radio"
-              aria-checked={view === option.view}
-              onClick={() => onChange({ visao: option.view === "detalhado" ? option.view : "" })}
-              className={cn(
-                "flex min-h-11 flex-1 items-center justify-center rounded-md px-3 text-[13px] whitespace-nowrap transition-colors md:min-h-8 md:flex-none",
-                view === option.view
-                  ? "bg-panel font-medium text-ink shadow-[0_0_0_1px_var(--color-hairline)]"
-                  : "text-ink-soft hover:text-ink"
-              )}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-        <div className="hidden flex-wrap items-center gap-3 md:flex">
+      <div className="hidden justify-end border-b border-hairline px-4 py-2.5 md:flex">
+        <div className="flex flex-wrap items-center gap-3">
           <Select value={lotId} onValueChange={(lote) => onChange({ lote })}>
             <SelectTrigger aria-label="Filtrar por lote" className="font-medium">
               <span className="flex min-w-0 items-center gap-1">
@@ -272,7 +242,6 @@ export function NodePane({
           key={listKey}
           node={node}
           rows={rows}
-          view={view}
           selectedId={selectedId}
           onSelect={onSelect}
           page={page}

@@ -3,9 +3,9 @@
 /**
  * /finance/lancamentos: the plano de contas as a tree on the left and, on the
  * right, the nó picked in it with its figures and its lançamentos, under one
- * toolbar that acts on the lançamento picked in the list. The nó, the window,
- * the view and the filters live in the URL query (conta, de, ate, visao, lote,
- * status, q, pagina), so the Painel's links land on a nó and reloading keeps
+ * toolbar that acts on the lançamento picked in the list. The nó, the window
+ * and the filters live in the URL query (conta, de, ate, lote, status, q,
+ * pagina), so the Painel's links land on a nó and reloading keeps
  * it. Below xl (phones, tablets) the two columns do not fit: the page is the
  * tree until a nó is picked, then its pane.
  */
@@ -84,7 +84,6 @@ export function LancamentosPage() {
 
   const params = useMemo(() => new URLSearchParams(query), [query]);
   const period = useMemo(() => periodFromSearch(params, today), [params, today]);
-  const view = params.get("visao") === "detalhado" ? "detalhado" : "extrato";
   const lotId = params.get("lote") || "all";
   const pendingOnly = params.get("status") === "pendentes";
   const search = params.get("q")?.trim() ?? "";
@@ -206,7 +205,6 @@ export function LancamentosPage() {
             summary={summary}
             rows={shown}
             total={rows.length}
-            view={view}
             lotId={lotId}
             pendingOnly={pendingOnly}
             search={search}
