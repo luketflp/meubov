@@ -20,14 +20,10 @@ import {
 const MAX_CHIPS = 3;
 
 function chipClasses(chip: DayChip): string {
-  if (chip.footAndMouth) {
-    return cn(
-      chip.status === "overdue" ? "bg-fmd text-panel" : "bg-fmd-soft text-fmd",
-      chip.status === "done" && "line-through"
-    );
-  }
-  if (chip.status === "overdue") return "bg-overdue text-panel";
+  // Done reads green whatever it was, aftosa too.
   if (chip.status === "done") return "bg-healthy-soft text-healthy line-through";
+  if (chip.footAndMouth) return chip.status === "overdue" ? "bg-fmd text-panel" : "bg-fmd-soft text-fmd";
+  if (chip.status === "overdue") return "bg-overdue text-panel";
   return "bg-scheduled-soft text-scheduled";
 }
 
@@ -99,7 +95,7 @@ function DayCell({ day, treatments, todayIso, onOpenDay }: DayCellProps) {
       </span>
       <span className="flex flex-wrap gap-1 md:hidden">
         {visible.map((chip) => (
-          <StatusDot key={chip.key} status={chip.footAndMouth ? "fmd" : chip.status} />
+          <StatusDot key={chip.key} status={chip.footAndMouth && chip.status !== "done" ? "fmd" : chip.status} />
         ))}
         {hidden > 0 ? (
           <span className="text-[10px] font-medium text-ink-soft">+{hidden}</span>
