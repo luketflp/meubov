@@ -204,6 +204,13 @@
       "when": 1791325251267,
       "tag": "0028_lancamento-historico",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1791328267982,
+      "tag": "0029_drop-health-protocols",
+      "breakpoints": true
     }
   ]
 }
