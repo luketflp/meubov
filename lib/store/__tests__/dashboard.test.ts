@@ -78,7 +78,7 @@ const steer = (earTag: string, lotId: string, overrides: Partial<Animal> = {}): 
   makeAnimal({ id: `steer-${earTag}`, earTag, lotId, ...overrides });
 
 describe("farmAgenda", () => {
-  it("groups a lote's pending treatments by date, type and name, up to 7 days ahead", () => {
+  it("groups a lote's pending treatments by date, type and name", () => {
     const animals = [steer("G1", "lot-garrotes"), steer("G2", "lot-garrotes")];
     const treatments = [
       makeTreatment({ id: "t1", animalEarTag: "G1", name: "Clostridiose", date: "2026-09-20" }),
@@ -100,7 +100,23 @@ describe("farmAgenda", () => {
         earTags: ["G1", "G2"],
       }),
       expect.objectContaining({ kind: "treatment", name: "Raiva", urgency: 2, date: "2026-09-29" }),
+      // Past the 7 days, but the agenda is short: the next one still shows.
+      expect.objectContaining({ kind: "treatment", name: "Carrapaticida", urgency: 2, date: "2026-09-30" }),
     ]);
+  });
+
+  it("reaches past the 7 days only until it holds five dates", () => {
+    const animals = [steer("G1", "lot-garrotes")];
+    const dates = ["2026-09-23", "2026-09-24", "2026-09-25", "2026-09-26", "2026-09-27", "2026-10-15"];
+    const treatments = dates.map((date, i) =>
+      makeTreatment({ id: `t${i}`, animalEarTag: "G1", name: "Raiva", date })
+    );
+
+    const [busy] = farmAgenda(input({ animals, treatments }), TODAY);
+    expect(busy.items.map((item) => item.date)).toEqual(dates.slice(0, 5));
+
+    const [quiet] = farmAgenda(input({ animals, treatments: treatments.slice(4) }), TODAY);
+    expect(quiet.items.map((item) => item.date)).toEqual(["2026-09-27", "2026-10-15"]);
   });
 
   it("puts each animal's treatment in the lote it stands in today", () => {

@@ -22,7 +22,6 @@ import {
 } from "lucide-react";
 import type { Animal, Invernada } from "@/lib/types";
 import {
-  AGENDA_DAYS_AHEAD,
   type AgendaItem,
   type AgendaLot,
   type AgendaUrgency,
@@ -257,8 +256,7 @@ function QuietLots({ lots, className }: { lots: QuietLot[]; className?: string }
         <span aria-hidden className="size-2 shrink-0 rounded-full bg-healthy" />
         <h3 className="font-sans text-sm font-semibold whitespace-nowrap text-ink">Em dia</h3>
         <span className="min-w-0 truncate text-xs text-ink-soft">
-          {lots.length === 1 ? "1 lote sem pendência" : `${lots.length} lotes sem pendência`} nos
-          próximos {AGENDA_DAYS_AHEAD} dias
+          {lots.length === 1 ? "1 lote sem pendência próxima" : `${lots.length} lotes sem pendência próxima`}
         </span>
       </header>
       <ul className="divide-y divide-hairline border-t border-hairline">

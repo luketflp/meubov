@@ -30,6 +30,9 @@ import { activeAnimals, currentPlacementForLot, recentBirths } from "@/lib/store
 /** Days ahead the agenda looks for scheduled work. */
 export const AGENDA_DAYS_AHEAD = 7;
 
+/** Dates ahead a short agenda reaches for, past {@link AGENDA_DAYS_AHEAD}. */
+export const AGENDA_MIN_DATES = 5;
+
 /** Days after a cobertura when the ultrassom can tell. */
 export const DIAGNOSIS_AFTER_DAYS = 30;
 
@@ -98,7 +101,8 @@ const compareItems = (a: AgendaItem, b: AgendaItem): number =>
 
 /**
  * What needs a hand, lote by lote: the treatments not done that are overdue,
- * due today or due within {@link AGENDA_DAYS_AHEAD} days, grouped like the
+ * due today or due within {@link AGENDA_DAYS_AHEAD} days (a quieter agenda
+ * reaches on to its next {@link AGENDA_MIN_DATES} dates), grouped like the
  * Manejo activities; the calvings expected before today with no parto
  * recorded; the calvings expected in the next days; and the coberturas that
  * wait for the ultrassom {@link DIAGNOSIS_AFTER_DAYS} days on. Each item sits
@@ -112,7 +116,21 @@ export function farmAgenda(input: AgendaInput, todayIso: string): AgendaLot[] {
   const byEarTag = new Map(active.map((animal) => [animal.earTag, animal]));
   const lotById = new Map(input.lots.map((lot) => [lot.id, lot]));
   const invernadaById = new Map(input.invernadas.map((item) => [item.id, item]));
-  const horizon = addDays(todayIso, AGENDA_DAYS_AHEAD);
+  // A week with few dates would leave the Painel empty while work is scheduled
+  // later: the horizon then reaches on to the next AGENDA_MIN_DATES dates.
+  const upcoming = [
+    ...new Set(
+      input.treatments
+        .filter(
+          (t) =>
+            t.date > todayIso && byEarTag.has(t.animalEarTag) && deriveTreatmentStatus(t, todayIso) !== "done"
+        )
+        .map((t) => t.date)
+    ),
+  ].sort(compareDates);
+  const week = addDays(todayIso, AGENDA_DAYS_AHEAD);
+  const reach = upcoming[Math.min(AGENDA_MIN_DATES, upcoming.length) - 1];
+  const horizon = reach !== undefined && reach > week ? reach : week;
   const lotKey = (lotId: string): string | null => (lotById.has(lotId) ? lotId : null);
 
   const heads = new Map<string | null, number>();
