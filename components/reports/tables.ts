@@ -1,5 +1,5 @@
 /**
- * The tables of the four documents, built once and used twice: the print
+ * The tables of the documents, built once and used twice: the print
  * sheet draws them with PrintTable (totals as a bold last row) and "Baixar
  * planilha" writes them to xlsx (totals appended as a plain last row). Pure.
  */
@@ -7,7 +7,10 @@ import { formatDate } from "@/lib/domain/dates";
 import { TREATMENT_TYPE_LABEL } from "@/lib/domain/labels";
 import { pluralCategoryLabel } from "@/lib/export/datasets/finance";
 import { buildTable, type Cell, type ExportTable } from "@/lib/export/table";
+import { bankAccountLabel, cents } from "@/lib/domain/bankAccounts";
 import type { BankReport } from "@/lib/reports/bank";
+import type { StatementSection } from "@/lib/reports/bankStatement";
+import type { GroupsReport } from "@/lib/reports/groups";
 import type { DeclarationFlow, HerdDeclaration } from "@/lib/reports/declaration";
 import type { Romaneio, RomaneioRow } from "@/lib/reports/romaneio";
 import type { TechnicalReport } from "@/lib/reports/technical";
@@ -16,6 +19,8 @@ import type { TechnicalReport } from "@/lib/reports/technical";
 export interface TotaledTable {
   table: ExportTable;
   totals?: Cell[];
+  /** Rows that open the row above them (a grupo's contas): indented on paper. */
+  subRows?: ReadonlySet<number>;
 }
 
 /** The table with its totals line appended as a last row, for a spreadsheet. */
@@ -254,6 +259,130 @@ export function technicalSummaryTable(report: TechnicalReport): ExportTable {
     [
       { header: "Indicador", value: ([label]) => label },
       { header: "Valor", kind: "number", decimals: 0, value: ([, value]) => value },
+    ],
+    lines
+  );
+}
+
+/** part / whole in %, null when the whole is zero. */
+const sharePct = (part: number, whole: number): number | null => (whole === 0 ? null : (part / whole) * 100);
+
+/** The receitas by conta, with their share of the receita. */
+export function groupsRevenueTable(report: GroupsReport): TotaledTable {
+  const table = buildTable<GroupsReport["revenues"][number]>(
+    "Receitas",
+    [
+      { header: "Conta", value: (r) => r.label },
+      { header: "Valor (R$)", kind: "money", value: (r) => r.amountBrl },
+      { header: "%", kind: "number", decimals: 2, value: (r) => sharePct(r.amountBrl, report.revenueTotal) },
+    ],
+    report.revenues
+  );
+  return { table, totals: ["Total de receitas", report.revenueTotal, sharePct(report.revenueTotal, report.revenueTotal)] };
+}
+
+/** The despesas by grupo with their share of the despesas and of the receita; `withAccounts` opens each grupo into its contas. */
+export function groupsExpenseTable(report: GroupsReport, withAccounts: boolean): TotaledTable {
+  const lines: { label: string; amountBrl: number }[] = [];
+  const subRows = new Set<number>();
+  for (const group of report.expenses) {
+    lines.push(group);
+    if (!withAccounts) continue;
+    for (const account of group.accounts) {
+      subRows.add(lines.length);
+      lines.push(account);
+    }
+  }
+  const table = buildTable<{ label: string; amountBrl: number }>(
+    "Despesas",
+    [
+      { header: withAccounts ? "Grupo / conta" : "Grupo", value: (r) => r.label },
+      { header: "Valor (R$)", kind: "money", value: (r) => r.amountBrl },
+      { header: "% despesas", kind: "number", decimals: 2, value: (r) => sharePct(r.amountBrl, report.expenseTotal) },
+      { header: "% receita", kind: "number", decimals: 2, value: (r) => sharePct(r.amountBrl, report.revenueTotal) },
+    ],
+    lines
+  );
+  return {
+    table,
+    totals: [
+      "Total de despesas",
+      report.expenseTotal,
+      sharePct(report.expenseTotal, report.expenseTotal),
+      sharePct(report.expenseTotal, report.revenueTotal),
+    ],
+    subRows: withAccounts ? subRows : undefined,
+  };
+}
+
+/** Investimentos, financiamentos, sócios and rendimentos: entradas, saídas and líquido per grupo, then its contas. */
+export function groupsCapitalTable(report: GroupsReport): TotaledTable {
+  const lines: { label: string; inBrl: number; outBrl: number }[] = [];
+  const subRows = new Set<number>();
+  for (const group of report.capital) {
+    lines.push(group);
+    for (const account of group.accounts) {
+      subRows.add(lines.length);
+      lines.push(account);
+    }
+  }
+  const table = buildTable<{ label: string; inBrl: number; outBrl: number }>(
+    "Fora do resultado",
+    [
+      { header: "Grupo / conta", value: (r) => r.label },
+      { header: "Entradas (R$)", kind: "money", value: (r) => r.inBrl || null },
+      { header: "Saídas (R$)", kind: "money", value: (r) => r.outBrl || null },
+      { header: "Líquido (R$)", kind: "money", value: (r) => cents(r.inBrl - r.outBrl) },
+    ],
+    lines
+  );
+  const ins = cents(sum(report.capital.map((g) => g.inBrl)));
+  const outs = cents(sum(report.capital.map((g) => g.outBrl)));
+  return { table, totals: ["Total", ins, outs, cents(ins - outs)], subRows };
+}
+
+/** One line per conta: saldo anterior, entradas, saídas, saldo final; the total leaves the cartões out. */
+export function bankSummaryTable(sections: readonly StatementSection[]): TotaledTable {
+  const table = buildTable<StatementSection>(
+    "Resumo",
+    [
+      { header: "Conta", value: (s) => bankAccountLabel(s.bank) },
+      { header: "Saldo anterior (R$)", kind: "money", value: (s) => s.opening },
+      { header: "Entradas (R$)", kind: "money", value: (s) => s.ins },
+      { header: "Saídas (R$)", kind: "money", value: (s) => s.outs },
+      { header: "Saldo final (R$)", kind: "money", value: (s) => s.closing },
+    ],
+    sections
+  );
+  const banks = sections.filter((s) => s.bank.kind !== "card");
+  return {
+    table,
+    totals: [
+      "Saldo em contas (sem cartões)",
+      cents(sum(banks.map((s) => s.opening))),
+      cents(sum(banks.map((s) => s.ins))),
+      cents(sum(banks.map((s) => s.outs))),
+      cents(sum(banks.map((s) => s.closing))),
+    ],
+  };
+}
+
+/** Every line of every section, the conta first: the extrato's spreadsheet. */
+export function bankStatementTable(sections: readonly StatementSection[]): ExportTable {
+  const lines = sections.flatMap((s) => s.lines.map((line) => ({ bank: bankAccountLabel(s.bank), line })));
+  return buildTable<(typeof lines)[number]>(
+    "Extrato",
+    [
+      { header: "Conta", value: (r) => r.bank },
+      { header: "Pagamento", kind: "date", value: (r) => r.line.paidAt },
+      { header: "Emissão", kind: "date", value: (r) => r.line.issuedAt },
+      { header: "Vencimento", kind: "date", value: (r) => r.line.dueDate },
+      { header: "Documento", value: (r) => r.line.document },
+      { header: "Pago para / recebido de", value: (r) => r.line.counterparty },
+      { header: "Histórico", value: (r) => r.line.history },
+      { header: "Conta do plano", value: (r) => r.line.planAccount },
+      { header: "Valor (R$)", kind: "money", value: (r) => r.line.amountBrl },
+      { header: "Saldo (R$)", kind: "money", value: (r) => r.line.balance },
     ],
     lines
   );

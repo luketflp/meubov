@@ -3,10 +3,13 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Period } from "@/lib/domain/finance";
 import { shiftPeriodByMonths } from "@/lib/domain/period";
+import { cn } from "@/lib/utils";
 
 interface PeriodPickerProps {
   value: Period;
   onChange: (period: Period) => void;
+  /** Takes the whole width of its column, the dates sharing what the arrows leave (a parameters card). */
+  fill?: boolean;
 }
 
 const DATE_INPUT =
@@ -18,9 +21,15 @@ const DATE_INPUT =
  * chosen window really filters the monthly revenue x cost series shown in the
  * panel. Start is clamped to ≤ end and end to ≥ start.
  */
-export function PeriodPicker({ value, onChange }: PeriodPickerProps) {
+export function PeriodPicker({ value, onChange, fill = false }: PeriodPickerProps) {
+  const dateInput = cn(DATE_INPUT, fill && "flex-1 px-0.5");
   return (
-    <div className="inline-flex items-center gap-0.5 rounded-lg border border-hairline bg-surface p-0.5">
+    <div
+      className={cn(
+        "items-center gap-0.5 rounded-lg border border-hairline bg-surface p-0.5",
+        fill ? "flex w-full min-w-0" : "inline-flex"
+      )}
+    >
       <button
         type="button"
         aria-label="Recuar um mês"
@@ -39,7 +48,7 @@ export function PeriodPicker({ value, onChange }: PeriodPickerProps) {
           const start = event.target.value;
           if (start && start <= value.end) onChange({ ...value, start });
         }}
-        className={DATE_INPUT}
+        className={dateInput}
       />
       <span className="px-0.5 text-xs text-ink-soft">até</span>
       <input
@@ -51,7 +60,7 @@ export function PeriodPicker({ value, onChange }: PeriodPickerProps) {
           const end = event.target.value;
           if (end && end >= value.start) onChange({ ...value, end });
         }}
-        className={DATE_INPUT}
+        className={dateInput}
       />
 
       <button

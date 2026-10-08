@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultPeriod, isIsoDate, parseDecimal, yearStart } from "@/components/reports/params";
+import { defaultPeriod, isIsoDate, lastMonth, parseDecimal, yearStart } from "@/components/reports/params";
 
 describe("yearStart", () => {
   it("is 1 January of the date's year", () => {
@@ -36,5 +36,13 @@ describe("parseDecimal", () => {
     expect(parseDecimal("")).toBeNull();
     expect(parseDecimal("abc")).toBeNull();
     expect(parseDecimal("-3")).toBeNull();
+  });
+});
+
+describe("lastMonth", () => {
+  it("is the whole month before today's", () => {
+    expect(lastMonth("2026-10-07")).toEqual({ start: "2026-09-01", end: "2026-09-30" });
+    expect(lastMonth("2026-01-31")).toEqual({ start: "2025-12-01", end: "2025-12-31" });
+    expect(lastMonth("2024-03-01")).toEqual({ start: "2024-02-01", end: "2024-02-29" });
   });
 });

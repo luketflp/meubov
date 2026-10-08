@@ -2,10 +2,11 @@
 
 /**
  * The farm's data as one HerdData, for the report selectors, rebuilt only
- * when a part of it changes.
+ * when a part of it changes; and the financial reports' inputs the same way.
  */
 import { useMemo } from "react";
 import type { HerdData } from "@/lib/types";
+import type { PlanInputs } from "@/lib/domain/planTree";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 
 export function useReportData(): HerdData {
@@ -53,5 +54,23 @@ export function useReportData(): HerdData {
       semenBulls,
       farm,
     ]
+  );
+}
+
+/** The ledger's inputs plus the contas bancárias and transferências: what the financial reports read. */
+export function usePlanInputs(): PlanInputs {
+  const expenses = useHerdStore((s) => s.expenses);
+  const accounts = useHerdStore((s) => s.accounts);
+  const movements = useHerdStore((s) => s.movements);
+  const manejoSessions = useHerdStore((s) => s.manejoSessions);
+  const animals = useHerdStore((s) => s.animals);
+  const treatments = useHerdStore((s) => s.treatments);
+  const lots = useHerdStore((s) => s.lots);
+  const bankAccounts = useHerdStore((s) => s.bankAccounts);
+  const transfers = useHerdStore((s) => s.transfers);
+  const expenseGroups = useHerdStore((s) => s.expenseGroups);
+  return useMemo(
+    () => ({ expenses, accounts, movements, manejoSessions, animals, treatments, lots, bankAccounts, transfers, expenseGroups }),
+    [expenses, accounts, movements, manejoSessions, animals, treatments, lots, bankAccounts, transfers, expenseGroups]
   );
 }

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   bankInventoryTable,
+  bankStatementTable,
+  bankSummaryTable,
+  groupsCapitalTable,
+  groupsExpenseTable,
+  groupsRevenueTable,
   declarationTables,
   flowTable,
   headsLabel,
@@ -9,6 +14,9 @@ import {
   withTotalsRow,
 } from "@/components/reports/tables";
 import type { BankReport } from "@/lib/reports/bank";
+import type { StatementSection } from "@/lib/reports/bankStatement";
+import type { GroupsReport } from "@/lib/reports/groups";
+import type { BankAccount } from "@/lib/types";
 import type { DeclarationFlow, HerdDeclaration } from "@/lib/reports/declaration";
 import type { TechnicalReport } from "@/lib/reports/technical";
 
@@ -123,5 +131,130 @@ describe("headsLabel", () => {
   it("agrees with the count", () => {
     expect(headsLabel(1)).toBe("1 cabeça");
     expect(headsLabel(24)).toBe("24 cabeças");
+  });
+});
+
+const GROUPS: GroupsReport = {
+  revenues: [{ label: "Venda de gado", amountBrl: 1000, locked: true }],
+  revenueTotal: 1000,
+  expenses: [
+    {
+      key: "nutrition",
+      label: "Nutrição",
+      custom: false,
+      amountBrl: 300,
+      accounts: [
+        { label: "Ração e suplemento", amountBrl: 100, locked: false },
+        { label: "Sal mineral", amountBrl: 200, locked: false },
+      ],
+    },
+    { key: "other", label: "Outros", custom: false, amountBrl: 100, accounts: [{ label: "Sem conta", amountBrl: 100, locked: false }] },
+  ],
+  expenseTotal: 400,
+  balance: 600,
+  capital: [
+    {
+      key: "financing",
+      label: "Financiamentos",
+      inBrl: 5000,
+      outBrl: 500,
+      accounts: [
+        { label: "Consórcio trator", inBrl: 0, outBrl: 500, locked: false },
+        { label: "Custeio", inBrl: 5000, outBrl: 0, locked: false },
+      ],
+    },
+  ],
+};
+
+describe("groups tables", () => {
+  it("gives each receita its share of the receita", () => {
+    const { table, totals } = groupsRevenueTable(GROUPS);
+    expect(table.rows).toEqual([["Venda de gado", 1000, 100]]);
+    expect(totals).toEqual(["Total de receitas", 1000, 100]);
+  });
+
+  it("lists the grupos with their share of the despesas and of the receita", () => {
+    const { table, totals, subRows } = groupsExpenseTable(GROUPS, false);
+    expect(table.rows).toEqual([
+      ["Nutrição", 300, 75, 30],
+      ["Outros", 100, 25, 10],
+    ]);
+    expect(totals).toEqual(["Total de despesas", 400, 100, 40]);
+    expect(subRows).toBeUndefined();
+  });
+
+  it("opens each grupo into its contas, marking them as sub-rows", () => {
+    const { table, subRows } = groupsExpenseTable(GROUPS, true);
+    expect(table.columns[0].header).toBe("Grupo / conta");
+    expect(table.rows.map((r) => r[0])).toEqual(["Nutrição", "Ração e suplemento", "Sal mineral", "Outros", "Sem conta"]);
+    expect([...(subRows ?? [])]).toEqual([1, 2, 4]);
+  });
+
+  it("has no share of the receita when there was none", () => {
+    const { table } = groupsExpenseTable({ ...GROUPS, revenues: [], revenueTotal: 0 }, false);
+    expect(table.rows[0][3]).toBeNull();
+  });
+
+  it("writes entradas, saídas and líquido outside the resultado", () => {
+    const { table, totals, subRows } = groupsCapitalTable(GROUPS);
+    expect(table.rows).toEqual([
+      ["Financiamentos", 5000, 500, 4500],
+      ["Consórcio trator", null, 500, -500],
+      ["Custeio", 5000, null, 5000],
+    ]);
+    expect(totals).toEqual(["Total", 5000, 500, 4500]);
+    expect([...(subRows ?? [])]).toEqual([1, 2]);
+  });
+});
+
+const account = (id: string, kind: BankAccount["kind"], label?: string): BankAccount => ({
+  id,
+  kind,
+  name: id,
+  label,
+  openingBalanceBrl: 0,
+  openingDate: "2026-01-01",
+  isMain: false,
+  pendingLines: 0,
+});
+
+const SECTIONS: StatementSection[] = [
+  {
+    bank: account("Sicredi", "checking", "c/c 12.345-6"),
+    opening: 1000.1,
+    ins: 500.2,
+    outs: 200,
+    closing: 1300.3,
+    lines: [
+      {
+        id: "e1",
+        paidAt: "2026-09-05",
+        issuedAt: "2026-08-28",
+        dueDate: "2026-09-05",
+        document: "NF 1",
+        counterparty: "Agro",
+        history: "Sal",
+        planAccount: "Nutrição › Sal mineral",
+        locked: false,
+        amountBrl: -200,
+        balance: 800.1,
+      },
+    ],
+  },
+  { bank: account("Caixa", "cash"), opening: 50.2, ins: 0, outs: 0, closing: 50.2, lines: [] },
+  { bank: account("Cartão", "card"), opening: -300, ins: 300, outs: 100, closing: -100, lines: [] },
+];
+
+describe("bank statement tables", () => {
+  it("sums the contas but the cartões as Saldo em contas", () => {
+    const { table, totals } = bankSummaryTable(SECTIONS);
+    expect(table.rows.map((r) => r[0])).toEqual(["Sicredi · c/c 12.345-6", "Caixa", "Cartão"]);
+    expect(totals).toEqual(["Saldo em contas (sem cartões)", 1050.3, 500.2, 200, 1350.5]);
+  });
+
+  it("writes every line with its conta for the spreadsheet", () => {
+    expect(bankStatementTable(SECTIONS).rows).toEqual([
+      ["Sicredi · c/c 12.345-6", "2026-09-05", "2026-08-28", "2026-09-05", "NF 1", "Agro", "Sal", "Nutrição › Sal mineral", -200, 800.1],
+    ]);
   });
 });

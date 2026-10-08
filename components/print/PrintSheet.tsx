@@ -96,8 +96,20 @@ const alignRight = (table: ExportTable, i: number) => {
   return kind === "number" || kind === "money";
 };
 
-/** An {@link ExportTable} as a print table; `totals` is an optional last row in bold. */
-export function PrintTable({ table, totals }: { table: ExportTable; totals?: (string | number | null)[] }) {
+/**
+ * An {@link ExportTable} as a print table; `totals` is an optional last row in bold. `subRows` open the row
+ * above them (a grupo's contas): indented and soft, the rows they open in bold.
+ */
+export function PrintTable({
+  table,
+  totals,
+  subRows,
+}: {
+  table: ExportTable;
+  totals?: (string | number | null)[];
+  subRows?: ReadonlySet<number>;
+}) {
+  const nested = subRows !== undefined && subRows.size > 0;
   return (
     <table className="w-full border-collapse text-[12px] leading-4">
       <thead className="table-header-group">
@@ -117,13 +129,20 @@ export function PrintTable({ table, totals }: { table: ExportTable; totals?: (st
       </thead>
       <tbody>
         {table.rows.map((row, r) => (
-          <tr key={r} className="break-inside-avoid">
+          <tr
+            key={r}
+            className={cn(
+              "break-inside-avoid",
+              subRows?.has(r) ? "text-[11px] text-ink-soft" : nested && "font-semibold"
+            )}
+          >
             {row.map((cell, i) => (
               <td
                 key={i}
                 className={cn(
                   "border-b border-hairline px-2 py-1",
-                  alignRight(table, i) ? "text-right font-mono" : "text-left"
+                  alignRight(table, i) ? "text-right font-mono" : "text-left",
+                  i === 0 && subRows?.has(r) && "pl-5"
                 )}
               >
                 {formatCell(cell, table.columns[i])}
@@ -185,6 +204,23 @@ export function PrintFigures({ figures }: { figures: { label: string; value: str
         </div>
       ))}
     </div>
+  );
+}
+
+/** Label/value lines in a ruled box at the right, the last one the result in bold: "Saldo do período". */
+export function PrintBalance({ lines }: { lines: [string, string][] }) {
+  return (
+    <dl className="ml-auto grid w-[300px] grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 rounded-md border border-ink px-3 py-2 text-[11.5px] break-inside-avoid">
+      {lines.map(([label, value], i) => {
+        const last = i === lines.length - 1;
+        return (
+          <div key={label} className="contents">
+            <dt className={cn(last ? "border-t border-hairline pt-1 font-semibold" : "text-ink-soft")}>{label}</dt>
+            <dd className={cn("text-right font-mono", last && "border-t border-hairline pt-1 font-semibold")}>{value}</dd>
+          </div>
+        );
+      })}
+    </dl>
   );
 }
 

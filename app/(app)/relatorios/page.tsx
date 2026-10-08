@@ -1,22 +1,24 @@
 "use client";
 
 /**
- * Relatórios (/relatorios): the four documents to print or save as PDF, and
- * every list of the farm as a planilha (.xlsx or .csv), one at a time or all
- * in one file. Banco, Romaneio and Despesas need Financeiro view.
+ * Relatórios (/relatorios): the documents to print or save as PDF, and every
+ * list of the farm as a planilha (.xlsx or .csv), one at a time or all in one
+ * file. Banco, Romaneio, Grupos, Extrato and Despesas need Financeiro view.
  */
 import { useMemo } from "react";
-import { Download, Info, Landmark, ReceiptText, ScrollText, Stethoscope } from "lucide-react";
+import { ChartPie, Download, Info, Landmark, ReceiptText, ScrollText, Stethoscope, Wallet } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { DocCard, type DocCardProps } from "@/components/reports/DocCard";
 import { SectionDivider } from "@/components/reports/SectionDivider";
 import { SheetsList } from "@/components/reports/SheetsList";
 import { reportDatasets, type ReportDataset } from "@/components/reports/datasets";
-import { defaultPeriod } from "@/components/reports/params";
+import { defaultPeriod, lastMonth } from "@/components/reports/params";
 import { headsLabel } from "@/components/reports/tables";
 import { useDownload, type DownloadFormat } from "@/components/reports/useDownload";
-import { useReportData } from "@/components/reports/useReportData";
+import { usePlanInputs, useReportData } from "@/components/reports/useReportData";
+import { bankTotal } from "@/lib/domain/bankAccounts";
+import { groupsReport } from "@/lib/reports/groups";
 import { formatDate, todayISO } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
 import { lastSalePrice } from "@/lib/reports/bank";
@@ -26,6 +28,7 @@ import { useCan } from "@/lib/store/usePermissions";
 
 export default function ReportsPage() {
   const data = useReportData();
+  const planInputs = usePlanInputs();
   const seeMoney = useCan("finance", "view");
   const today = todayISO();
   const { download, busy } = useDownload();
@@ -42,7 +45,9 @@ export default function ReportsPage() {
       .flatMap((animal) => animal.reproduction?.breedings ?? [])
       .filter((breeding) => breeding.date >= from && breeding.date <= today).length;
 
-    // Banco and Romaneio carry values in R$: shown only with Financeiro view.
+    const liveBanks = planInputs.bankAccounts.filter((bank) => bank.archivedAt === undefined).length;
+
+    // Banco, Romaneio, Grupos and Extrato carry values in R$: shown only with Financeiro view.
     const all: DocCardProps[] = [
       {
         href: "/relatorios/declaracao",
@@ -86,9 +91,32 @@ export default function ReportsPage() {
         audience: "Veterinário ou consultor",
         fact: `${formatNumber(breedings)} ${breedings === 1 ? "cobertura" : "coberturas"} nos últimos 12 meses`,
       },
+      {
+        href: "/relatorios/grupos",
+        icon: ChartPie,
+        tone: "brand",
+        title: "Receitas e despesas por grupo",
+        text: "Total de cada grupo no período, com o percentual nas despesas e na receita, e o saldo.",
+        audience: "Contador e sócios",
+        fact: `Mês passado: saldo de ${formatCurrency(groupsReport(planInputs, lastMonth(today), "accrual", today).balance)}`,
+        money: true,
+      },
+      {
+        href: "/relatorios/extrato",
+        icon: Wallet,
+        tone: "scheduled",
+        title: "Extrato de conta bancária",
+        text: "Cada conta com o saldo anterior, o que entrou e saiu, linha a linha, e o saldo final.",
+        audience: "Contador e conferência com o banco",
+        fact:
+          liveBanks === 0
+            ? "Nenhuma conta bancária cadastrada"
+            : `${liveBanks === 1 ? "1 conta" : `${liveBanks} contas`} · ${formatCurrency(bankTotal(planInputs.bankAccounts, planInputs, today))} em contas hoje`,
+        money: true,
+      },
     ];
     return all.filter((doc) => seeMoney || !doc.money);
-  }, [data.animals, data.manejoSessions, seeMoney, today]);
+  }, [data.animals, data.manejoSessions, planInputs, seeMoney, today]);
 
   const downloadDataset = (dataset: ReportDataset, format: DownloadFormat) =>
     void download(`${dataset.key}.${format}`, dataset.name, dataset.tables, format);

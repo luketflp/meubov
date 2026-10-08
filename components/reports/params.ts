@@ -1,7 +1,8 @@
 /**
  * Defaults and parsing for the parameters cards of the report pages. Pure.
  */
-import { addDays } from "@/lib/domain/dates";
+import { addDays, firstDayOfMonth } from "@/lib/domain/dates";
+import type { Period } from "@/lib/domain/period";
 
 /** A blank line on a document, filled in by hand. */
 export const BLANK = "__________________";
@@ -21,6 +22,12 @@ export function yearStart(iso: string): string {
 /** The 365 days up to today: the relatório técnico's default period. */
 export function defaultPeriod(todayIso: string): { from: string; to: string } {
   return { from: addDays(todayIso, -365), to: todayIso };
+}
+
+/** The whole month before today's: the financial reports' default window. */
+export function lastMonth(todayIso: string): Period {
+  const end = addDays(firstDayOfMonth(todayIso), -1);
+  return { start: firstDayOfMonth(end), end };
 }
 
 /** Dots as thousands only: "4.800", "1.234.567". */
