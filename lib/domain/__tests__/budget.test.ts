@@ -198,7 +198,7 @@ describe("budgetView: realizado", () => {
   });
 
   it("never counts an investimento or a receita", () => {
-    expect(view.groups.map((g) => g.key)).toEqual(["nutrition", "health", "admin"]);
+    expect(view.groups.map((g) => g.key)).toEqual(["admin", "nutrition", "health"]);
   });
 });
 
@@ -217,7 +217,7 @@ describe("budgetView: orçado of a grupo and its contas", () => {
     const withSilagem = budgetView(
       { ...INPUTS, expenses: [...INPUTS.expenses, expense("sil", { accountId: "nut-sil", amountBrl: 10 })] },
       2025, 10, TODAY
-    ).groups[0];
+    ).groups.find((g) => g.key === "nutrition")!;
     const silagem = withSilagem.accounts.find((a) => a.accountId === "nut-sil")!;
     expect([silagem.hasBudget, silagem.realizedToDate, silagem.tone]).toEqual([false, 10, "none"]);
   });
@@ -226,14 +226,14 @@ describe("budgetView: orçado of a grupo and its contas", () => {
     const g = budgetView(
       { ...INPUTS, budgets: BUDGETS.filter((b) => !(b.category === "nutrition" && b.accountId === undefined)) },
       2025, 10, TODAY
-    ).groups[0];
+    ).groups.find((g) => g.key === "nutrition")!;
     expect(g.budgeted).toEqual(Array<number>(12).fill(900));
     expect([g.budgetedTotal, g.ownRows, g.hasBudget, g.distribution, g.accountsSum]).toEqual([10800, false, true, null, null]);
   });
 
   it("leaves accountsSum out when the contas match the grupo", () => {
     const budgets = [...budgetLine("nutrition", 900), ...BUDGETS.filter((b) => b.accountId !== undefined)];
-    expect(budgetView({ ...INPUTS, budgets }, 2025, 10, TODAY).groups[0].accountsSum).toBeNull();
+    expect(budgetView({ ...INPUTS, budgets }, 2025, 10, TODAY).groups.find((g) => g.key === "nutrition")!.accountsSum).toBeNull();
   });
 
   it("places each row on its calendar month", () => {
@@ -292,7 +292,7 @@ describe("budgetView: previsto até o fim", () => {
     const labor = ahead.groups.find((g) => g.category === "labor")!;
     expect([labor.hasBudget, labor.realizedToDate, labor.usedPct, labor.tone]).toEqual([false, 0, null, "none"]);
     expect(labor.forecast).toBe(7 * 2000);
-    const sil = ahead.groups[0].accounts.find((a) => a.accountId === "nut-sil")!;
+    const sil = ahead.groups.find((g) => g.key === "nutrition")!.accounts.find((a) => a.accountId === "nut-sil")!;
     expect([sil.hasBudget, sil.realizedToDate, sil.forecast]).toEqual([false, 0, 50]);
   });
 
@@ -312,7 +312,7 @@ describe("budgetView: previsto até o fim", () => {
     for (const g of past.groups) {
       for (const l of [g, ...g.accounts]) expect(l.forecast).toBe(l.realizedToDate);
     }
-    const g = past.groups[0];
+    const g = past.groups.find((g) => g.key === "nutrition")!;
     expect([g.realizedToDate, g.budgetedToDate, g.usedPct]).toEqual([3150, 12000, 26.25]);
   });
 });
@@ -356,7 +356,7 @@ describe("budgetView: % usado and its tone", () => {
     const g = budgetView(
       { ...INPUTS, budgets: [row("nutrition", "2025-12", 500)] },
       2025, 10, "2025-10-20"
-    ).groups[0];
+    ).groups.find((g) => g.key === "nutrition")!;
     expect([g.hasBudget, g.budgetedToDate, g.realizedToDate, g.usedPct, g.tone]).toEqual([true, 0, 350, null, "none"]);
   });
 });
@@ -392,7 +392,7 @@ describe("budgetView: totals and grupos over", () => {
       },
       2025, 10, "2025-10-20"
     );
-    expect(two.groups.map((g) => [g.key, g.tone])).toEqual([["pasture", "brand"], ["health", "none"], ["admin", "attention"]]);
+    expect(two.groups.map((g) => [g.key, g.tone])).toEqual([["admin", "attention"], ["pasture", "brand"], ["health", "none"]]);
     expect(two.totals).toMatchObject({ budgetedToDate: 200, realizedToDate: 185, usedPct: 92.5, tone: "attention" });
   });
 
@@ -433,7 +433,7 @@ describe("budgetView with the farm's grupos", () => {
     expenseGroups: groups,
   };
 
-  it("lists them after the seven by creation, an archived one while it has orçado or despesas in the safra", () => {
+  it("lists them among the seven alphabetically, an archived one while it has orçado or despesas in the safra", () => {
     const farmView = budgetView(farm, 2025, 10, TODAY);
     expect(farmView.groups.map((g) => [g.key, g.label, g.budgetedTotal, g.realizedToDate])).toEqual([
       ["g-arr", "Arrendamento", 12000, 1000],

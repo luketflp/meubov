@@ -314,9 +314,11 @@ describe("planTree", () => {
     expect(figures(top("socios").children)).toEqual([["Distribuição de lucro", 5000]]);
   });
 
-  it("opens Despesas into the seven grupos with the treatments under Sanidade", () => {
+  it("opens Despesas into the seven grupos, alphabetical with Outros last, the treatments under Sanidade", () => {
     const grupos = top("despesas").children ?? [];
-    expect(grupos.map((i) => i.key)).toEqual(BUILTIN_CATEGORIES.map((c) => `grupo:${c}`));
+    expect(grupos.map((i) => i.key)).toEqual(
+      ["admin", "labor", "nutrition", "pasture", "breeding", "health", "other"].map((c) => `grupo:${c}`)
+    );
     const grupo = (c: string) => grupos.find((i) => i.key === `grupo:${c}`)!;
     expect(["nutrition", "health", "admin", "pasture"].map((c) => grupo(c).amountBrl)).toEqual([1200, 310, 90, 0]);
     expect(figures(grupo("health").children)).toEqual([["Vacinas", 300]]);
@@ -797,9 +799,22 @@ describe("the farm's grupos de despesa", () => {
     expect(legacyNode({ grupo: MAQ })).toBeNull();
   });
 
-  it("lists them after the seven, an archived one only while it has a line in the window, a removed one last", () => {
+  it("lists them among the seven alphabetically, an archived one only while it has a line in the window, a removed one last", () => {
     const tree = despesas();
-    expect(tree.children?.slice(7).map((i) => [i.key, i.label, i.amountBrl, i.archived])).toEqual([
+    expect(tree.children?.map((i) => i.label)).toEqual([
+      "Administrativo",
+      "Arrendamento",
+      "Mão de obra",
+      "Máquinas e veículos",
+      "Nutrição",
+      "Pastagem",
+      "Reprodução",
+      "Sanidade",
+      "Outros",
+      "Grupo removido",
+    ]);
+    const farmRows = tree.children?.filter((i) => i.key !== "grupo:other" && !BUILTIN_CATEGORIES.some((c) => i.key === `grupo:${c}`));
+    expect(farmRows?.map((i) => [i.key, i.label, i.amountBrl, i.archived])).toEqual([
       [`grupo:${ARRENDAMENTO}`, "Arrendamento", 3000, true],
       [`grupo:${MAQ}`, "Máquinas e veículos", 700, false],
       ["grupo:grupo-apagado", "Grupo removido", 50, false],
@@ -809,10 +824,9 @@ describe("the farm's grupos de despesa", () => {
       ["Diesel", 700],
     ]);
     // In September Arrendamento has no line: it leaves the tree.
-    expect(despesas({ start: "2026-09-01", end: "2026-09-30" }).children?.slice(7).map((i) => i.label)).toEqual([
-      "Máquinas e veículos",
-      "Grupo removido",
-    ]);
+    const september = despesas({ start: "2026-09-01", end: "2026-09-30" }).children?.map((i) => i.label);
+    expect(september).not.toContain("Arrendamento");
+    expect(september).toContain("Máquinas e veículos");
   });
 
   it("titles a farm grupo by its name, a removed one Grupo removido, and puts its contas under it", () => {

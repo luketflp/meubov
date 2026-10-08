@@ -26,10 +26,8 @@ const FRETE = group({
 });
 const BENS = group({ id: "g-4", name: "Bens de terceiros" }); // same createdAt as MAQUINAS
 
-const BUILTIN_LABELS = ["Nutrição", "Pastagem", "Mão de obra", "Sanidade", "Reprodução", "Administrativo", "Outros"];
-
 describe("BUILTIN_CATEGORIES", () => {
-  it("is the seven grupos the app ships with, in screen order", () => {
+  it("is the seven grupos the app ships with", () => {
     expect(BUILTIN_CATEGORIES).toEqual(["nutrition", "pasture", "labor", "health", "breeding", "admin", "other"]);
   });
 });
@@ -56,28 +54,31 @@ describe("isDespesaGroup", () => {
 });
 
 describe("despesaGroups", () => {
-  it("lists the seven first, then the farm's by creation, ties by name, archived ones left out", () => {
-    const list = despesaGroups([MAQUINAS, FRETE, BENS, ARRENDAMENTO]);
-    expect(list.slice(0, 7)).toEqual(
-      BUILTIN_CATEGORIES.map((key, i) => ({ key, label: BUILTIN_LABELS[i], custom: false, archived: false }))
-    );
-    expect(list.slice(7)).toEqual([
+  it("lists the seven and the farm's together in alphabetical order, Outros last, archived ones left out", () => {
+    expect(despesaGroups([MAQUINAS, FRETE, BENS, ARRENDAMENTO])).toEqual([
+      { key: "admin", label: "Administrativo", custom: false, archived: false },
       { key: "g-2", label: "Arrendamento", custom: true, archived: false },
       { key: "g-4", label: "Bens de terceiros", custom: true, archived: false },
+      { key: "labor", label: "Mão de obra", custom: false, archived: false },
       { key: "g-1", label: "Máquinas e veículos", custom: true, archived: false },
+      { key: "nutrition", label: "Nutrição", custom: false, archived: false },
+      { key: "pasture", label: "Pastagem", custom: false, archived: false },
+      { key: "breeding", label: "Reprodução", custom: false, archived: false },
+      { key: "health", label: "Sanidade", custom: false, archived: false },
+      { key: "other", label: "Outros", custom: false, archived: false },
     ]);
   });
 
   it("brings the archived ones back when asked", () => {
-    expect(despesaGroups([FRETE, MAQUINAS], { archived: true }).slice(7)).toEqual([
-      { key: "g-1", label: "Máquinas e veículos", custom: true, archived: false },
+    expect(despesaGroups([FRETE, MAQUINAS], { archived: true }).filter((g) => g.custom)).toEqual([
       { key: "g-3", label: "Frete", custom: true, archived: true },
+      { key: "g-1", label: "Máquinas e veículos", custom: true, archived: false },
     ]);
   });
 
   it("keeps the archived grupo a lançamento already sits in, and no other", () => {
     const archived = group({ id: "g-5", name: "Cercas", archivedAt: "2026-10-04T12:00:00.000Z" });
-    expect(despesaGroups([FRETE, archived], { keep: "g-3" }).slice(7).map((g) => g.key)).toEqual(["g-3"]);
+    expect(despesaGroups([FRETE, archived], { keep: "g-3" }).filter((g) => g.custom).map((g) => g.key)).toEqual(["g-3"]);
     expect(despesaGroups([FRETE], { keep: "nutrition" })).toHaveLength(7);
   });
 

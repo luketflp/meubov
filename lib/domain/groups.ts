@@ -8,7 +8,7 @@ import type { AccountGroup, BuiltinCategory, CapitalGroup, ExpenseCategory, Expe
 import { BUILTIN_CATEGORY_LABEL } from "@/lib/domain/labels";
 import { CAPITAL_GROUPS } from "@/lib/domain/entries";
 
-/** The seven built-in grupos, in screen order. */
+/** The seven built-in grupos; screens list them through `despesaGroups`, alphabetically. */
 export const BUILTIN_CATEGORIES: readonly BuiltinCategory[] = Object.keys(BUILTIN_CATEGORY_LABEL) as BuiltinCategory[];
 
 /** Receitas and the three grupos outside the resultado. */
@@ -54,20 +54,19 @@ export interface DespesaGroup {
   archived: boolean;
 }
 
-/** The seven built-ins in screen order, then the farm's by createdAt (ties by name). Archived ones only with
- *  `archived: true`, or the one whose key is `keep` (a row already in it). */
+/** The seven built-ins and the farm's own in alphabetical order, Outros last as the catch-all. Archived farm
+ *  grupos only with `archived: true`, or the one whose key is `keep` (a row already in it). */
 export function despesaGroups(
   groups: readonly ExpenseGroup[],
   opts: { archived?: boolean; keep?: ExpenseCategory } = {}
 ): DespesaGroup[] {
   const farm = groups
     .filter((g) => opts.archived || g.archivedAt === undefined || g.id === opts.keep)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.name.localeCompare(b.name, "pt-BR"))
     .map((g) => ({ key: g.id, label: g.name, custom: true, archived: g.archivedAt !== undefined }));
-  return [
-    ...BUILTIN_CATEGORIES.map((key) => ({ key, label: BUILTIN_CATEGORY_LABEL[key], custom: false, archived: false })),
-    ...farm,
-  ];
+  const builtin = BUILTIN_CATEGORIES.map((key) => ({ key, label: BUILTIN_CATEGORY_LABEL[key], custom: false, archived: false }));
+  return [...builtin, ...farm].sort(
+    (a, b) => Number(a.key === "other") - Number(b.key === "other") || a.label.localeCompare(b.label, "pt-BR")
+  );
 }
 
 /** Label of any grupo key: a built-in, Receitas/capital, a farm grupo's name; "Grupo removido" when it resolves to nothing. */
