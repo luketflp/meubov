@@ -3,7 +3,7 @@
  * inclusive. Pure; the Painel, the Financeiro and the Extrato share it.
  */
 import type { Period } from "@/lib/domain/finance";
-import { addDays, daysBetween, parseISODate, toISO } from "@/lib/domain/dates";
+import { addDays, daysBetween, lastDayOfMonth, parseISODate, toISO } from "@/lib/domain/dates";
 
 export type { Period } from "@/lib/domain/finance";
 
@@ -19,10 +19,19 @@ export function defaultPeriod(refIso: string, months = 12): Period {
   return { start: toISO(start), end: toISO(end) };
 }
 
-/** Shifts both ends of a period by `months` (may be negative), keeping the day. */
+/**
+ * Shifts both ends of a period by `months` (may be negative), keeping the day. A window of whole months (from a
+ * 1st to a month's last day) moves by whole months: setembro back is 01/08 to 31/08, not to 30/08.
+ */
 export function shiftPeriodByMonths(period: Period, months: number): Period {
   const start = parseISODate(period.start);
   const end = parseISODate(period.end);
+  if (start.getDate() === 1 && period.end === lastDayOfMonth(period.end)) {
+    return {
+      start: toISO(new Date(start.getFullYear(), start.getMonth() + months, 1)),
+      end: toISO(new Date(end.getFullYear(), end.getMonth() + months + 1, 0)),
+    };
+  }
   return {
     start: toISO(new Date(start.getFullYear(), start.getMonth() + months, start.getDate())),
     end: toISO(new Date(end.getFullYear(), end.getMonth() + months, end.getDate())),

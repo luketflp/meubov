@@ -36,6 +36,17 @@ describe("shiftPeriodByMonths", () => {
     });
   });
 
+  it("moves a window of whole months by whole months, landing on each month's last day", () => {
+    expect(shiftPeriodByMonths({ start: "2026-09-01", end: "2026-09-30" }, -1)).toEqual({
+      start: "2026-08-01",
+      end: "2026-08-31",
+    });
+    expect(shiftPeriodByMonths({ start: "2026-01-01", end: "2026-01-31" }, 1)).toEqual({
+      start: "2026-02-01",
+      end: "2026-02-28",
+    });
+  });
+
   it("keeps the day, rolling a missing month-end into the next month", () => {
     expect(shiftPeriodByMonths({ start: "2024-01-31", end: "2024-02-29" }, 1)).toEqual({
       start: "2024-03-02",
