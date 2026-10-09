@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Receitas e despesas por grupo (/relatorios/grupos): the window's receitas by
- * conta and despesas by grupo with the saldo, by competência or caixa, for the
- * contador and the sócios. Needs Financeiro view.
+ * Receitas e despesas por grupo (/relatorios/grupos): the window's receitas and
+ * despesas by grupo with the saldo, by competência or caixa, for the contador
+ * and the sócios. Needs Financeiro view.
  */
 import { useMemo, useState } from "react";
 import { todayISO } from "@/lib/domain/dates";
@@ -49,7 +49,10 @@ function GroupsReportScreen() {
   const filters = [`Período: ${periodLabel(period)}`, `Regime: ${REGIME_LABEL[regime]}`];
 
   const downloadSheet = () => {
-    const tables = [withTotalsRow(groupsRevenueTable(report)), withTotalsRow(groupsExpenseTable(report, options.accounts))];
+    const tables = [
+      withTotalsRow(groupsRevenueTable(report, options.accounts)),
+      withTotalsRow(groupsExpenseTable(report, options.accounts)),
+    ];
     if (options.capital) tables.push(withTotalsRow(groupsCapitalTable(report)));
     void download("grupos", "Receitas e despesas por grupo", tables, "xlsx", filters);
   };

@@ -14,7 +14,7 @@ import {
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
 import type { SemenBullRow } from "@/lib/db/schema";
-import type { Expense, SemenBull } from "@/lib/types";
+import type { SemenBull } from "@/lib/types";
 
 /** A new bull as the client sends it ("Novo touro"). */
 export interface NewSemenBullInput {
@@ -22,7 +22,7 @@ export interface NewSemenBullInput {
   code?: string;
   breed?: string;
   central?: string;
-  /** "Primeira compra (opcional)": becomes the bull's first purchase and expense. */
+  /** "Primeira compra (opcional)": becomes the bull's first purchase. */
   firstPurchase?: NewSemenPurchaseInput;
 }
 
@@ -31,14 +31,14 @@ interface AddBullUseCaseProps {
   input: NewSemenBullInput;
 }
 
-type AddBullUseCaseResponse = { bull: SemenBull; expense?: Expense } | "duplicate_name";
+type AddBullUseCaseResponse = { bull: SemenBull } | "duplicate_name";
 
 type CurrUseCase = _UseCase<AddBullUseCaseProps, AddBullUseCaseResponse>;
 
 /**
  * Registers a bull the farm buys semen from. The name is unique per farm
  * (`duplicate_name`); blank optional texts are stored as null. A first purchase
- * is written with its expense in the same transaction as the bull.
+ * is written in the same transaction as the bull.
  */
 export class AddBullUseCase implements CurrUseCase {
   private repository: RepositoryType;
@@ -71,13 +71,8 @@ export class AddBullUseCase implements CurrUseCase {
 
       if (!input.firstPurchase) return { bull: toSemenBull(row, []) };
 
-      const { purchase, expense } = await writeSemenPurchase(
-        tx,
-        farmId,
-        row,
-        input.firstPurchase
-      );
-      return { bull: toSemenBull(row, [purchase]), expense };
+      const purchase = await writeSemenPurchase(tx, row.id, input.firstPurchase);
+      return { bull: toSemenBull(row, [purchase]) };
     });
   };
 }

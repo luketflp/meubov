@@ -20,6 +20,7 @@ export function useReportData(): HerdData {
   const manejoSessions = useHerdStore((s) => s.manejoSessions);
   const expenses = useHerdStore((s) => s.expenses);
   const accounts = useHerdStore((s) => s.accounts);
+  const planGroups = useHerdStore((s) => s.planGroups);
   const customCategories = useHerdStore((s) => s.customCategories);
   const semenBulls = useHerdStore((s) => s.semenBulls);
   const farm = useHerdStore((s) => s.farm);
@@ -35,6 +36,7 @@ export function useReportData(): HerdData {
       manejoSessions,
       expenses,
       accounts,
+      planGroups,
       customCategories,
       semenBulls,
       farm,
@@ -50,6 +52,7 @@ export function useReportData(): HerdData {
       manejoSessions,
       expenses,
       accounts,
+      planGroups,
       customCategories,
       semenBulls,
       farm,
@@ -64,13 +67,12 @@ export function usePlanInputs(): PlanInputs {
   const movements = useHerdStore((s) => s.movements);
   const manejoSessions = useHerdStore((s) => s.manejoSessions);
   const animals = useHerdStore((s) => s.animals);
-  const treatments = useHerdStore((s) => s.treatments);
   const lots = useHerdStore((s) => s.lots);
   const bankAccounts = useHerdStore((s) => s.bankAccounts);
   const transfers = useHerdStore((s) => s.transfers);
-  const expenseGroups = useHerdStore((s) => s.expenseGroups);
+  const planGroups = useHerdStore((s) => s.planGroups);
   return useMemo(
-    () => ({ expenses, accounts, movements, manejoSessions, animals, treatments, lots, bankAccounts, transfers, expenseGroups }),
-    [expenses, accounts, movements, manejoSessions, animals, treatments, lots, bankAccounts, transfers, expenseGroups]
+    () => ({ expenses, accounts, movements, manejoSessions, animals, lots, bankAccounts, transfers, planGroups }),
+    [expenses, accounts, movements, manejoSessions, animals, lots, bankAccounts, transfers, planGroups]
   );
 }

@@ -7,7 +7,8 @@
  * - Windows are inclusive ISO dates. Competência uses `date`.
  * - Revenue = priced sale movements + receitas lançadas (`isRevenue`).
  *   Purchases are capital, never cost.
- * - COE = despesas (`isCost`, paid or not) + DONE treatments' `costBrl`.
+ * - COE = despesas (`isCost`, paid or not). A tratamento's cost stays in
+ *   Sanidade and never reaches it.
  * - Investimentos, financiamentos, sócios and rendimentos are neither.
  * - Arrobas sold are carcass arrobas (kg × rendimento ÷ 15); bought and herd
  *   arrobas are live (kg ÷ 30).
@@ -22,7 +23,6 @@ import type {
   Lot,
   ManejoSession,
   Movement,
-  Treatment,
 } from "@/lib/types";
 import { addDays, monthYearLabel, parseISODate, toISO } from "@/lib/domain/dates";
 import { carcassArrobas, kgToArroba, totalWeightKg } from "@/lib/domain/weights";
@@ -43,7 +43,7 @@ export interface MonthlyRevenueCost {
   cost: number;
 }
 
-/** One slice of the cost breakdown. */
+/** One slice of the cost breakdown: a grupo de despesa. */
 export interface CostBreakdownSlice {
   category: ExpenseCategory;
   amountBrl: number;
@@ -56,7 +56,6 @@ export interface EconomicsInputs {
   animals: Animal[];
   manejoSessions: ManejoSession[];
   movements: Movement[];
-  treatments: Treatment[];
   expenses: Expense[];
   invernadas: Invernada[];
   lots: Lot[];
@@ -75,10 +74,6 @@ function monthStart(refIso: string, back: number): string {
 const isPricedSale = (m: Movement): m is Movement & { amountBrl: number } =>
   m.type === "sale" && m.amountBrl !== undefined;
 
-/** A done treatment with a recorded cost (the "health" cost rows). */
-const isCostedTreatment = (t: Treatment): t is Treatment & { costBrl: number } =>
-  t.status === "done" && t.costBrl !== undefined;
-
 /**
  * Consolidated revenue × cost of the last `months` calendar months ending at
  * refIso's month. Receitas lançadas add to revenue, despesas to cost, the
@@ -86,7 +81,6 @@ const isCostedTreatment = (t: Treatment): t is Treatment & { costBrl: number } =
  */
 export function monthlyRevenueCost(
   movements: Movement[],
-  treatments: Treatment[],
   expenses: Expense[],
   months: number,
   refIso: string
@@ -116,22 +110,15 @@ export function monthlyRevenueCost(
     if (isRevenue(e)) bucket.revenue += e.amountBrl;
     else if (isCost(e)) bucket.cost += e.amountBrl;
   }
-  for (const t of treatments) {
-    if (!isCostedTreatment(t)) continue;
-    const bucket = buckets.get(t.date.slice(0, 7));
-    if (bucket) bucket.cost += t.costBrl;
-  }
   return series;
 }
 
 /**
- * Cost split by category between two ISO dates (both inclusive): the
- * despesas, and the done treatments' costs in the "health" bucket. Zero
- * slices are dropped; empty array when there is no cost at all.
+ * Cost split by grupo between two ISO dates (both inclusive): the despesas.
+ * Zero slices are dropped; empty array when there is no cost at all.
  */
 export function costBreakdownBetween(
   expenses: Expense[],
-  treatments: Treatment[],
   startIso: string,
   endIso: string
 ): CostBreakdownSlice[] {
@@ -141,12 +128,8 @@ export function costBreakdownBetween(
   };
 
   for (const e of expenses) {
-    if (isCost(e) && e.date >= startIso && e.date <= endIso) add(e.category, e.amountBrl);
-  }
-  for (const t of treatments) {
-    if (isCostedTreatment(t) && t.date >= startIso && t.date <= endIso) {
-      add("health", t.costBrl);
-    }
+    // A despesa always has its grupo; the check only narrows the type.
+    if (isCost(e) && e.category !== undefined && e.date >= startIso && e.date <= endIso) add(e.category, e.amountBrl);
   }
 
   const total = [...totals.values()].reduce((sum, v) => sum + v, 0);
@@ -161,24 +144,11 @@ export function costBreakdownBetween(
     .sort((a, b) => b.amountBrl - a.amountBrl);
 }
 
-/** Cost split over the last `months` calendar months ending at refIso's month. */
-export function costBreakdown(
-  expenses: Expense[],
-  treatments: Treatment[],
-  months: number,
-  refIso: string
-): CostBreakdownSlice[] {
-  return costBreakdownBetween(expenses, treatments, monthStart(refIso, months - 1), refIso);
-}
-
-/** COE of the window: despesas by `date`, paid or pending, plus done treatment costs. */
-export function coe(expenses: Expense[], treatments: Treatment[], period: Period): number {
+/** COE of the window: despesas by `date`, paid or pending. */
+export function coe(expenses: Expense[], period: Period): number {
   let total = 0;
   for (const e of expenses) {
     if (isCost(e) && inPeriod(e.date, period)) total += e.amountBrl;
-  }
-  for (const t of treatments) {
-    if (isCostedTreatment(t) && inPeriod(t.date, period)) total += t.costBrl;
   }
   return total;
 }
@@ -507,7 +477,7 @@ export function indicators(
   quote: number | null,
   todayIso: string
 ): Indicators {
-  const { animals, manejoSessions, movements, treatments, expenses, invernadas } = input;
+  const { animals, manejoSessions, movements, expenses, invernadas } = input;
 
   const startHeads = herdArrobasAt(animals, manejoSessions, addDays(period.start, -1)).heads;
   const endHeads = herdArrobasAt(animals, manejoSessions, closingDate(period, todayIso)).heads;
@@ -515,7 +485,7 @@ export function indicators(
   const hectares = invernadas.reduce((sum, i) => sum + i.hectares, 0);
 
   const revenue = periodRevenue(expenses, movements, period);
-  const cost = coe(expenses, treatments, period);
+  const cost = coe(expenses, period);
   const result = revenue.total - cost;
   const produced = arrobasProduced(input, period, todayIso);
   const unitCost = costPerArroba(cost, produced.produced);

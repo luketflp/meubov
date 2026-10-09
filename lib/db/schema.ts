@@ -154,6 +154,15 @@ export const entryKindEnum = pgEnum("entry_kind", [
 /** Movimento of an investment, financing or partners lançamento. */
 export const entryFlowEnum = pgEnum("entry_flow", ["in", "out"]);
 
+/** Tipo of a grupo of the plano de contas (lib/types.ts GroupKind): every entry kind but yield. */
+export const planGroupKindEnum = pgEnum("plan_group_kind", [
+  "revenue",
+  "expense",
+  "investment",
+  "financing",
+  "partners",
+]);
+
 /** A parcelamento (N parcelas of one purchase) or a recorrência (the same bill again and again). */
 export const seriesModeEnum = pgEnum("series_mode", ["installments", "recurring"]);
 
@@ -507,7 +516,7 @@ export const semenBulls = pgTable(
   (t) => [uniqueIndex("semen_bulls_farm_id_name_idx").on(t.farmId, sql`lower(${t.name})`)]
 );
 
-/** One purchase of semen doses of a bull, written together with its expense. */
+/** One purchase of semen doses of a bull: stock for Touros, not a lançamento. */
 export const semenPurchases = pgTable(
   "semen_purchases",
   {
@@ -520,10 +529,6 @@ export const semenPurchases = pgTable(
     totalBrl: numeric("total_brl", { mode: "number" }).notNull(),
     /** Fornecedor, free text: they are outside the farm. */
     seller: text("seller"),
-    /** Expense the purchase wrote in Financeiro; nulls out if that row goes. */
-    expenseId: text("expense_id").references(() => expenses.id, {
-      onDelete: "set null",
-    }),
   },
   (t) => [
     index("semen_purchases_bull_id_idx").on(t.bullId),
@@ -647,24 +652,25 @@ export const movements = pgTable(
 );
 
 /**
- * A grupo de despesa the farm created, next to the seven built-in ones. The
- * columns that hold a grupo (`accounts.group`, `expenses.category`,
- * `expense_series.category`, `budgets.category`) are text: a built-in grupo
- * is its key ("nutrition"), a farm grupo its row id, so they carry no FK.
+ * A grupo of the plano de contas. Every grupo is the farm's; `kind` says what
+ * its lançamentos are. The columns that hold a grupo (`accounts.group`,
+ * `expenses.category`, `expense_series.category`, `budgets.category`) are text
+ * ids with no FK: the API checks the grupo.
  */
-export const expenseGroups = pgTable(
-  "expense_groups",
+export const planGroups = pgTable(
+  "plan_groups",
   {
     id: text("id").primaryKey(),
     farmId: integer("farm_id")
       .notNull()
       .references(() => farm.id, { onDelete: "cascade" }),
+    kind: planGroupKindEnum("kind").notNull(),
     name: text("name").notNull(),
     archivedAt: timestamp("archived_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  // Names are unique per farm ignoring case.
-  (t) => [uniqueIndex("expense_groups_farm_name_idx").on(t.farmId, sql`lower(${t.name})`)]
+  // Names are unique per farm ignoring case, across every tipo.
+  (t) => [uniqueIndex("plan_groups_farm_name_idx").on(t.farmId, sql`lower(${t.name})`)]
 );
 
 /**
@@ -679,7 +685,7 @@ export const accounts = pgTable(
     farmId: integer("farm_id")
       .notNull()
       .references(() => farm.id, { onDelete: "cascade" }),
-    /** "revenue", a capital grupo, a built-in despesa key or an expense_groups id. */
+    /** A plan_groups id, of any tipo. */
     group: text("group").$type<AccountGroup>().notNull(),
     name: text("name").notNull(),
     archivedAt: timestamp("archived_at"),
@@ -721,6 +727,7 @@ export const expenseSeries = pgTable(
     kind: entryKindEnum("kind").notNull().default("expense"),
     /** Investment, financing and partners only. */
     flow: entryFlowEnum("flow"),
+    /** A plan_groups id of the série's kind (a série is never a rendimento). */
     category: text("category").$type<ExpenseCategory>().notNull(),
     amountBrl: numeric("amount_brl", { mode: "number" }).notNull(),
     accountId: text("account_id").references(() => accounts.id, { onDelete: "set null" }),
@@ -740,8 +747,8 @@ export const expenseSeries = pgTable(
 );
 
 /**
- * A lançamento: one line of money the farm typed, a despesa or a receita
- * (costs outside the sanitary treatments, revenue outside the vendas).
+ * A lançamento: one line of money the farm typed. Vendas and compras of gado
+ * derive from the manejos; a tratamento's cost stays on the tratamento.
  */
 export const expenses = pgTable(
   "expenses",
@@ -755,8 +762,8 @@ export const expenses = pgTable(
     flow: entryFlowEnum("flow"),
     /** Competência. */
     date: date("date").notNull(),
-    /** Grupo of a despesa (a built-in key or an expense_groups id); the other kinds write "other" and nothing reads it. */
-    category: text("category").$type<ExpenseCategory>().notNull(),
+    /** Grupo of the lançamento, a plan_groups id of its kind; null on a rendimento. */
+    category: text("category").$type<ExpenseCategory>(),
     amountBrl: numeric("amount_brl", { mode: "number" }).notNull(),
     notes: text("notes"),
     /** Vencimento; null means `date`. */
@@ -928,6 +935,7 @@ export const budgets = pgTable(
     farmId: integer("farm_id")
       .notNull()
       .references(() => farm.id, { onDelete: "cascade" }),
+    /** A plan_groups id of kind expense. */
     category: text("category").$type<ExpenseCategory>().notNull(),
     /** Null = the grupo's own line; removing the conta removes its lines. */
     accountId: text("account_id").references(() => accounts.id, { onDelete: "cascade" }),
@@ -1071,7 +1079,7 @@ export type CalvingRow = typeof calvings.$inferSelect;
 export type MovementRow = typeof movements.$inferSelect;
 export type ExpenseRow = typeof expenses.$inferSelect;
 export type FarmAccountRow = typeof accounts.$inferSelect;
-export type ExpenseGroupRow = typeof expenseGroups.$inferSelect;
+export type PlanGroupRow = typeof planGroups.$inferSelect;
 export type ExpenseSeriesRow = typeof expenseSeries.$inferSelect;
 export type AttachmentRow = typeof attachments.$inferSelect;
 export type BankAccountRow = typeof bankAccounts.$inferSelect;

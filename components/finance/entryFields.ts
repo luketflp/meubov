@@ -2,8 +2,8 @@
  * The fields of "Novo lançamento" and what they become. `initialFields` says
  * where the form starts (the lançamento edited or duplicated, the nó picked,
  * a linha do extrato), `withKind` keeps it sound when the type or the
- * movimento changes, and `entryValues` turns it into the row the API takes: a
- * receita and the capital kinds write category "other"; the capital kinds
+ * movimento changes, and `entryValues` turns it into the row the API takes:
+ * every kind carries its grupo (a PlanGroup of its tipo); the capital kinds
  * need a conta and a movimento and take no lote. `entrySummary` is the line
  * at the foot of the dialog that says what will be lançado. Pure.
  */
@@ -13,7 +13,7 @@ import type {
   EntryKind,
   Expense,
   ExpenseCategory,
-  ExpenseGroup,
+  PlanGroup,
   SeriesRepeat,
   StatementLine,
 } from "@/lib/types";
@@ -21,7 +21,7 @@ import { ENTRY_KIND_LABEL, FLOW_LABEL, isCapitalKind, isInflow, mayPayFrom } fro
 import { formatDate } from "@/lib/domain/dates";
 import { formatCurrency } from "@/lib/domain/format";
 import { installmentPlan } from "@/lib/domain/series";
-import { despesaGroups } from "@/lib/domain/groups";
+import { groupsOf } from "@/lib/domain/groups";
 import type { EntryInitial } from "@/lib/domain/planTree";
 import { parseAmount } from "@/components/finance/parseAmount";
 import { defaultPaidBy } from "@/components/finance/contas/PaidByField";
@@ -35,6 +35,7 @@ export interface EntryFields {
   flow: EntryFlow;
   date: string;
   amount: string;
+  /** A PlanGroup id of the tipo; "" when the tipo has no active grupo. */
   category: ExpenseCategory;
   accountId: string;
   dueDate: string;
@@ -84,21 +85,26 @@ export interface EntryValues {
 
 const amountText = (amountBrl: number) => String(amountBrl).replace(".", ",");
 
-/** `groups`: the farm's grupos de despesa; a new lançamento only starts in one it may still pick. */
+/** The grupo a tipo starts in: its first active one by name, "" when it has none. */
+const firstGroup = (planGroups: readonly PlanGroup[], kind: EntryKind): ExpenseCategory =>
+  kind === "yield" ? "" : (groupsOf(planGroups, kind)[0]?.id ?? "");
+
+/** `planGroups`: every grupo of the farm; a new lançamento only starts in one it may still pick. */
 export function initialFields(
   source: EntrySource,
   bankAccounts: BankAccount[],
   today: string,
-  groups: readonly ExpenseGroup[] = []
+  planGroups: readonly PlanGroup[]
 ): EntryFields {
   const { expense, template, initial, fromLine } = source;
   if (fromLine) {
+    const kind = fromLine.amountBrl < 0 ? "expense" : "revenue";
     return {
-      kind: fromLine.amountBrl < 0 ? "expense" : "revenue",
+      kind,
       flow: "out",
       date: fromLine.date,
       amount: amountText(Math.abs(fromLine.amountBrl)),
-      category: "nutrition",
+      category: firstGroup(planGroups, kind),
       accountId: NONE,
       dueDate: fromLine.date,
       dueTouched: false,
@@ -119,7 +125,8 @@ export function initialFields(
       flow: expense.flow ?? "out",
       date: expense.date,
       amount: amountText(expense.amountBrl),
-      category: expense.category,
+      // Its own grupo, archived or not: the picker keeps it for this row.
+      category: expense.category ?? "",
       accountId: expense.accountId ?? NONE,
       dueDate: expense.dueDate ?? expense.date,
       dueTouched: expense.dueDate !== undefined && expense.dueDate !== expense.date,
@@ -138,15 +145,15 @@ export function initialFields(
   // Duplicar keeps what the lançamento is and drops when and how it was paid.
   const kind = template?.kind ?? initial?.kind ?? source.defaultKind;
   const flow = template?.flow ?? initial?.flow ?? "out";
-  // An archived grupo, or one deleted meanwhile, falls back to Nutrição, without its conta.
+  // An archived grupo, one deleted meanwhile or one of another tipo falls back to the tipo's first, without its conta.
   const picked = template?.category ?? initial?.category;
-  const live = picked === undefined || despesaGroups(groups).some((g) => g.key === picked);
+  const live = kind !== "yield" && groupsOf(planGroups, kind).some((g) => g.id === picked);
   return {
     kind,
     flow,
     date: today,
     amount: template ? amountText(template.amountBrl) : "",
-    category: live ? (picked ?? "nutrition") : "nutrition",
+    category: live && picked ? picked : firstGroup(planGroups, kind),
     accountId: live ? (template?.accountId ?? initial?.accountId ?? NONE) : NONE,
     dueDate: today,
     dueTouched: false,
@@ -162,22 +169,25 @@ export function initialFields(
 }
 
 /**
- * The type or the movimento changed: another kind starts without conta (its
- * grupo changed), and "Pago por" leaves a conta that may not take the new
+ * The type or the movimento changed: another kind starts in its first grupo
+ * without conta, and "Pago por" leaves a conta that may not take the new
  * direction (a cartão never receives).
  */
 export function withKind(
   fields: EntryFields,
   kind: EntryKind,
   flow: EntryFlow,
-  bankAccounts: BankAccount[]
+  bankAccounts: BankAccount[],
+  planGroups: readonly PlanGroup[]
 ): EntryFields {
   const current = bankAccounts.find((a) => a.id === fields.bankAccountId);
+  const same = kind === fields.kind;
   return {
     ...fields,
     kind,
     flow,
-    accountId: kind === fields.kind ? fields.accountId : NONE,
+    category: same ? fields.category : firstGroup(planGroups, kind),
+    accountId: same ? fields.accountId : NONE,
     bankAccountId:
       current && mayPayFrom(current.kind, kind, flow) ? current.id : defaultPaidBy(bankAccounts, kind, flow),
   };
@@ -191,6 +201,7 @@ export function entryValues(fields: EntryFields, repeating: boolean): EntryValue
   if (fields.date === "") return "Informe a data do lançamento.";
   const amountBrl = parseAmount(fields.amount);
   if (!Number.isFinite(amountBrl) || amountBrl <= 0) return "Informe o valor (maior que zero).";
+  if (fields.category === "") return "Escolha o grupo.";
   const capital = isCapitalKind(fields.kind);
   if (capital && fields.accountId === NONE) return "Escolha a conta do plano.";
   if (!repeating && fields.dueDate === "") return "Informe o vencimento.";
@@ -201,7 +212,7 @@ export function entryValues(fields: EntryFields, repeating: boolean): EntryValue
   return {
     ...(capital ? { flow: fields.flow } : {}),
     date: fields.date,
-    category: fields.kind === "expense" ? fields.category : "other",
+    category: fields.category,
     amountBrl,
     dueDate: fields.dueDate,
     paidAt: fields.paid ? fields.paidAt : null,
@@ -236,10 +247,7 @@ export function entrySummary(
   const amount = parseAmount(fields.amount);
   const capital = isCapitalKind(fields.kind);
   const what = isCapitalKind(fields.kind) ? FLOW_LABEL[fields.kind][fields.flow] : ENTRY_KIND_LABEL[fields.kind];
-  const where =
-    fields.kind === "expense"
-      ? [names.group, names.account].filter(Boolean).join(" › ")
-      : (names.account ?? (fields.kind === "revenue" ? "Receitas" : ""));
+  const where = [names.group, names.account].filter(Boolean).join(" › ");
   const day = (iso: string) => (iso === today ? "hoje" : formatDate(iso).slice(0, 5));
   const inflow = isInflow(fields);
   const rest = [where ? `em ${where}` : "", capital ? "fora do custo" : ""];

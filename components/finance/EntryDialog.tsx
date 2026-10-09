@@ -5,11 +5,11 @@
  * resultado (investimento, financiamento, sócios), with vencimento, pagamento
  * and the conta bancária it was paid by ("Pago por"), conta do plano, pago
  * para, documento, lote (centro de custo), Repetir (uma vez, parcelado,
- * recorrente) and anexos. A capital kind needs a conta of its grupo and a
- * Movimento (Compra / Venda do bem, Pagamento / Liberação, Retirada / Aporte)
- * and takes no grupo or lote; the words about paying follow the direction.
- * The Grupo picker lists the seven of the system, then the farm's under "da
- * fazenda"; an archived grupo shows only while the lançamento sits in it.
+ * recorrente) and anexos. Every kind sits in a grupo of its tipo; a capital
+ * kind needs a conta of that grupo and a Movimento (Compra / Venda do bem,
+ * Pagamento / Liberação, Retirada / Aporte) and takes no lote, and the words
+ * about paying follow the direction. The Grupo picker lists the tipo's grupos
+ * by name; an archived one shows only while the lançamento sits in it.
  * `initial` starts it on the nó picked in Lançamentos; `template` fills it
  * from a lançamento (Duplicar: today, pending, no anexos, no repetition).
  * With `fromLine` it is "Criar lançamento" of the conciliação: the linha do
@@ -29,22 +29,13 @@ import { CircleCheck, Clock, Info, Paperclip, Receipt, Repeat, Wallet, X, type L
 import { useHerdStore, type ExpensePatch } from "@/lib/store/useHerdStore";
 import { activeAnimals, activeLots } from "@/lib/store/selectors";
 import { useToast } from "@/components/providers/Toasts";
-import type {
-  AccountGroup,
-  CapitalGroup,
-  EntryFlow,
-  EntryKind,
-  Expense,
-  ExpenseCategory,
-  SeriesScope,
-  StatementLine,
-} from "@/lib/types";
+import type { CapitalGroup, EntryFlow, EntryKind, Expense, SeriesScope, StatementLine } from "@/lib/types";
 import type { Resolved } from "@/lib/api/domains/statements/useCases/ResolveLine.useCase";
 import { accountsByGroup, counterpartySuggestions } from "@/lib/domain/accounts";
 import { CAPITAL_GROUPS, ENTRY_KIND_LABEL, FLOW_LABEL, isCapitalKind, isInflow } from "@/lib/domain/entries";
 import type { EntryInitial } from "@/lib/domain/planTree";
 import { todayISO } from "@/lib/domain/dates";
-import { despesaGroups } from "@/lib/domain/groups";
+import { groupsOf } from "@/lib/domain/groups";
 import { MAX_INSTALLMENTS, MIN_INSTALLMENTS, installmentLabel, recurrenceLabel } from "@/lib/domain/series";
 import { cn } from "@/lib/utils";
 import { parseAmount } from "@/components/finance/parseAmount";
@@ -78,16 +69,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 /** The type switch: despesa, receita, then the three kinds outside the resultado. */
@@ -222,7 +204,7 @@ function EntryForm({
 }) {
   const { expense, fromLine } = source;
   const accounts = useHerdStore((s) => s.accounts);
-  const expenseGroups = useHerdStore((s) => s.expenseGroups);
+  const planGroups = useHerdStore((s) => s.planGroups);
   const bankAccounts = useHerdStore((s) => s.bankAccounts);
   const expenses = useHerdStore((s) => s.expenses);
   const lots = useHerdStore((s) => s.lots);
@@ -236,7 +218,7 @@ function EntryForm({
   /** The linha do extrato fixes the kind, the value and the payment. */
   const fixed = fromLine !== undefined;
 
-  const [fields, setFields] = useState<EntryFields>(() => initialFields(source, bankAccounts, todayISO(), expenseGroups));
+  const [fields, setFields] = useState<EntryFields>(() => initialFields(source, bankAccounts, todayISO(), planGroups));
   const [repeatFields, setRepeatFields] = useState<RepeatFields>(() => initialRepeat(todayISO()));
   const [pending, setPending] = useState<PendingFile[]>([]);
   /** The edit waiting for "Só esta" · "Esta e as próximas" · "Todas". */
@@ -252,18 +234,18 @@ function EntryForm({
 
   const set = (patch: Partial<EntryFields>) => setFields((f) => ({ ...f, ...patch }));
 
-  /** Investimento, financiamento or sócios: conta required, Movimento, no grupo or lote. */
+  /** Investimento, financiamento or sócios: conta required, Movimento, no lote. */
   const capitalKind = isCapitalKind(fields.kind) ? fields.kind : null;
   const inflow = isInflow(fields);
-  const group: AccountGroup = capitalKind ?? (fields.kind === "revenue" ? "revenue" : fields.category);
-  // A farm grupo without contas has no entry in accountsByGroup.
-  const groupAccounts = accountsByGroup(accounts)[group] ?? [];
-  // Only the row being edited keeps its archived grupo, whatever the farmer picks meanwhile.
-  const groupOptions = despesaGroups(expenseGroups, { keep: source.expense?.category });
-  const farmGroups = groupOptions.filter((g) => g.custom);
+  // A grupo without contas has no entry in accountsByGroup.
+  const groupAccounts = accountsByGroup(accounts)[fields.category] ?? [];
+  // Only the row being edited keeps its archived grupo, whatever the farmer picks meanwhile. The dialog never
+  // holds a rendimento, so the tipo is a grupo's.
+  const groupOptions =
+    fields.kind === "yield" ? [] : groupsOf(planGroups, fields.kind, { keep: source.expense?.category });
   const currentAccount = accounts.find((a) => a.id === fields.accountId);
   const accountOptions =
-    currentAccount && currentAccount.group === group && !groupAccounts.some((a) => a.id === currentAccount.id)
+    currentAccount && currentAccount.group === fields.category && !groupAccounts.some((a) => a.id === currentAccount.id)
       ? [...groupAccounts, currentAccount]
       : groupAccounts;
 
@@ -335,7 +317,7 @@ function EntryForm({
     let created;
     try {
       // A financiamento created here has no saldo inicial: Configurações › Plano de contas sets it.
-      created = await addAccount({ group, name });
+      created = await addAccount({ group: fields.category, name });
     } catch {
       return; // apiFail already toasted
     } finally {
@@ -461,7 +443,7 @@ function EntryForm({
           fields,
           rule,
           {
-            group: groupOptions.find((g) => g.key === fields.category)?.label,
+            group: groupOptions.find((g) => g.id === fields.category)?.name,
             account: currentAccount?.name,
             bank: bankAccounts.find((a) => a.id === fields.bankAccountId)?.name,
           },
@@ -499,7 +481,7 @@ function EntryForm({
                 role="radio"
                 aria-checked={selected}
                 onClick={() => {
-                  setFields((f) => withKind(f, kind, f.flow, bankAccounts));
+                  setFields((f) => withKind(f, kind, f.flow, bankAccounts, planGroups));
                   setNewAccountName(null);
                 }}
                 className={segmentClass(selected, "shrink-0 grow")}
@@ -600,120 +582,100 @@ function EntryForm({
               )}
             </div>
           </div>
-          {capitalKind ? null : (
-            <div className="grid gap-1.5">
-              {fields.kind === "revenue" ? (
-                <>
-                  <span className={FIELD_LABEL}>Grupo</span>
-                  <p className="flex min-h-11 items-center rounded-lg border border-input bg-surface px-2.5 text-sm text-ink-soft md:min-h-9">
-                    Receitas
-                  </p>
-                </>
-              ) : (
-                <>
-                  <Label htmlFor="entry-category">Grupo</Label>
-                  <Select
-                    value={fields.category}
-                    onValueChange={(category) => {
-                      set({ category: category as ExpenseCategory, accountId: NONE });
-                      setNewAccountName(null);
-                    }}
+          {/* A capital kind's Movimento takes a row of its own: there Grupo and Conta share one, so the column
+              keeps the five rows that fit the notebook. */}
+          <div className={capitalKind ? "grid grid-cols-2 gap-3" : "contents"}>
+            <div className="grid content-start gap-1.5">
+              <Label htmlFor="entry-category">Grupo</Label>
+              <Select
+                value={fields.category}
+                disabled={groupOptions.length === 0}
+                onValueChange={(category) => {
+                  // On a tipo change the value moves before the new options render: Radix's hidden native
+                  // select then reports "" once. That is not a pick.
+                  if (category === "") return;
+                  set({ category, accountId: NONE });
+                  setNewAccountName(null);
+                }}
+              >
+                <SelectTrigger id="entry-category" className="min-h-11 w-full md:min-h-9">
+                  <SelectValue
+                    placeholder={groupOptions.length === 0 ? "Nenhum grupo — crie um no Plano de contas" : "Escolha o grupo"}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {groupOptions.map((g) => (
+                    <SelectItem key={g.id} value={g.id}>
+                      {g.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid content-start gap-1.5">
+              <span className="flex items-center justify-between gap-2">
+                <Label htmlFor="entry-account">{capitalKind ? "Conta" : "Conta do plano"}</Label>
+                {newAccountName === null && fields.category !== "" ? (
+                  <button
+                    type="button"
+                    onClick={() => setNewAccountName("")}
+                    className="-my-3.5 inline-flex min-h-11 items-center text-xs font-medium whitespace-nowrap text-brand hover:underline md:my-0 md:min-h-0"
                   >
-                    <SelectTrigger id="entry-category" className="min-h-11 w-full md:min-h-9">
-                      <SelectValue />
+                    + nova conta
+                  </button>
+                ) : null}
+              </span>
+              {newAccountName === null ? (
+                <>
+                  {/* A capital kind has no "Sem conta": "" shows the placeholder until one is picked. */}
+                  <Select
+                    value={capitalKind && fields.accountId === NONE ? "" : fields.accountId}
+                    onValueChange={(accountId) => set({ accountId })}
+                  >
+                    <SelectTrigger
+                      id="entry-account"
+                      className="min-h-11 w-full md:min-h-9"
+                      aria-required={capitalKind ? true : undefined}
+                    >
+                      <SelectValue placeholder="Escolha a conta" />
                     </SelectTrigger>
                     <SelectContent>
-                      {groupOptions
-                        .filter((g) => !g.custom)
-                        .map((g) => (
-                          <SelectItem key={g.key} value={g.key}>
-                            {g.label}
-                          </SelectItem>
-                        ))}
-                      {farmGroups.length > 0 ? (
-                        <>
-                          <SelectSeparator />
-                          <SelectGroup className="p-0">
-                            <SelectLabel className="text-[11px] font-medium tracking-wide text-ink-soft uppercase">
-                              da fazenda
-                            </SelectLabel>
-                            {farmGroups.map((g) => (
-                              <SelectItem key={g.key} value={g.key}>
-                                {g.label}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </>
-                      ) : null}
+                      {capitalKind ? null : <SelectItem value={NONE}>Sem conta</SelectItem>}
+                      {accountOptions.map((account) => (
+                        <SelectItem key={account.id} value={account.id}>
+                          {account.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    id="entry-account"
+                    autoFocus
+                    value={newAccountName}
+                    placeholder="Nome da conta"
+                    onChange={(e) => setNewAccountName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void onCreateAccount();
+                      }
+                    }}
+                    className="min-h-11 min-w-0 md:min-h-9"
+                  />
+                  <Button
+                    type="button"
+                    className="min-h-11 md:min-h-9"
+                    disabled={creatingAccount}
+                    onClick={() => void onCreateAccount()}
+                  >
+                    Criar
+                  </Button>
+                </div>
               )}
             </div>
-          )}
-          <div className="grid gap-1.5">
-            <span className="flex items-center justify-between gap-2">
-              <Label htmlFor="entry-account">Conta do plano</Label>
-              {newAccountName === null ? (
-                <button
-                  type="button"
-                  onClick={() => setNewAccountName("")}
-                  className="-my-3.5 inline-flex min-h-11 items-center text-xs font-medium text-brand hover:underline md:my-0 md:min-h-0"
-                >
-                  + nova conta
-                </button>
-              ) : null}
-            </span>
-            {newAccountName === null ? (
-              <>
-                {/* A capital kind has no "Sem conta": "" shows the placeholder until one is picked. */}
-                <Select
-                  value={capitalKind && fields.accountId === NONE ? "" : fields.accountId}
-                  onValueChange={(accountId) => set({ accountId })}
-                >
-                  <SelectTrigger
-                    id="entry-account"
-                    className="min-h-11 w-full md:min-h-9"
-                    aria-required={capitalKind ? true : undefined}
-                  >
-                    <SelectValue placeholder="Escolha a conta" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {capitalKind ? null : <SelectItem value={NONE}>Sem conta</SelectItem>}
-                    {accountOptions.map((account) => (
-                      <SelectItem key={account.id} value={account.id}>
-                        {account.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </>
-            ) : (
-              <div className="flex gap-2">
-                <Input
-                  id="entry-account"
-                  autoFocus
-                  value={newAccountName}
-                  placeholder="Nome da conta"
-                  onChange={(e) => setNewAccountName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      void onCreateAccount();
-                    }
-                  }}
-                  className="min-h-11 md:min-h-9"
-                />
-                <Button
-                  type="button"
-                  className="min-h-11 md:min-h-9"
-                  disabled={creatingAccount}
-                  onClick={() => void onCreateAccount()}
-                >
-                  Criar
-                </Button>
-              </div>
-            )}
           </div>
           {capitalKind ? (
             <div className="grid content-start gap-1.5">
@@ -733,7 +695,7 @@ function EntryForm({
                       type="button"
                       role="radio"
                       aria-checked={selected}
-                      onClick={() => setFields((f) => withKind(f, f.kind, flow, bankAccounts))}
+                      onClick={() => setFields((f) => withKind(f, f.kind, flow, bankAccounts, planGroups))}
                       className={segmentClass(selected, "flex-1")}
                     >
                       {FLOW_LABEL[capitalKind][flow]}

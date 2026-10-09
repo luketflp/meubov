@@ -22,7 +22,7 @@ import { weighingsController } from "@/lib/api/domains/animals/weighings.control
 import { breedsController } from "@/lib/api/domains/breeds/breeds.controller";
 import { categoriesController } from "@/lib/api/domains/categories/categories.controller";
 import { accountsController } from "@/lib/api/domains/accounts/accounts.controller";
-import { expenseGroupsController } from "@/lib/api/domains/expenseGroups/expenseGroups.controller";
+import { planGroupsController } from "@/lib/api/domains/planGroups/planGroups.controller";
 import { attachmentsController } from "@/lib/api/domains/attachments/attachments.controller";
 import { bankAccountsController } from "@/lib/api/domains/bankAccounts/bankAccounts.controller";
 import { budgetsController } from "@/lib/api/domains/budgets/budgets.controller";
@@ -80,7 +80,7 @@ export const herdApi = new Elysia({ prefix: "/api/herd" })
   .use(expensesController)
   .use(attachmentsController)
   .use(accountsController)
-  .use(expenseGroupsController)
+  .use(planGroupsController)
 
   /* ---- Contas bancárias, transferências, extratos e conciliação ---------- */
   .use(bankAccountsController)

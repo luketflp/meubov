@@ -1,7 +1,7 @@
 /**
  * Synthetic data factories for the domain tests.
  */
-import type { Animal, ManejoSession, SemenBull, Treatment } from "@/lib/types";
+import type { Animal, ManejoSession, PlanGroup, SemenBull, Treatment } from "@/lib/types";
 
 /** Creates a default animal for tests, with partial overrides. */
 export function makeAnimal(overrides: Partial<Animal> = {}): Animal {
@@ -55,6 +55,17 @@ export function makeManejoSession(overrides: Partial<ManejoSession> = {}): Manej
     kind: "insemination",
     weighing: false,
     animals: [],
+    ...overrides,
+  };
+}
+
+/** Creates a default grupo (Despesas › Nutrição) for tests, with partial overrides. */
+export function makePlanGroup(overrides: Partial<PlanGroup> = {}): PlanGroup {
+  return {
+    id: "g-1",
+    kind: "expense",
+    name: "Nutrição",
+    createdAt: "2026-10-01T12:00:00.000Z",
     ...overrides,
   };
 }

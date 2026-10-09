@@ -1,16 +1,17 @@
 "use client";
 
 /**
- * The header of a grupo the farm created, on the Despesas (COE) card of the
- * Plano de contas: its name with the "da fazenda" tag, Renomear (inline, like
- * a conta), Arquivar (confirmed, naming what leaves the forms and what stays),
- * Excluir while no lançamento was ever made in it (confirmed; the server still
- * refuses one a recorrência keeps) and "+ Conta".
+ * The header of a grupo on the Plano de contas, any tipo: its name (with the
+ * tipo on a grupo outside the resultado), Renomear (inline, like a conta),
+ * Arquivar (confirmed, naming what leaves the forms and what stays), Excluir
+ * while no lançamento was ever made in it (confirmed; the server still refuses
+ * one a recorrência keeps) and "+ Conta".
  */
 import { useState, type KeyboardEvent } from "react";
 import { Archive, Pencil, Plus, Trash2 } from "lucide-react";
-import type { Account, Expense, ExpenseCategory } from "@/lib/types";
-import { GROUP_NAME_MAX, type DespesaGroup } from "@/lib/domain/groups";
+import type { Account, Expense, ExpenseCategory, GroupKind, PlanGroup } from "@/lib/types";
+import { ENTRY_KIND_LABEL, isCapitalKind } from "@/lib/domain/entries";
+import { GROUP_NAME_MAX } from "@/lib/domain/groups";
 import { formatNumber } from "@/lib/domain/format";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
@@ -36,14 +37,26 @@ export function groupEntryCount(
     .length;
 }
 
-/** What "Arquivar <nome>?" says: the contas that leave the forms, the lançamentos that stay. */
-export function archiveGroupText(contas: number, entries: number): string {
+/**
+ * What "Arquivar <nome>?" says: the contas that leave the forms, the
+ * lançamentos that stay. Only a grupo de despesa has an Orçamento and a custo.
+ */
+export function archiveGroupText(kind: GroupKind, contas: number, entries: number): string {
   const leaving =
     contas === 0
       ? "O grupo sai"
       : contas === 1
         ? "O grupo e a conta dele saem"
         : `O grupo e as ${formatNumber(contas)} contas dele saem`;
+  if (kind !== "expense") {
+    const kept =
+      entries === 0
+        ? ""
+        : entries === 1
+          ? " O lançamento continua em Lançamentos e nos relatórios."
+          : ` Os ${formatNumber(entries)} lançamentos continuam em Lançamentos e nos relatórios.`;
+    return `${leaving} do formulário de lançamento.${kept}`;
+  }
   const staying =
     entries === 0
       ? ""
@@ -53,7 +66,7 @@ export function archiveGroupText(contas: number, entries: number): string {
   return `${leaving} do formulário de lançamento e do Orçamento da próxima safra.${staying}`;
 }
 
-export function AddAccountButton({ onClick }: { onClick(): void }) {
+function AddAccountButton({ onClick }: { onClick(): void }) {
   return (
     <Button variant="ghost" size="sm" className="min-h-11 md:min-h-0" onClick={onClick}>
       <Plus data-icon="inline-start" aria-hidden />
@@ -68,8 +81,8 @@ export function GroupHeader({
   entries,
   onAdd,
 }: {
-  /** A farm grupo, not archived. */
-  group: DespesaGroup;
+  /** Not archived. */
+  group: PlanGroup;
   /** Its contas that are not archived. */
   contas: number;
   /** Lançamentos ever made in it (groupEntryCount). */
@@ -77,8 +90,8 @@ export function GroupHeader({
   /** "+ Conta" in this grupo; absent for a reader, who gets no buttons. */
   onAdd?: () => void;
 }) {
-  const updateExpenseGroup = useHerdStore((s) => s.updateExpenseGroup);
-  const removeExpenseGroup = useHerdStore((s) => s.removeExpenseGroup);
+  const updatePlanGroup = useHerdStore((s) => s.updatePlanGroup);
+  const removePlanGroup = useHerdStore((s) => s.removePlanGroup);
   const { addToast } = useToast();
   const [draft, setDraft] = useState<string | null>(null);
   /** Which confirmation; kept while it closes so the title does not flip. */
@@ -94,12 +107,12 @@ export function GroupHeader({
   async function onRename() {
     if (draft === null) return;
     const clean = draft.trim();
-    if (clean === "" || clean === group.label) {
+    if (clean === "" || clean === group.name) {
       setDraft(null);
       return;
     }
     try {
-      if (!(await updateExpenseGroup(group.key, { name: clean }))) {
+      if (!(await updatePlanGroup(group.id, { name: clean }))) {
         addToast({ messageType: "error", text: "Já existe um grupo com esse nome" });
         return;
       }
@@ -114,7 +127,7 @@ export function GroupHeader({
   async function onArchive() {
     setBusy(true);
     try {
-      await updateExpenseGroup(group.key, { archived: true });
+      await updatePlanGroup(group.id, { archived: true });
       addToast({ messageType: "success", text: "Grupo arquivado" });
     } catch {
       // apiFail already told the user.
@@ -126,7 +139,7 @@ export function GroupHeader({
   async function onRemove() {
     setBusy(true);
     try {
-      if ((await removeExpenseGroup(group.key)) === "in_use") {
+      if ((await removePlanGroup(group.id)) === "in_use") {
         addToast({ messageType: "error", text: "Grupo com lançamentos não se apaga. Arquive em vez de excluir." });
         setConfirming(false);
         return;
@@ -149,7 +162,7 @@ export function GroupHeader({
       <header className="flex flex-wrap items-center gap-2">
         <Input
           autoFocus
-          aria-label={`Novo nome de ${group.label}`}
+          aria-label={`Novo nome de ${group.name}`}
           value={draft}
           maxLength={GROUP_NAME_MAX}
           onChange={(e) => setDraft(e.target.value)}
@@ -169,10 +182,12 @@ export function GroupHeader({
   return (
     <header className="flex flex-wrap items-center justify-between gap-2">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <h3 className="text-sm font-semibold break-words text-ink">{group.label}</h3>
-        <span className="inline-flex items-center rounded-md bg-surface px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-ink-soft">
-          da fazenda
-        </span>
+        <h3 className="text-sm font-semibold break-words text-ink">{group.name}</h3>
+        {isCapitalKind(group.kind) ? (
+          <span className="inline-flex items-center rounded-md bg-surface px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-ink-soft">
+            {ENTRY_KIND_LABEL[group.kind].toLowerCase()}
+          </span>
+        ) : null}
       </div>
       {onAdd ? (
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
@@ -180,9 +195,9 @@ export function GroupHeader({
             size="icon"
             variant="ghost"
             className="size-11 md:size-8"
-            aria-label={`Renomear o grupo ${group.label}`}
+            aria-label={`Renomear o grupo ${group.name}`}
             title="Renomear grupo"
-            onClick={() => setDraft(group.label)}
+            onClick={() => setDraft(group.name)}
           >
             <Pencil aria-hidden />
           </Button>
@@ -190,7 +205,7 @@ export function GroupHeader({
             size="icon"
             variant="ghost"
             className="size-11 md:size-8"
-            aria-label={`Arquivar o grupo ${group.label}`}
+            aria-label={`Arquivar o grupo ${group.name}`}
             title="Arquivar grupo"
             onClick={() => confirm("archive")}
           >
@@ -201,7 +216,7 @@ export function GroupHeader({
               size="icon"
               variant="ghost"
               className="size-11 md:size-8"
-              aria-label={`Excluir o grupo ${group.label}`}
+              aria-label={`Excluir o grupo ${group.name}`}
               title="Excluir grupo"
               onClick={() => confirm("delete")}
             >
@@ -220,12 +235,12 @@ export function GroupHeader({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {action === "delete" ? "Excluir" : "Arquivar"} {group.label}?
+              {action === "delete" ? "Excluir" : "Arquivar"} {group.name}?
             </DialogTitle>
             <DialogDescription>
               {action === "delete"
                 ? "O grupo ainda não tem lançamentos. Ele sai do plano de contas e do orçamento, com as contas que tiver."
-                : archiveGroupText(contas, entries)}
+                : archiveGroupText(group.kind, contas, entries)}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

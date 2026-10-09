@@ -25,7 +25,7 @@ const ROW = {
   farmId: 7,
   kind: "expense",
   date: "2026-09-27",
-  category: "nutrition",
+  category: "grp-nutricao",
   amountBrl: 333.33,
   notes: null,
   dueDate: "2026-11-10",

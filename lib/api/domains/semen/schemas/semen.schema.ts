@@ -4,10 +4,7 @@ import { t } from "elysia";
 
 import { DateString, NonBlankString } from "@/lib/api/schemas/shared.schema";
 
-/**
- * Body of POST /semen-bulls/:id/purchases, and the optional first purchase of a
- * new bull. Every purchase also becomes a Reprodução expense of `totalBrl`.
- */
+/** Body of POST /semen-bulls/:id/purchases, and the optional first purchase of a new bull. */
 export const SemenPurchaseBody = t.Object({
   date: DateString,
   doses: t.Integer({ minimum: 1 }),

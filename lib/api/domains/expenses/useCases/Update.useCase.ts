@@ -80,7 +80,7 @@ export class UpdateExpenseUseCase implements CurrUseCase {
         kind,
         flow: patch.flow ?? current.flow,
         date,
-        category: patch.category ?? current.category,
+        category: patch.category ?? current.category ?? undefined,
         dueDate: patch.dueDate === undefined ? current.dueDate : patch.dueDate,
         paidAt: patch.paidAt === undefined ? current.paidAt : patch.paidAt,
         accountId: patch.accountId === undefined ? current.accountId : patch.accountId,

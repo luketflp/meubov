@@ -29,11 +29,8 @@ export function useDeleteSemenBull(bull: SemenBull, onDeleted?: () => void) {
       addToast({ messageType: "error", text: BLOCK_MESSAGE[block] });
       return;
     }
-    const money =
-      bull.purchases.length > 0
-        ? " As compras dele e as despesas que elas geraram saem do Financeiro."
-        : "";
-    if (!window.confirm(`Excluir o touro ${bull.name}?${money}`)) return;
+    const purchases = bull.purchases.length > 0 ? " As compras dele saem junto." : "";
+    if (!window.confirm(`Excluir o touro ${bull.name}?${purchases}`)) return;
     setRemoving(true);
     try {
       const refused = await removeSemenBull(bull.id);

@@ -1,6 +1,6 @@
 /**
- * loadHerd: the farm's grupos de despesa travel with the herd, archived ones
- * included, oldest first; the contas come by name (the client groups them).
+ * loadHerd: every grupo of the plano travels with the herd, archived ones
+ * included, by name; the contas come by name (the client groups them).
  *
  * A db stub keyed by table: every select resolves to the rows queued for the
  * table it reads `from`, and records its `orderBy`. The recorrências top-up is
@@ -10,7 +10,7 @@ import type { SQL } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderSql } from "@/lib/api/__tests__/dbStub";
-import { accounts, expenseGroups } from "@/lib/db/schema";
+import { accounts, planGroups } from "@/lib/db/schema";
 
 const { state } = vi.hoisted(() => ({
   state: {
@@ -57,37 +57,36 @@ beforeEach(() => {
 });
 
 describe("loadHerd", () => {
-  it("returns the farm's grupos de despesa, archived ones included, oldest first", async () => {
-    state.rows.set(expenseGroups, [
-      { id: "g-1", farmId: 7, name: "Arrendamento", archivedAt: null, createdAt: new Date("2026-09-15T12:00:00Z") },
+  it("returns every grupo of the farm with its tipo, archived ones included, by name", async () => {
+    state.rows.set(planGroups, [
       {
-        id: "g-2",
+        id: "g-1",
         farmId: 7,
+        kind: "expense",
         name: "Frete",
         archivedAt: new Date("2026-10-03T12:00:00Z"),
         createdAt: new Date("2026-10-01T12:00:00Z"),
       },
+      { id: "g-2", farmId: 7, kind: "revenue", name: "Receitas", archivedAt: null, createdAt: new Date("2026-09-15T12:00:00Z") },
     ]);
 
     const data = await new LoadHerdUseCase().run({ farmId: 7 });
 
-    expect(data.expenseGroups).toEqual([
-      { id: "g-1", name: "Arrendamento", createdAt: "2026-09-15T12:00:00.000Z" },
+    expect(data.planGroups).toEqual([
       {
-        id: "g-2",
+        id: "g-1",
+        kind: "expense",
         name: "Frete",
         archivedAt: "2026-10-03T12:00:00.000Z",
         createdAt: "2026-10-01T12:00:00.000Z",
       },
+      { id: "g-2", kind: "revenue", name: "Receitas", createdAt: "2026-09-15T12:00:00.000Z" },
     ]);
-    expect(orderOf(expenseGroups)).toEqual([
-      '"expense_groups"."created_at" asc',
-      '"expense_groups"."name" asc',
-    ]);
+    expect(orderOf(planGroups)).toEqual(['"plan_groups"."name" asc']);
   });
 
   it("is no grupos for a farm that has none", async () => {
-    expect((await new LoadHerdUseCase().run({ farmId: 7 })).expenseGroups).toEqual([]);
+    expect((await new LoadHerdUseCase().run({ farmId: 7 })).planGroups).toEqual([]);
   });
 
   it("lists the contas by name: a grupo key no longer sorts them", async () => {

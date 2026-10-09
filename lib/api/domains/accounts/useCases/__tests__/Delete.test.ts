@@ -20,7 +20,7 @@ vi.mock("@/lib/db", async () => ({
 
 import { DeleteAccountUseCase } from "../Delete.useCase";
 
-const ROW = { id: "racao", farmId: 7, group: "feed", name: "Ração", archivedAt: null };
+const ROW = { id: "racao", farmId: 7, group: "grp-nutricao", name: "Ração", archivedAt: null };
 
 beforeEach(() => {
   state.selectResults = [];

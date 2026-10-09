@@ -3,11 +3,12 @@
  * the Placar's indicators beside the prior window and their references, and
  * the Por lote table.
  */
-import type { Category, Expense, ExpenseGroup } from "@/lib/types";
+import type { Category, Expense, PlanGroup } from "@/lib/types";
 import type { LedgerStatus } from "@/lib/domain/ledger";
 import type { Indicators } from "@/lib/domain/economics";
 import type { LotEconomics } from "@/lib/domain/lotEconomics";
 import { benchmark, type BenchmarkKey } from "@/lib/domain/benchmarks";
+import { ENTRY_KIND_LABEL, entryGroup } from "@/lib/domain/entries";
 import { formatNumber } from "@/lib/domain/format";
 import { groupLabel } from "@/lib/domain/groups";
 import { pluralCategory } from "@/lib/domain/labels";
@@ -21,18 +22,23 @@ export function expensesNewestFirst(expenses: readonly Expense[]): Expense[] {
 
 /**
  * Every despesa, newest first; receitas and the kinds outside the resultado
- * are left out. `expenseGroups` names the farm's grupos.
+ * are left out. `planGroups` names the grupos.
  */
 export function expensesExportTable(
   expenses: readonly Expense[],
-  title = "Despesas",
-  expenseGroups: readonly ExpenseGroup[] = []
+  title: string,
+  planGroups: readonly PlanGroup[]
 ): ExportTable {
+  const label = (e: Expense): string => {
+    const group = entryGroup(e);
+    // Only a rendimento has no grupo: it reads as the ledger reads it.
+    return group === null ? ENTRY_KIND_LABEL.yield : groupLabel(group, planGroups);
+  };
   return buildTable(
     title,
     [
       { header: "Data", kind: "date", value: (e) => e.date },
-      { header: "Categoria", value: (e) => groupLabel(e.category, expenseGroups) },
+      { header: "Categoria", value: label },
       { header: "Descrição", value: (e) => e.notes ?? null },
       { header: "Valor (R$)", kind: "money", value: (e) => e.amountBrl },
     ],

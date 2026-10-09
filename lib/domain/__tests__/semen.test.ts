@@ -10,7 +10,6 @@ import {
   eligibleForInsemination,
   inseminationBulls,
   predominantLotId,
-  purchaseExpenseNotes,
   sessionDosesByBull,
   sessionSemenCost,
 } from "@/lib/domain/semen";
@@ -339,13 +338,6 @@ describe("sessionSemenCost", () => {
       totalBrl: null,
       perCowBrl: null,
     });
-  });
-});
-
-describe("purchaseExpenseNotes", () => {
-  it("names the bull and the doses bought", () => {
-    expect(purchaseExpenseNotes("Tufão da Serra", 30)).toBe("Sêmen — Tufão da Serra, 30 doses");
-    expect(purchaseExpenseNotes("Tufão da Serra", 1)).toBe("Sêmen — Tufão da Serra, 1 dose");
   });
 });
 

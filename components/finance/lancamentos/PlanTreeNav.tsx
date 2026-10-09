@@ -2,9 +2,10 @@
 
 /**
  * The plano de contas, the left column of Lançamentos: a search by name,
- * "Todos os lançamentos" and the six groups with their figure for the window.
- * Each row is a link that picks its nó (the URL's `conta`); the groups and the
- * grupos of Despesas open and close in place, the path to the picked nó
+ * "Todos os lançamentos", Bancos e caixa and the five tipos with their figure
+ * for the window. Each row is a link that picks its nó (the URL's `conta`); a
+ * tipo opens into its grupos and a grupo into its contas (a tipo with a single
+ * grupo lists the contas itself), in place, the path to the picked nó
  * starting open. "+" opens Nova conta and the gear goes to Configurações.
  */
 import { useState, type ReactNode } from "react";

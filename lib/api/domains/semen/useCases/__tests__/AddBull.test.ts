@@ -1,7 +1,7 @@
 /**
  * addSemenBull: registers a bull the farm buys semen from. Names are unique per
  * farm; blank optional texts are stored as null; a first purchase is written
- * with its Reprodução expense in the same transaction.
+ * in the same transaction, and nothing lands in the Financeiro.
  *
  * Same chainable db stub as the other use-case tests: inserts record the table
  * and the row and echo it from returning(), or reject with a queued error.
@@ -35,21 +35,9 @@ function insertBuilder(table: Table) {
   };
 }
 
-/** The "Sêmen" conta lookup of a first purchase: this farm has none. */
-function selectBuilder() {
-  const builder = {
-    from: () => builder,
-    where: () => builder,
-    limit: () => builder,
-    then: (resolve: (value: Record<string, unknown>[]) => unknown) => resolve([]),
-  };
-  return builder;
-}
-
 vi.mock("@/lib/db", () => ({
   db: {
-    transaction: (run: (tx: unknown) => unknown) =>
-      Promise.resolve(run({ insert: insertBuilder, select: selectBuilder })),
+    transaction: (run: (tx: unknown) => unknown) => Promise.resolve(run({ insert: insertBuilder })),
   },
 }));
 
@@ -137,7 +125,7 @@ describe("addSemenBull", () => {
     ).rejects.toThrow("boom");
   });
 
-  it("writes the first purchase and its expense, linked", async () => {
+  it("writes the first purchase with the bull, and no expense", async () => {
     const result = await new AddBullUseCase().run({
       farmId: 7,
       input: {
@@ -151,30 +139,15 @@ describe("addSemenBull", () => {
       },
     });
 
-    expect(state.inserts.map((insert) => insert.table)).toEqual([
-      "semen_bulls",
-      "expenses",
-      "semen_purchases",
-    ]);
-    const [bull, expense, purchase] = state.inserts.map((insert) => insert.row);
-    expect(expense).toMatchObject({
-      farmId: 7,
-      kind: "expense",
-      date: "2026-08-01",
-      paidAt: "2026-08-01",
-      category: "breeding",
-      amountBrl: 1140,
-      counterparty: null,
-      accountId: null,
-      notes: "Sêmen — Tufão da Serra, 30 doses",
-    });
-    expect(purchase).toMatchObject({
+    expect(state.inserts.map((insert) => insert.table)).toEqual(["semen_bulls", "semen_purchases"]);
+    const [bull, purchase] = state.inserts.map((insert) => insert.row);
+    expect(purchase).toEqual({
+      id: expect.any(String),
       bullId: bull.id,
       date: "2026-08-01",
       doses: 30,
       totalBrl: 1140,
       seller: "Central Bela Vista",
-      expenseId: expense.id,
     });
     expect(result).toEqual({
       bull: {
@@ -187,20 +160,10 @@ describe("addSemenBull", () => {
             doses: 30,
             totalBrl: 1140,
             seller: "Central Bela Vista",
-            expenseId: expense.id,
           },
         ],
       },
-      expense: {
-        id: expense.id,
-        kind: "expense",
-        date: "2026-08-01",
-        paidAt: "2026-08-01",
-        category: "breeding",
-        amountBrl: 1140,
-        notes: "Sêmen — Tufão da Serra, 30 doses",
-        attachmentCount: 0,
-      },
     });
+    expect(result).not.toHaveProperty("expense");
   });
 });

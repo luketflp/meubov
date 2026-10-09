@@ -8,8 +8,7 @@
  * from the coberturas.
  *
  * Mirrors the other register dialogs: local validation, the store action, and
- * the name conflict the server answers shown under the fields. The first
- * purchase writes an expense, so it is offered only with Financeiro edit.
+ * the name conflict the server answers shown under the fields.
  */
 import { useState, type FormEvent } from "react";
 import { Pencil, Plus } from "lucide-react";
@@ -19,7 +18,6 @@ import {
   type NewSemenPurchase,
   type SemenBullPatch,
 } from "@/lib/store/useHerdStore";
-import { useCan } from "@/lib/store/usePermissions";
 import { useToast } from "@/components/providers/Toasts";
 import {
   PurchaseInputs,
@@ -94,7 +92,6 @@ export function SemenBullDialog({ bull }: SemenBullDialogProps) {
   const breeds = useHerdStore((s) => s.breeds);
   const addSemenBull = useHerdStore((s) => s.addSemenBull);
   const updateSemenBull = useHerdStore((s) => s.updateSemenBull);
-  const canBuy = useCan("finance", "edit");
   const { addToast } = useToast();
 
   const editing = bull !== undefined;
@@ -119,7 +116,7 @@ export function SemenBullDialog({ bull }: SemenBullDialogProps) {
   /** Registers the new bull; the first purchase goes along when one was typed. */
   async function register() {
     let firstPurchase: NewSemenPurchase | undefined;
-    if (canBuy && purchaseStarted(fields.purchase)) {
+    if (purchaseStarted(fields.purchase)) {
       const reading = readPurchase(fields.purchase);
       if (reading.error !== null) {
         setError(reading.error);
@@ -254,7 +251,7 @@ export function SemenBullDialog({ bull }: SemenBullDialogProps) {
             </div>
           </div>
 
-          {editing || !canBuy ? null : (
+          {editing ? null : (
             <div
               role="group"
               aria-labelledby="semen-bull-first-purchase"
@@ -274,7 +271,6 @@ export function SemenBullDialog({ bull }: SemenBullDialogProps) {
                 onChange={(patch) =>
                   setFields((f) => ({ ...f, purchase: { ...f.purchase, ...patch } }))
                 }
-                totalHint="Vira despesa de Reprodução no Financeiro"
               />
             </div>
           )}

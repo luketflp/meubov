@@ -22,7 +22,7 @@ import { renderSql } from "@/lib/api/__tests__/dbStub";
 import { DeleteBudgetLineUseCase } from "../DeleteBudgetLine.useCase";
 
 const remove = (accountId?: string) =>
-  new DeleteBudgetLineUseCase().run({ farmId: 7, safra: 2025, startMonth: 10, category: "admin", accountId });
+  new DeleteBudgetLineUseCase().run({ farmId: 7, safra: 2025, startMonth: 10, category: "grp-administrativo", accountId });
 
 beforeEach(() => {
   state.selectResults = [[{ startMonth: 10 }]];
@@ -39,14 +39,20 @@ describe("deleteBudgetLine", () => {
     const removed = renderSql(state.wheres[1] as SQL);
     expect(removed.sql).toContain('"budgets"."farm_id" = $1');
     expect(removed.sql).toContain('"budgets"."account_id" is null');
-    expect(removed.params).toEqual([7, "2025-10-01", "2026-09-30", "admin"]);
+    expect(removed.params).toEqual([7, "2025-10-01", "2026-09-30", "grp-administrativo"]);
   });
 
   it("removes a conta's line only, and counts nothing when it had none", async () => {
     state.returning = [[]];
 
     expect(await remove("acc-escritorio")).toBe(0);
-    expect(renderSql(state.wheres[1] as SQL).params).toEqual([7, "2025-10-01", "2026-09-30", "admin", "acc-escritorio"]);
+    expect(renderSql(state.wheres[1] as SQL).params).toEqual([
+      7,
+      "2025-10-01",
+      "2026-09-30",
+      "grp-administrativo",
+      "acc-escritorio",
+    ]);
   });
 
   it("refuses with start_month_changed when the farm's início moved in another session, and removes nothing", async () => {

@@ -12,10 +12,10 @@ import type {
   ExpenseCategory,
 } from "@/lib/types";
 
-/** The three groups outside the resultado that hold contas do plano, in screen order. */
+/** The three kinds outside the resultado, in screen order. */
 export const CAPITAL_GROUPS: readonly CapitalGroup[] = ["investment", "financing", "partners"];
 
-/** Investimento, financiamento or sócios: a conta of its own group and a movimento. */
+/** Investimento, financiamento or sócios: a movimento, with a `flow`. */
 export function isCapitalKind(kind: EntryKind): kind is CapitalGroup {
   return (CAPITAL_GROUPS as readonly EntryKind[]).includes(kind);
 }
@@ -40,11 +40,9 @@ export function isRevenue(e: { kind: EntryKind }): boolean {
   return e.kind === "revenue";
 }
 
-/** Grupo of the plano a lançamento sits in; null for a rendimento. */
-export function entryGroup(e: { kind: EntryKind; category: ExpenseCategory }): AccountGroup | null {
-  if (e.kind === "expense") return e.category;
-  if (e.kind === "yield") return null;
-  return e.kind;
+/** Grupo of the plano a lançamento sits in; null for a rendimento, which has none. */
+export function entryGroup(e: { kind: EntryKind; category?: ExpenseCategory }): AccountGroup | null {
+  return e.category ?? null;
 }
 
 export const ENTRY_KIND_LABEL: Record<EntryKind, string> = {

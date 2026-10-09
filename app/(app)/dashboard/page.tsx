@@ -143,8 +143,8 @@ export default function DashboardPage() {
 
   const monthsInPeriod = useMemo(
     () =>
-      filterMonthlyByPeriod(monthlyRevenueCost(movements, treatments, expenses, 12, today), period),
-    [movements, treatments, expenses, today, period]
+      filterMonthlyByPeriod(monthlyRevenueCost(movements, expenses, 12, today), period),
+    [movements, expenses, today, period]
   );
   const financials = useMemo(
     () =>
@@ -155,8 +155,8 @@ export default function DashboardPage() {
     [monthsInPeriod]
   );
   const costSlices = useMemo(
-    () => costBreakdownBetween(expenses, treatments, period.start, period.end),
-    [expenses, treatments, period]
+    () => costBreakdownBetween(expenses, period.start, period.end),
+    [expenses, period]
   );
 
   return (

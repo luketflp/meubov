@@ -3,13 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Wallet } from "lucide-react";
-import type { Account, Expense, ExpenseCategory, Treatment } from "@/lib/types";
+import type { Account, Expense, ExpenseCategory } from "@/lib/types";
 import type { CostBreakdownSlice } from "@/lib/domain/economics";
 import { accountName } from "@/lib/domain/accounts";
 import { isCost } from "@/lib/domain/entries";
 import { inPeriod, periodSearch, type Period } from "@/lib/domain/period";
 import { nodeParam } from "@/lib/domain/planTree";
-import { groupLabel } from "@/lib/domain/groups";
+import { groupLabel, groupsOf } from "@/lib/domain/groups";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -30,16 +30,14 @@ const SLICE_COLORS = [
 interface CostBreakdownCardProps {
   breakdown: CostBreakdownSlice[];
   expenses: Expense[];
-  treatments: Treatment[];
   accounts: Account[];
   period: Period;
 }
 
-/** The group's despesas in the window by conta ("Sem conta" when none), plus treatments under Sanidade. */
+/** The grupo's despesas in the window by conta ("Sem conta" when none). */
 function accountTotals(
   category: ExpenseCategory,
   expenses: Expense[],
-  treatments: Treatment[],
   accounts: Account[],
   period: Period
 ): { label: string; amount: number }[] {
@@ -50,30 +48,14 @@ function accountTotals(
     const label = accountName(expense.accountId, accounts) ?? "Sem conta";
     totals.set(label, (totals.get(label) ?? 0) + expense.amountBrl);
   }
-  if (category === "health") {
-    const treated = treatments.reduce(
-      (sum, t) =>
-        t.status === "done" && t.costBrl !== undefined && inPeriod(t.date, period)
-          ? sum + t.costBrl
-          : sum,
-      0
-    );
-    if (treated > 0) totals.set("Tratamentos (manejos)", treated);
-  }
   return [...totals]
     .map(([label, amount]) => ({ label, amount }))
     .sort((a, b) => b.amount - a.amount);
 }
 
 /** COE by grupo; a grupo opens to its contas, the largest open by default. */
-export function CostBreakdownCard({
-  breakdown,
-  expenses,
-  treatments,
-  accounts,
-  period,
-}: CostBreakdownCardProps) {
-  const expenseGroups = useHerdStore((s) => s.expenseGroups);
+export function CostBreakdownCard({ breakdown, expenses, accounts, period }: CostBreakdownCardProps) {
+  const planGroups = useHerdStore((s) => s.planGroups);
   // null = the default (largest open); "none" = the user closed every grupo.
   const [picked, setPicked] = useState<ExpenseCategory | "none" | null>(null);
   // A picked grupo with no cost in this window falls back to the largest.
@@ -84,15 +66,14 @@ export function CostBreakdownCard({
   const open = openSlice?.category ?? null;
   const total = breakdown.reduce((sum, slice) => sum + slice.amountBrl, 0);
   const largest = Math.max(1, ...breakdown.map((slice) => slice.amountBrl));
-  const byAccount = openSlice
-    ? accountTotals(openSlice.category, expenses, treatments, accounts, period)
-    : [];
+  const byAccount = openSlice ? accountTotals(openSlice.category, expenses, accounts, period) : [];
 
-  // The open grupo's nó, or the whole COE ("despesas") when every grupo is closed.
-  const lancamentosHref = `/finance/lancamentos?${periodSearch(period)}&conta=${nodeParam({
-    type: "group",
-    group: open ?? "expenses",
-  })}`;
+  // The open grupo's nó, or the whole COE (Despesas) when every grupo is closed or when the farm has a single
+  // despesa grupo: the tree then lists its contas under the tipo and has no grupo item.
+  const single = groupsOf(planGroups, "expense").length <= 1;
+  const lancamentosHref = `/finance/lancamentos?${periodSearch(period)}&conta=${nodeParam(
+    open && !single ? { type: "group", id: open } : { type: "kind", kind: "expense" }
+  )}`;
 
   return (
     <SectionCard
@@ -109,11 +90,7 @@ export function CostBreakdownCard({
       }
     >
       {breakdown.length === 0 ? (
-        <EmptyState
-          icon={Wallet}
-          title="Sem custos no período"
-          description="Lance despesas (ou tratamentos com custo) para ver a composição."
-        />
+        <EmptyState icon={Wallet} title="Sem custos no período" description="Lance despesas para ver a composição." />
       ) : (
         <>
           <ul className="flex flex-col gap-1">
@@ -134,7 +111,7 @@ export function CostBreakdownCard({
                     <span className="flex items-baseline justify-between gap-2">
                       <span className="inline-flex items-center gap-2 text-[13px] text-ink">
                         <span aria-hidden className={cn("size-2 rounded-full", color)} />
-                        {groupLabel(slice.category, expenseGroups)}
+                        {groupLabel(slice.category, planGroups)}
                       </span>
                       <span className="font-mono text-[13px] whitespace-nowrap text-ink">
                         {formatCurrency(slice.amountBrl)}
@@ -160,7 +137,7 @@ export function CostBreakdownCard({
             <div className="mt-3 border-t border-hairline pt-2.5">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold text-ink">
-                  {groupLabel(openSlice.category, expenseGroups)} por conta
+                  {groupLabel(openSlice.category, planGroups)} por conta
                 </span>
                 <span className="text-xs text-ink-soft">
                   {byAccount.length} {byAccount.length === 1 ? "conta" : "contas"}

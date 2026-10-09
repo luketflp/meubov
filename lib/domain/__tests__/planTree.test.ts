@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Account, BankAccount, Expense, ExpenseGroup, Movement, Transfer } from "@/lib/types";
+import type { Account, BankAccount, Expense, GroupKind, Movement, PlanGroup, Transfer } from "@/lib/types";
 import { formatCurrency } from "@/lib/domain/format";
-import { BUILTIN_CATEGORIES } from "@/lib/domain/groups";
 import {
   capitalSummary,
   debtBalance,
@@ -21,10 +20,31 @@ import {
 import { makeManejoSession, makeTreatment } from "./fixtures";
 
 // One small farm: two contas correntes, a caixa, an aplicação, a cartão and an
-// archived caixa; contas in every group; lançamentos of every kind.
+// archived caixa; the eleven grupos a farm starts with, contas in every tipo;
+// lançamentos of every kind.
 const TODAY = "2026-09-24";
 const PERIOD = { start: "2026-07-01", end: "2026-09-30" };
-const TREATMENT = "treatment:2026-09-08:Vacina aftosa";
+
+const group = (id: string, kind: GroupKind, name: string, archivedAt?: string): PlanGroup => ({
+  id,
+  kind,
+  name,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  ...(archivedAt && { archivedAt }),
+});
+const planGroups: PlanGroup[] = [
+  group("receitas", "revenue", "Receitas"),
+  group("nutrition", "expense", "Nutrição"),
+  group("pasture", "expense", "Pastagem"),
+  group("labor", "expense", "Mão de obra"),
+  group("health", "expense", "Sanidade"),
+  group("breeding", "expense", "Reprodução"),
+  group("admin", "expense", "Administrativo"),
+  group("other", "expense", "Outros"),
+  group("investimentos", "investment", "Investimentos"),
+  group("financiamentos", "financing", "Financiamentos"),
+  group("socios", "partners", "Sócios"),
+];
 
 const bank = (patch: Pick<BankAccount, "id" | "kind" | "name"> & Partial<BankAccount>): BankAccount => ({
   openingBalanceBrl: 0,
@@ -50,16 +70,16 @@ const CARTAO = bank({ id: "cartao", kind: "card", name: "Cartão Sicredi", closi
 const OLD = bank({ id: "old", kind: "cash", name: "Cofre antigo", archivedAt: "2026-01-10T00:00:00.000Z" });
 
 const accounts: Account[] = [
-  { id: "inv-maq", group: "investment", name: "Máquinas e implementos" },
-  { id: "inv-benf", group: "investment", name: "Benfeitorias" },
-  { id: "fin-custeio", group: "financing", name: "Custeio Sicredi" },
-  { id: "fin-consorcio", group: "financing", name: "Consórcio trator", openingBalanceBrl: 100000, openingDate: "2026-07-31" },
-  { id: "soc-lucro", group: "partners", name: "Distribuição de lucro" },
+  { id: "inv-maq", group: "investimentos", name: "Máquinas e implementos" },
+  { id: "inv-benf", group: "investimentos", name: "Benfeitorias" },
+  { id: "fin-custeio", group: "financiamentos", name: "Custeio Sicredi" },
+  { id: "fin-consorcio", group: "financiamentos", name: "Consórcio trator", openingBalanceBrl: 100000, openingDate: "2026-07-31" },
+  { id: "soc-lucro", group: "socios", name: "Distribuição de lucro" },
   { id: "nut-sal", group: "nutrition", name: "Sal mineral" },
   { id: "hea-vac", group: "health", name: "Vacinas" },
   { id: "adm-tel", group: "admin", name: "Telefone", archivedAt: "2026-09-01T00:00:00.000Z" },
-  { id: "rev-aluguel", group: "revenue", name: "Aluguel de pasto" },
-  { id: "rev-esterco", group: "revenue", name: "Venda de esterco", archivedAt: "2026-09-01T00:00:00.000Z" },
+  { id: "rev-aluguel", group: "receitas", name: "Aluguel de pasto" },
+  { id: "rev-esterco", group: "receitas", name: "Venda de esterco", archivedAt: "2026-09-01T00:00:00.000Z" },
 ];
 const account = (id: string): Account => accounts.find((a) => a.id === id)!;
 
@@ -67,7 +87,8 @@ const entry = (id: string, patch: Partial<Expense>): Expense => ({
   id,
   kind: "expense",
   date: "2026-09-01",
-  category: "other",
+  // The grupo of its conta, as the form writes it.
+  category: accounts.find((a) => a.id === patch.accountId)?.group ?? "other",
   amountBrl: 100,
   ...patch,
 });
@@ -155,7 +176,7 @@ const expenses: Expense[] = [
     counterparty: "Lucas",
   }),
   entry("p-aporte", { kind: "partners", flow: "in", accountId: "soc-lucro", date: "2026-08-01", amountBrl: 1000, paidAt: "2026-08-01", bankAccountId: "caixa" }),
-  entry("y-1", { kind: "yield", date: "2026-09-01", amountBrl: 250, paidAt: "2026-09-01", bankAccountId: "rdc" }),
+  entry("y-1", { kind: "yield", category: undefined, date: "2026-09-01", amountBrl: 250, paidAt: "2026-09-01", bankAccountId: "rdc" }),
 ];
 
 const movements: Movement[] = [
@@ -171,14 +192,10 @@ const inputs: PlanInputs = {
   movements,
   manejoSessions: [],
   animals: [],
-  treatments: [
-    makeTreatment({ id: "t-1", animalEarTag: "BR-001", date: "2026-09-08", status: "done", costBrl: 5 }),
-    makeTreatment({ id: "t-2", animalEarTag: "BR-002", date: "2026-09-08", status: "done", costBrl: 5 }),
-  ],
   lots: [{ id: "lot-1", name: "Lote do Rio" }],
   bankAccounts: [CARTAO, BB, SICREDI, CAIXA, RDC, OLD],
   transfers: [T_APL],
-  expenseGroups: [],
+  planGroups,
 };
 
 describe("nodeParam and parseNode", () => {
@@ -186,12 +203,12 @@ describe("nodeParam and parseNode", () => {
     { type: "all" },
     { type: "banks" },
     { type: "bank", id: "sicredi" },
-    { type: "group", group: "investment" },
-    { type: "group", group: "financing" },
-    { type: "group", group: "partners" },
-    { type: "group", group: "expenses" },
-    { type: "group", group: "revenue" },
-    { type: "group", group: "nutrition" },
+    { type: "kind", kind: "investment" },
+    { type: "kind", kind: "financing" },
+    { type: "kind", kind: "partners" },
+    { type: "kind", kind: "expense" },
+    { type: "kind", kind: "revenue" },
+    { type: "group", id: "nutrition" },
     { type: "account", id: "nut-sal" },
     { type: "auto", which: "purchases" },
     { type: "auto", which: "sales" },
@@ -214,45 +231,43 @@ describe("nodeParam and parseNode", () => {
     ]);
   });
 
-  it("reads back every nó, every grupo de despesa included", () => {
-    const grupos: PlanNode[] = BUILTIN_CATEGORIES.map((group) => ({ type: "group", group }));
+  it("reads back every nó, every grupo of every tipo included", () => {
+    const grupos: PlanNode[] = planGroups.map((g) => ({ type: "group", id: g.id }));
     for (const node of [...nodes, ...grupos]) expect(parseNode(nodeParam(node))).toEqual(node);
   });
 
   it("reads an absent, empty, unknown or malformed value as null", () => {
-    for (const value of [null, undefined, "", "nope", "Bancos", "banco", "banco:", "conta:", "grupo:", "grupo:revenue", "grupo:expenses", "grupo:investment"]) {
+    for (const value of [null, undefined, "", "nope", "Bancos", "banco", "banco:", "conta:", "grupo:", "expense"]) {
       expect(parseNode(value)).toBeNull();
     }
   });
 
-  it("still reads a conta that was deleted; nodeSummary is what finds it gone", () => {
+  it("still reads a conta or a grupo that was deleted; nodeSummary is what finds it gone", () => {
     expect(parseNode("conta:deleted")).toEqual({ type: "account", id: "deleted" });
+    expect(parseNode("grupo:grupo-apagado")).toEqual({ type: "group", id: "grupo-apagado" });
   });
 });
 
 describe("legacyNode", () => {
   it("turns the old Extrato filters into a nó", () => {
     expect(legacyNode({ conta: "nut-sal" })).toEqual({ type: "account", id: "nut-sal" });
-    expect(legacyNode({ grupo: "revenue" })).toEqual({ type: "group", group: "revenue" });
-    expect(legacyNode({ grupo: "nutrition" })).toEqual({ type: "group", group: "nutrition" });
-    expect(legacyNode({ grupo: "capital" })).toEqual({ type: "auto", which: "purchases" });
-    expect(legacyNode({ tipo: "expense" })).toEqual({ type: "group", group: "expenses" });
-    expect(legacyNode({ tipo: "revenue" })).toEqual({ type: "group", group: "revenue" });
+    expect(legacyNode({ tipo: "expense" })).toEqual({ type: "kind", kind: "expense" });
+    expect(legacyNode({ tipo: "revenue" })).toEqual({ type: "kind", kind: "revenue" });
     expect(legacyNode({ tipo: "sale" })).toEqual({ type: "auto", which: "sales" });
     expect(legacyNode({ tipo: "purchase" })).toEqual({ type: "auto", which: "purchases" });
-    expect(legacyNode({ tipo: "treatment" })).toEqual({ type: "group", group: "health" });
   });
 
-  it("prefers conta over grupo over tipo", () => {
+  it("prefers conta over tipo, and ignores the old grupo keys, which name nothing now", () => {
     expect(legacyNode({ conta: "nut-sal", grupo: "admin", tipo: "sale" })).toEqual({ type: "account", id: "nut-sal" });
-    expect(legacyNode({ grupo: "admin", tipo: "sale" })).toEqual({ type: "group", group: "admin" });
-    expect(legacyNode({ grupo: "nope", tipo: "sale" })).toEqual({ type: "auto", which: "sales" });
+    expect(legacyNode({ grupo: "admin", tipo: "sale" })).toEqual({ type: "auto", which: "sales" });
+    for (const grupo of ["nutrition", "revenue", "capital"]) expect(legacyNode({ grupo })).toBeNull();
   });
 
-  it("is null when no old filter was set or the values are unknown", () => {
+  it("is null when no old filter was set or the values are unknown, a tratamento's tipo included", () => {
     expect(legacyNode({})).toBeNull();
     expect(legacyNode({ tipo: null, grupo: null, conta: null })).toBeNull();
     expect(legacyNode({ conta: "", grupo: "nope", tipo: "toString" })).toBeNull();
+    expect(legacyNode({ tipo: "treatment" })).toBeNull();
   });
 });
 
@@ -279,13 +294,13 @@ describe("planTree", () => {
   const top = (key: string): TreeItem => tree.find((i) => i.key === key)!;
   const figures = (items: TreeItem[] = []) => items.map((i) => [i.label, i.amountBrl]);
 
-  it("lists the six groups in order, each saying what its figure is", () => {
+  it("lists Bancos e caixa and the five tipos in order, each saying what its figure is", () => {
     expect(tree.map((i) => [i.key, i.label, i.tag, i.amountBrl])).toEqual([
       ["bancos", "Bancos e caixa", "saldo", 57650],
       ["investimentos", "Investimentos", "no período", 35500],
       ["financiamentos", "Financiamentos", "devedor", 105000],
       ["socios", "Sócios", "retirado", 5000],
-      ["despesas", "Despesas", "custo (COE)", 1600],
+      ["despesas", "Despesas", "custo (COE)", 1590],
       ["receitas", "Receitas", "no período", 52000],
     ]);
   });
@@ -300,7 +315,7 @@ describe("planTree", () => {
     ]);
   });
 
-  it("sums investimentos, financiamentos and sócios per conta, with Compra de gado locked last", () => {
+  it("lists a tipo with a single grupo flat: its contas, with Compra de gado locked last", () => {
     expect(figures(top("investimentos").children)).toEqual([
       ["Benfeitorias", 2000],
       ["Máquinas e implementos", 13500],
@@ -314,18 +329,18 @@ describe("planTree", () => {
     expect(figures(top("socios").children)).toEqual([["Distribuição de lucro", 5000]]);
   });
 
-  it("opens Despesas into the seven grupos, alphabetical with Outros last, the treatments under Sanidade", () => {
+  it("opens Despesas into its seven grupos, alphabetical, no tratamento under Sanidade", () => {
     const grupos = top("despesas").children ?? [];
     expect(grupos.map((i) => i.key)).toEqual(
-      ["admin", "labor", "nutrition", "pasture", "breeding", "health", "other"].map((c) => `grupo:${c}`)
+      ["admin", "labor", "nutrition", "other", "pasture", "breeding", "health"].map((c) => `grupo:${c}`)
     );
     const grupo = (c: string) => grupos.find((i) => i.key === `grupo:${c}`)!;
-    expect(["nutrition", "health", "admin", "pasture"].map((c) => grupo(c).amountBrl)).toEqual([1200, 310, 90, 0]);
+    expect(["nutrition", "health", "admin", "pasture"].map((c) => grupo(c).amountBrl)).toEqual([1200, 300, 90, 0]);
     expect(figures(grupo("health").children)).toEqual([["Vacinas", 300]]);
     expect(grupo("pasture").children).toEqual([]);
   });
 
-  it("opens Receitas with Venda de gado locked first", () => {
+  it("opens Receitas, a single grupo, with Venda de gado locked first and then its contas", () => {
     expect(figures(top("receitas").children)).toEqual([
       ["Venda de gado", 50000],
       ["Aluguel de pasto", 2000],
@@ -421,12 +436,11 @@ describe("nodeRows", () => {
     };
     const lines = nodeRows({ type: "all" }, farm, PERIOD, TODAY);
     const line = (id: string) => lines.find((r) => r.id === id)!;
-    expect(["i-historico", "i-trator", "e-diesel", "m-sale", TREATMENT].map((id) => [line(id).history, line(id).detail])).toEqual([
+    expect(["i-historico", "i-trator", "e-diesel", "m-sale"].map((id) => [line(id).history, line(id).detail])).toEqual([
       ["Carreta agrícola 4 t", "Agropecuária Sertão · entrega na sede · NF 11.640"],
       ["Agro Máquinas Uberaba", "Trator MF 4275 · NF 2.871"],
       ["Diesel do trator", "NF 77"],
       ["Frigorífico Minerva", "manejo · 1 animal"],
-      ["Vacina aftosa", null],
     ]);
   });
 
@@ -445,7 +459,7 @@ describe("nodeRows", () => {
     ]);
     expect(ids(rows({ type: "all" }))).toContain("y-1");
     expect(ids(rows({ type: "banks" }))).toContain("y-1");
-    const others: PlanNode[] = [{ type: "group", group: "investment" }, { type: "group", group: "revenue" }];
+    const others: PlanNode[] = [{ type: "kind", kind: "investment" }, { type: "kind", kind: "revenue" }];
     for (const node of others) expect(ids(rows(node))).not.toContain("y-1");
   });
 
@@ -456,9 +470,10 @@ describe("nodeRows", () => {
       ["f-p1", "2026-07-15", -10000, 20000, "Sicredi"],
       ["f-lib", "2026-07-15", 30000, 30000, "Sicredi"],
     ]);
-    const group = rows({ type: "group", group: "financing" });
-    expect(ids(group)).toEqual(["f-lib-pend", "f-c1", "f-old", "f-p3", "f-p2", "f-p1", "f-lib"]);
-    expect(group.every((r) => r.balance === null)).toBe(true);
+    const kind = rows({ type: "kind", kind: "financing" });
+    expect(ids(kind)).toEqual(["f-lib-pend", "f-c1", "f-old", "f-p3", "f-p2", "f-p1", "f-lib"]);
+    expect(kind.every((r) => r.balance === null)).toBe(true);
+    expect(rows({ type: "group", id: "financiamentos" })).toEqual(kind);
   });
 
   it("leaves a line inside the saldo inicial without saldo devedor and runs the saldo through lines paid on one day", () => {
@@ -477,23 +492,24 @@ describe("nodeRows", () => {
   });
 
   it("gives every other nó its rows by competência, newest first, signed, with the conta bancária as contra partida", () => {
-    expect(rows({ type: "group", group: "investment" }).map((r) => [r.id, r.amountBrl, r.contra, r.contraGroup])).toEqual([
+    expect(rows({ type: "kind", kind: "investment" }).map((r) => [r.id, r.amountBrl, r.contra, r.contraGroup])).toEqual([
       ["i-cerca", -2000, null, null],
       ["i-rocadeira", -18500, "Sicredi", "Bancos e caixa"],
       ["i-venda", 5000, "Banco do Brasil", "Bancos e caixa"],
       ["m-buy", -20000, "Banco do Brasil", "Bancos e caixa"],
     ]);
-    expect(ids(rows({ type: "group", group: "expenses" }))).toEqual(["e-vac", "e-sal", TREATMENT, "e-tel"]);
-    expect(ids(rows({ type: "group", group: "health" }))).toEqual(["e-vac", TREATMENT]);
-    expect(ids(rows({ type: "group", group: "revenue" }))).toEqual(["m-sale", "r-aluguel"]);
-    expect(ids(rows({ type: "group", group: "partners" }))).toEqual(["p-ret", "p-aporte"]);
+    expect(ids(rows({ type: "kind", kind: "expense" }))).toEqual(["e-vac", "e-sal", "e-tel"]);
+    expect(ids(rows({ type: "group", id: "health" }))).toEqual(["e-vac"]);
+    expect(ids(rows({ type: "kind", kind: "revenue" }))).toEqual(["m-sale", "r-aluguel"]);
+    expect(ids(rows({ type: "group", id: "receitas" }))).toEqual(["r-aluguel"]);
+    expect(ids(rows({ type: "kind", kind: "partners" }))).toEqual(["p-ret", "p-aporte"]);
     expect(ids(rows({ type: "auto", which: "sales" }))).toEqual(["m-sale"]);
     expect(ids(rows({ type: "auto", which: "purchases" }))).toEqual(["m-buy"]);
     expect(ids(rows({ type: "account", id: "inv-maq" }))).toEqual(["i-rocadeira", "i-venda"]);
-    expect(rows({ type: "group", group: "health" }).find((r) => r.id === TREATMENT)).toMatchObject({
-      history: "Vacina aftosa",
-      amountBrl: -10,
-    });
+  });
+
+  it("puts no rendimento and no line of the manejos in a grupo, whatever its id", () => {
+    for (const id of ["capital", "revenue"]) expect(rows({ type: "group", id })).toEqual([]);
   });
 
   it("shows in Bancos e caixa the movimentação of every conta by payment day, both sides of each transferência", () => {
@@ -547,7 +563,7 @@ describe("filterPaneRows", () => {
   });
 
   it("keeps only what is still to pay or receive", () => {
-    const financing = nodeRows({ type: "group", group: "financing" }, inputs, PERIOD, TODAY);
+    const financing = nodeRows({ type: "kind", kind: "financing" }, inputs, PERIOD, TODAY);
     expect(filter(financing, { pendingOnly: true })).toEqual(["f-lib-pend", "f-p3"]);
     expect(filter(sicredi, { pendingOnly: true })).toEqual([]);
   });
@@ -574,8 +590,8 @@ describe("nodeSummary", () => {
     expect(summary({ type: "all" })).toMatchObject({ crumb: null, title: "Todos os lançamentos", pills: [] });
     expect(strip({ type: "all" })).toEqual([
       ["Receitas", 52000, "vendas e outras receitas", "healthy"],
-      ["Despesas (COE)", 1600, "despesas e tratamentos", "ink"],
-      ["Resultado", 50400, "receitas − custo", "healthy"],
+      ["Despesas (COE)", 1590, "despesas lançadas", "ink"],
+      ["Resultado", 50410, "receitas − custo", "healthy"],
       ["Fora do resultado", -30250, "capital, dívidas e sócios · entradas − saídas", "ink"],
     ]);
   });
@@ -622,7 +638,7 @@ describe("nodeSummary", () => {
   });
 
   it("shows an investimento's compras, what was paid, what is still to pay and the total since the start", () => {
-    expect(summary({ type: "group", group: "investment" })).toMatchObject({
+    expect(summary({ type: "kind", kind: "investment" })).toMatchObject({
       crumb: null,
       title: "Investimentos",
       pills: [
@@ -630,12 +646,13 @@ describe("nodeSummary", () => {
         { text: "fora do custo (COE)", tone: "muted" },
       ],
     });
-    expect(strip({ type: "group", group: "investment" })).toEqual([
+    expect(strip({ type: "kind", kind: "investment" })).toEqual([
       ["Investido no período", 35500, "3 compras · pela data da compra", "ink"],
       ["Pago", 38500, "saiu do caixa", "ink"],
       ["A pagar", 2000, "1 lançamento · próxima 10/10", "attention"],
       ["Desde o início", 42500, "tudo o que entrou no grupo", "ink"],
     ]);
+    // Investimentos has a single grupo: the crumb names the tipo only.
     expect(summary({ type: "account", id: "inv-maq" })).toMatchObject({
       crumb: "Investimentos",
       title: "Máquinas e implementos",
@@ -670,13 +687,14 @@ describe("nodeSummary", () => {
     ]);
     expect(nodeSummary({ type: "account", id: "fin-custeio" }, inputs, { start: "2026-09-01", end: "2026-09-30" }, TODAY)?.figures[2].amountBrl).toBe(20000);
     expect(summary({ type: "account", id: "fin-consorcio" })?.paidShare).toBeCloseTo(0.05);
-    expect(summary({ type: "group", group: "financing" })?.figures[0].amountBrl).toBe(105000);
-    expect(summary({ type: "group", group: "financing" })?.paidShare).toBeCloseTo(25000 / 130000);
-    expect(summary({ type: "group", group: "investment" })?.paidShare).toBeUndefined();
+    expect(summary({ type: "kind", kind: "financing" })?.figures[0].amountBrl).toBe(105000);
+    expect(summary({ type: "kind", kind: "financing" })?.paidShare).toBeCloseTo(25000 / 130000);
+    expect(summary({ type: "group", id: "financiamentos" })?.figures[0].amountBrl).toBe(105000);
+    expect(summary({ type: "kind", kind: "investment" })?.paidShare).toBeUndefined();
   });
 
   it("shows what the sócios took out, put in and the net", () => {
-    expect(strip({ type: "group", group: "partners" })).toEqual([
+    expect(strip({ type: "kind", kind: "partners" })).toEqual([
       ["Retirado", 6000, "1 retirada", "ink"],
       ["Aportado", 1000, "1 aporte", "healthy"],
       ["Líquido", 5000, "retirado − aportado", "ink"],
@@ -685,16 +703,16 @@ describe("nodeSummary", () => {
   });
 
   it("shows a grupo de despesa with its share of the COE", () => {
-    expect(summary({ type: "group", group: "health" })).toMatchObject({
+    expect(summary({ type: "group", id: "health" })).toMatchObject({
       crumb: "Despesas",
       title: "Sanidade",
       pills: [{ text: "custo (COE)", tone: "muted" }],
     });
-    expect(strip({ type: "group", group: "health" })).toEqual([
-      ["No período", 310, "2 lançamentos", "ink"],
-      ["Pago", 10, "saiu do caixa", "ink"],
+    expect(strip({ type: "group", id: "health" })).toEqual([
+      ["No período", 300, "1 lançamento", "ink"],
+      ["Pago", 0, "saiu do caixa", "ink"],
       ["A pagar", 300, "1 lançamento · próxima 15/10", "attention"],
-      ["% do COE", "19 %", `de ${formatCurrency(1600)}`, "ink"],
+      ["% do COE", "19 %", `de ${formatCurrency(1590)}`, "ink"],
     ]);
     expect(summary({ type: "account", id: "nut-sal" })).toMatchObject({ crumb: "Despesas › Nutrição", title: "Sal mineral" });
     expect(summary({ type: "account", id: "adm-tel" })?.pills).toContainEqual({ text: "arquivada", tone: "muted" });
@@ -712,7 +730,7 @@ describe("nodeSummary", () => {
 });
 
 describe("entryInitialFor", () => {
-  const initial = (node: PlanNode) => entryInitialFor(node, accounts, inputs.bankAccounts);
+  const initial = (node: PlanNode) => entryInitialFor(node, accounts, inputs.bankAccounts, planGroups);
 
   it("starts Novo with nothing on todos, Bancos e caixa and the lines of the manejos", () => {
     expect(initial({ type: "all" })).toEqual({});
@@ -725,15 +743,20 @@ describe("entryInitialFor", () => {
     expect(initial({ type: "bank", id: "rdc" })).toEqual({ kind: "yield", bankAccountId: "rdc" });
   });
 
-  it("starts with the kind of the group, the grupo and the conta", () => {
-    expect(initial({ type: "group", group: "financing" })).toEqual({ kind: "financing" });
-    expect(initial({ type: "group", group: "expenses" })).toEqual({ kind: "expense" });
-    expect(initial({ type: "group", group: "breeding" })).toEqual({ kind: "expense", category: "breeding" });
-    expect(initial({ type: "group", group: "revenue" })).toEqual({ kind: "revenue" });
+  it("starts with the tipo, the grupo and the conta", () => {
+    expect(initial({ type: "kind", kind: "financing" })).toEqual({ kind: "financing", flow: "out" });
+    expect(initial({ type: "kind", kind: "expense" })).toEqual({ kind: "expense" });
+    expect(initial({ type: "kind", kind: "revenue" })).toEqual({ kind: "revenue" });
+    expect(initial({ type: "group", id: "breeding" })).toEqual({ kind: "expense", category: "breeding" });
+    expect(initial({ type: "group", id: "socios" })).toEqual({ kind: "partners", category: "socios" });
     expect(initial({ type: "account", id: "nut-sal" })).toEqual({ kind: "expense", category: "nutrition", accountId: "nut-sal" });
-    expect(initial({ type: "account", id: "rev-aluguel" })).toEqual({ kind: "revenue", accountId: "rev-aluguel" });
-    expect(initial({ type: "account", id: "soc-lucro" })).toEqual({ kind: "partners", accountId: "soc-lucro" });
+    expect(initial({ type: "account", id: "rev-aluguel" })).toEqual({ kind: "revenue", category: "receitas", accountId: "rev-aluguel" });
+    expect(initial({ type: "account", id: "soc-lucro" })).toEqual({ kind: "partners", category: "socios", accountId: "soc-lucro" });
+  });
+
+  it("starts with nothing on a conta or grupo that is gone", () => {
     expect(initial({ type: "account", id: "gone" })).toEqual({});
+    expect(initial({ type: "group", id: "grupo-apagado" })).toEqual({});
   });
 });
 
@@ -755,8 +778,8 @@ describe("capitalSummary", () => {
   it("leaves archived financiamentos out and counts only the contas that still owe", () => {
     const more: Account[] = [
       ...accounts,
-      { id: "fin-old", group: "financing", name: "Antigo", openingBalanceBrl: 5000, openingDate: "2026-01-01", archivedAt: "2026-02-01T00:00:00.000Z" },
-      { id: "fin-zero", group: "financing", name: "Quitado" },
+      { id: "fin-old", group: "financiamentos", name: "Antigo", openingBalanceBrl: 5000, openingDate: "2026-01-01", archivedAt: "2026-02-01T00:00:00.000Z" },
+      { id: "fin-zero", group: "financiamentos", name: "Quitado" },
     ];
     const parcelaOld = entry("f-old-p", { kind: "financing", flow: "out", accountId: "fin-old", date: "2026-09-01", dueDate: "2026-10-01", amountBrl: 700 });
     expect(capitalSummary({ ...inputs, accounts: more, expenses: [...expenses, parcelaOld] }, PERIOD, TODAY)).toMatchObject({
@@ -767,95 +790,138 @@ describe("capitalSummary", () => {
   });
 });
 
-describe("the farm's grupos de despesa", () => {
-  const MAQ = "6f1c2b8e-4a3d-4e5f-9b7a-1c2d3e4f5a6b";
+
+describe("grupos of every tipo", () => {
+  const ARRENDAMENTOS = "6f1c2b8e-4a3d-4e5f-9b7a-1c2d3e4f5a6b";
   const ARRENDAMENTO = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
   const VELHO = "1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
-  const groups: ExpenseGroup[] = [
-    { id: MAQ, name: "Máquinas e veículos", createdAt: "2026-08-01T12:00:00.000Z" },
-    { id: ARRENDAMENTO, name: "Arrendamento", archivedAt: "2026-09-20T00:00:00.000Z", createdAt: "2026-07-01T12:00:00.000Z" },
-    { id: VELHO, name: "Grupo velho", archivedAt: "2026-05-01T00:00:00.000Z", createdAt: "2026-01-01T12:00:00.000Z" },
-  ];
+  const PRONAF = "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f";
   const farm: PlanInputs = {
     ...inputs,
-    expenseGroups: groups,
-    accounts: [...accounts, { id: "maq-diesel", group: MAQ, name: "Diesel" }],
+    planGroups: [
+      ...planGroups,
+      group(ARRENDAMENTOS, "revenue", "Arrendamentos"),
+      group(ARRENDAMENTO, "expense", "Arrendamento", "2026-09-20T00:00:00.000Z"),
+      group(VELHO, "expense", "Grupo velho", "2026-05-01T00:00:00.000Z"),
+      group(PRONAF, "financing", "Pronaf"),
+    ],
+    accounts: [...accounts, { id: "arr-vizinho", group: ARRENDAMENTOS, name: "Pasto do vizinho" }],
     expenses: [
       ...expenses,
-      entry("g-diesel", { category: MAQ, accountId: "maq-diesel", date: "2026-09-02", amountBrl: 700, paidAt: "2026-09-02", bankAccountId: "caixa" }),
+      entry("r-vizinho", { kind: "revenue", category: ARRENDAMENTOS, accountId: "arr-vizinho", date: "2026-09-02", amountBrl: 700, paidAt: "2026-09-02", bankAccountId: "caixa" }),
       entry("g-arrend", { category: ARRENDAMENTO, date: "2026-08-10", amountBrl: 3000 }),
       // Its grupo is gone (an old snapshot): it still reads, as "Grupo removido".
       entry("g-gone", { category: "grupo-apagado", date: "2026-09-03", amountBrl: 50 }),
     ],
   };
-  const despesas = (period = PERIOD) => planTree(farm, period, TODAY).find((i) => i.key === "despesas")!;
+  const top = (key: string, period = PERIOD) => planTree(farm, period, TODAY).find((i) => i.key === key)!;
+  const summary = (node: PlanNode) => nodeSummary(node, farm, PERIOD, TODAY);
 
-  it("writes and reads a farm grupo by its id, and any other key as a grupo", () => {
-    const node: PlanNode = { type: "group", group: MAQ };
-    expect(nodeParam(node)).toBe(`grupo:${MAQ}`);
-    expect(parseNode(`grupo:${MAQ}`)).toEqual(node);
-    expect(parseNode("grupo:grupo-apagado")).toEqual({ type: "group", group: "grupo-apagado" });
-    // The old Extrato only knew the seven.
-    expect(legacyNode({ grupo: MAQ })).toBeNull();
+  it("lists the grupo items once a tipo has two, each opening into its contas", () => {
+    const receitas = top("receitas");
+    expect(receitas.children?.map((i) => [i.key, i.label, i.amountBrl])).toEqual([
+      ["venda-de-gado", "Venda de gado", 50000],
+      [`grupo:${ARRENDAMENTOS}`, "Arrendamentos", 700],
+      ["grupo:receitas", "Receitas", 2000],
+    ]);
+    expect(receitas.children?.[1].children?.map((i) => [i.key, i.amountBrl])).toEqual([["conta:arr-vizinho", 700]]);
+    expect(receitas.amountBrl).toBe(52700);
+    // The tipo's pane holds the same rows however the tree draws it.
+    expect(nodeRows({ type: "kind", kind: "revenue" }, farm, PERIOD, TODAY).map((r) => r.id)).toEqual(["m-sale", "r-aluguel", "r-vizinho"]);
   });
 
-  it("lists them among the seven alphabetically, an archived one only while it has a line in the window, a removed one last", () => {
-    const tree = despesas();
-    expect(tree.children?.map((i) => i.label)).toEqual([
-      "Administrativo",
-      "Arrendamento",
-      "Mão de obra",
-      "Máquinas e veículos",
-      "Nutrição",
-      "Pastagem",
-      "Reprodução",
-      "Sanidade",
-      "Outros",
-      "Grupo removido",
+  it("gives a financiamento grupo the saldo devedor of its contas", () => {
+    expect(top("financiamentos").children?.map((i) => [i.label, i.amountBrl, i.children?.length])).toEqual([
+      ["Financiamentos", 105000, 2],
+      ["Pronaf", 0, 0],
     ]);
-    const farmRows = tree.children?.filter((i) => i.key !== "grupo:other" && !BUILTIN_CATEGORIES.some((c) => i.key === `grupo:${c}`));
-    expect(farmRows?.map((i) => [i.key, i.label, i.amountBrl, i.archived])).toEqual([
-      [`grupo:${ARRENDAMENTO}`, "Arrendamento", 3000, true],
-      [`grupo:${MAQ}`, "Máquinas e veículos", 700, false],
-      ["grupo:grupo-apagado", "Grupo removido", 50, false],
+  });
+
+  it("keeps an archived financiamento grupo while one of its contas still owes", () => {
+    const ANTIGO = "3d4e5f6a-7b8c-4d9e-8f0a-1b2c3d4e5f6a";
+    const owing: PlanInputs = {
+      ...farm,
+      planGroups: [...farm.planGroups, group(ANTIGO, "financing", "Banco antigo", "2026-01-01T00:00:00.000Z")],
+      accounts: [
+        ...farm.accounts,
+        { id: "fin-antigo", group: ANTIGO, name: "Custeio 2024", openingBalanceBrl: 8000, openingDate: "2025-12-31" },
+      ],
+    };
+    const fin = planTree(owing, PERIOD, TODAY).find((i) => i.key === "financiamentos")!;
+    expect(fin.children?.map((i) => [i.label, i.amountBrl, i.archived])).toEqual([
+      ["Banco antigo", 8000, true],
+      ["Financiamentos", 105000, false],
+      ["Pronaf", 0, false],
     ]);
-    expect(tree.children?.reduce((sum, i) => sum + i.amountBrl, 0)).toBe(tree.amountBrl);
-    expect(tree.children?.find((i) => i.key === `grupo:${MAQ}`)?.children?.map((i) => [i.label, i.amountBrl])).toEqual([
-      ["Diesel", 700],
+    // The tipo's devedor is the sum of what it lists.
+    expect(fin.amountBrl).toBe(113000);
+    expect(nodeSummary({ type: "account", id: "fin-antigo" }, owing, PERIOD, TODAY)?.crumb).toBe("Financiamentos › Banco antigo");
+  });
+
+  it("lists an archived grupo only while it has a line in the window, a removed one last", () => {
+    expect(top("despesas").children?.map((i) => [i.label, i.amountBrl, i.archived])).toEqual([
+      ["Administrativo", 90, false],
+      ["Arrendamento", 3000, true],
+      ["Mão de obra", 0, false],
+      ["Nutrição", 1200, false],
+      ["Outros", 0, false],
+      ["Pastagem", 0, false],
+      ["Reprodução", 0, false],
+      ["Sanidade", 300, false],
+      ["Grupo removido", 50, false],
     ]);
-    // In September Arrendamento has no line: it leaves the tree.
-    const september = despesas({ start: "2026-09-01", end: "2026-09-30" }).children?.map((i) => i.label);
+    expect(top("despesas").children?.reduce((sum, i) => sum + i.amountBrl, 0)).toBe(top("despesas").amountBrl);
+    // In September Arrendamento has no line: it leaves the tree. Grupo velho never shows.
+    const september = top("despesas", { start: "2026-09-01", end: "2026-09-30" }).children?.map((i) => i.label);
     expect(september).not.toContain("Arrendamento");
-    expect(september).toContain("Máquinas e veículos");
+    expect(JSON.stringify(planTree(farm, PERIOD, TODAY))).not.toContain(VELHO);
   });
 
-  it("titles a farm grupo by its name, a removed one Grupo removido, and puts its contas under it", () => {
-    const summary = (node: PlanNode) => nodeSummary(node, farm, PERIOD, TODAY);
-    expect(summary({ type: "group", group: MAQ })).toMatchObject({
-      crumb: "Despesas",
-      title: "Máquinas e veículos",
-      pills: [{ text: "custo (COE)", tone: "muted" }],
+  it("names the grupo in a conta's crumb only when the tipo shows more than one", () => {
+    expect(summary({ type: "account", id: "rev-aluguel" })).toMatchObject({ crumb: "Receitas › Receitas", title: "Aluguel de pasto" });
+    expect(nodeSummary({ type: "account", id: "rev-aluguel" }, inputs, PERIOD, TODAY)?.crumb).toBe("Receitas");
+    expect(summary({ type: "account", id: "arr-vizinho" })?.crumb).toBe("Receitas › Arrendamentos");
+  });
+
+  it("titles a grupo by its name under its tipo, a removed one Grupo removido", () => {
+    expect(summary({ type: "group", id: ARRENDAMENTOS })).toMatchObject({
+      crumb: "Receitas",
+      title: "Arrendamentos",
+      pills: [{ text: "receita", tone: "muted" }],
     });
-    expect(summary({ type: "account", id: "maq-diesel" })).toMatchObject({ crumb: "Despesas › Máquinas e veículos", title: "Diesel" });
-    expect(summary({ type: "group", group: "grupo-apagado" })).toMatchObject({ crumb: "Despesas", title: "Grupo removido" });
-    expect(nodeRows({ type: "group", group: "grupo-apagado" }, farm, PERIOD, TODAY).map((r) => [r.id, r.history])).toEqual([
+    expect(summary({ type: "group", id: "grupo-apagado" })).toMatchObject({ crumb: "Despesas", title: "Grupo removido" });
+    expect(nodeRows({ type: "group", id: "grupo-apagado" }, farm, PERIOD, TODAY).map((r) => [r.id, r.history])).toEqual([
       ["g-gone", "Grupo removido"],
     ]);
-    // A key no line ever had: an empty pane, still titled.
-    expect(nodeRows({ type: "group", group: "nunca" }, farm, PERIOD, TODAY)).toEqual([]);
-    expect(summary({ type: "group", group: "nunca" })?.title).toBe("Grupo removido");
-    expect(nodeRows({ type: "bank", id: "caixa" }, farm, PERIOD, TODAY).find((r) => r.id === "g-diesel")).toMatchObject({
-      contra: "Diesel",
-      contraGroup: "Despesas › Máquinas e veículos",
-    });
+    // An id no line ever had: an empty pane, still titled.
+    expect(nodeRows({ type: "group", id: "nunca" }, farm, PERIOD, TODAY)).toEqual([]);
+    expect(summary({ type: "group", id: "nunca" })?.title).toBe("Grupo removido");
   });
 
-  it("starts Novo as a despesa of the farm grupo", () => {
-    expect(entryInitialFor({ type: "group", group: MAQ }, farm.accounts)).toEqual({ kind: "expense", category: MAQ });
-    expect(entryInitialFor({ type: "account", id: "maq-diesel" }, farm.accounts)).toEqual({
-      kind: "expense",
-      category: MAQ,
-      accountId: "maq-diesel",
+  it("starts Novo in the grupo, with its tipo", () => {
+    expect(entryInitialFor({ type: "group", id: ARRENDAMENTOS }, farm.accounts, [], farm.planGroups)).toEqual({
+      kind: "revenue",
+      category: ARRENDAMENTOS,
     });
+    expect(entryInitialFor({ type: "account", id: "arr-vizinho" }, farm.accounts, [], farm.planGroups)).toEqual({
+      kind: "revenue",
+      category: ARRENDAMENTOS,
+      accountId: "arr-vizinho",
+    });
+  });
+});
+
+describe("a tratamento with cost", () => {
+  // The store's data has the tratamentos; handed in whole, they still make no line and no cost.
+  const withTreatments = {
+    ...inputs,
+    treatments: [makeTreatment({ animalEarTag: "BR-001", date: "2026-09-08", status: "done", costBrl: 5 })],
+  };
+
+  it("makes no line in any nó and leaves the COE to the despesas alone", () => {
+    expect(planTree(withTreatments, PERIOD, TODAY)).toEqual(planTree(inputs, PERIOD, TODAY));
+    expect(nodeRows({ type: "all" }, withTreatments, PERIOD, TODAY)).toEqual(nodeRows({ type: "all" }, inputs, PERIOD, TODAY));
+    const despesas = expenses.filter((e) => e.kind === "expense" && e.date >= PERIOD.start).reduce((sum, e) => sum + e.amountBrl, 0);
+    expect(nodeSummary({ type: "all" }, withTreatments, PERIOD, TODAY)?.figures[1].amountBrl).toBe(despesas);
   });
 });

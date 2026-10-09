@@ -1,7 +1,8 @@
 /**
- * deleteSemenBull: removes a bull with its purchases and the expenses they
- * wrote, under the bull's row lock, and refuses while a cobertura used one of
- * its doses or an open inseminação still offers it.
+ * deleteSemenBull: removes a bull with its purchases (cascade) under the bull's
+ * row lock, and refuses while a cobertura used one of its doses or an open
+ * inseminação still offers it. Nothing in the Financeiro goes with it, so the
+ * caller's permissions play no part here.
  *
  * Same chainable db stub as the other use-case tests: selects answer from a
  * queued list of rows, deletes record the table they hit.
@@ -52,8 +53,6 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-import { memoryBlobStore } from "@/lib/api/__tests__/memoryBlob";
-
 import { DeleteBullUseCase } from "../DeleteBull.useCase";
 
 const BULL_ROW = {
@@ -65,7 +64,7 @@ const BULL_ROW = {
   central: null,
 };
 
-/** The bull lock and its counts, then the open inseminações that list it. */
+/** The bull lock and its counts (60 doses bought), then the open inseminações that list it. */
 const stockSelects = (used: number, openSessions: Record<string, unknown>[] = []) => [
   [BULL_ROW],
   [{ bought: 60 }],
@@ -73,8 +72,7 @@ const stockSelects = (used: number, openSessions: Record<string, unknown>[] = []
   openSessions,
 ];
 
-const run = (canRemoveExpenses = true) =>
-  new DeleteBullUseCase().run({ farmId: 7, id: "bull-1", canRemoveExpenses });
+const run = () => new DeleteBullUseCase().run({ farmId: 7, id: "bull-1" });
 
 beforeEach(() => {
   state.selectResults = [];
@@ -83,60 +81,27 @@ beforeEach(() => {
 });
 
 describe("deleteSemenBull", () => {
-  it("deletes the expenses of its purchases, then the bull", async () => {
-    state.selectResults = [...stockSelects(0), [{ expenseId: "e-1" }, { expenseId: "e-2" }]];
+  it("deletes a bull that has purchases, and only the bull row, answering its id", async () => {
+    state.selectResults = stockSelects(0);
 
-    const result = await run();
-
-    expect(result).toEqual({ id: "bull-1", expenseIds: ["e-1", "e-2"] });
+    expect(await run()).toEqual({ id: "bull-1" });
     expect(state.locked).toBe(true);
-    expect(state.deletes).toEqual(["expenses", "semen_bulls"]);
-  });
-
-  it("deletes the anexos' files of those expenses after the rows", async () => {
-    const PATH = "farms/7/expenses/e-1/u-nf.pdf";
-    const blob = memoryBlobStore({ [PATH]: { size: 1, contentType: "application/pdf" } });
-    state.selectResults = [...stockSelects(0), [{ expenseId: "e-1" }], [{ pathname: PATH }]];
-
-    await new DeleteBullUseCase(undefined, blob.store).run({ farmId: 7, id: "bull-1", canRemoveExpenses: true });
-
-    expect(blob.deleted).toEqual([PATH]);
-  });
-
-  it("deletes only the bull when no purchase still has its expense", async () => {
-    state.selectResults = [...stockSelects(0), [{ expenseId: null }]];
-
-    const result = await run();
-
-    expect(result).toEqual({ id: "bull-1", expenseIds: [] });
     expect(state.deletes).toEqual(["semen_bulls"]);
-  });
-
-  it("deletes a bull that never had a purchase", async () => {
-    state.selectResults = [...stockSelects(0), []];
-
-    expect(await run(false)).toEqual({ id: "bull-1", expenseIds: [] });
-    expect(state.deletes).toEqual(["semen_bulls"]);
+    // Nothing else was read: no purchase or expense lookup after the checks.
+    expect(state.selectResults).toEqual([]);
   });
 
   it("refuses with doses_used once a cobertura took a dose", async () => {
-    state.selectResults = [...stockSelects(1), []];
+    state.selectResults = stockSelects(1);
 
     expect(await run()).toBe("doses_used");
     expect(state.deletes).toEqual([]);
   });
 
   it("refuses with open_insemination while an open inseminação lists it", async () => {
-    state.selectResults = [...stockSelects(0, [{ id: "s-1" }]), []];
+    state.selectResults = stockSelects(0, [{ id: "s-1" }]);
 
     expect(await run()).toBe("open_insemination");
-    expect(state.deletes).toEqual([]);
-  });
-
-  it("refuses with finance_forbidden when an expense would go without Financeiro edit", async () => {
-    state.selectResults = [...stockSelects(0), [{ expenseId: "e-1" }]];
-
-    expect(await run(false)).toBe("finance_forbidden");
     expect(state.deletes).toEqual([]);
   });
 

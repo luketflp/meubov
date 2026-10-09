@@ -8,12 +8,31 @@ import {
   type LedgerRow,
 } from "@/lib/domain/ledger";
 import type { Period } from "@/lib/domain/period";
-import type { Account, Expense, ExpenseGroup, Lot, Movement } from "@/lib/types";
+import type { Account, Expense, GroupKind, Lot, Movement, PlanGroup } from "@/lib/types";
 import { makeAnimal, makeManejoSession, makeTreatment } from "./fixtures";
 
 const TODAY = "2026-09-24";
 const PERIOD: Period = { start: "2026-07-01", end: "2026-09-30" };
-const TREATMENT_ID = "treatment:2026-09-08:Vacina aftosa";
+
+const group = (id: string, kind: GroupKind, name: string, archivedAt?: string): PlanGroup => ({
+  id,
+  kind,
+  name,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  ...(archivedAt && { archivedAt }),
+});
+
+const planGroups: PlanGroup[] = [
+  group("receitas", "revenue", "Receitas"),
+  group("nutrition", "expense", "Nutrição"),
+  group("pasture", "expense", "Pastagem"),
+  group("labor", "expense", "Mão de obra"),
+  group("admin", "expense", "Administrativo"),
+  group("other", "expense", "Outros"),
+  group("investimentos", "investment", "Investimentos"),
+  group("financiamentos", "financing", "Financiamentos"),
+  group("socios", "partners", "Sócios"),
+];
 
 const expense = (overrides: Partial<Expense>): Expense => ({
   id: "e",
@@ -31,7 +50,7 @@ const lots: Lot[] = [
 
 const accounts: Account[] = [
   { id: "acc-sal", group: "nutrition", name: "Sal mineral" },
-  { id: "acc-aluguel", group: "revenue", name: "Aluguel de pasto" },
+  { id: "acc-aluguel", group: "receitas", name: "Aluguel de pasto" },
 ];
 
 const expenses: Expense[] = [
@@ -73,6 +92,7 @@ const expenses: Expense[] = [
   expense({
     id: "r-received",
     kind: "revenue",
+    category: "receitas",
     date: "2026-09-12",
     amountBrl: 2000,
     paidAt: "2026-09-14",
@@ -82,6 +102,7 @@ const expenses: Expense[] = [
   expense({
     id: "r-pending",
     kind: "revenue",
+    category: "receitas",
     date: "2026-09-18",
     dueDate: "2026-10-18",
     amountBrl: 700,
@@ -139,23 +160,14 @@ const movements: Movement[] = [
   { id: "mov-transfer", type: "transfer", date: "2026-09-03", quantity: 5, origin: "Lote do Rio", destination: "Engorda" },
 ];
 
-const treatments = [
-  makeTreatment({ id: "t-1", animalEarTag: "BR-101", date: "2026-09-08", status: "done", costBrl: 5 }),
-  makeTreatment({ id: "t-2", animalEarTag: "BR-102", date: "2026-09-08", status: "done", costBrl: 5 }),
-  makeTreatment({ id: "t-3", animalEarTag: "BR-201", date: "2026-09-08", status: "done", costBrl: 5 }),
-  makeTreatment({ id: "t-4", animalEarTag: "BR-202", date: "2026-09-08", status: "done" }),
-  makeTreatment({ id: "t-5", animalEarTag: "BR-101", date: "2026-09-28", status: "scheduled", costBrl: 5 }),
-];
-
 const input: LedgerInputs = {
   expenses,
   accounts,
   movements,
   manejoSessions: [saleSession, entrySession],
   animals,
-  treatments,
   lots,
-  expenseGroups: [],
+  planGroups,
 };
 
 const rows = ledgerRows(input, PERIOD, TODAY);
@@ -167,14 +179,13 @@ const row = (id: string): LedgerRow => {
 const ids = (list: LedgerRow[]) => list.map((r) => r.id);
 
 describe("ledgerRows", () => {
-  it("lists the window's lançamentos, vendas, compras and treatment days, newest first", () => {
+  it("lists the window's lançamentos, vendas and compras, newest first", () => {
     // Same day: a venda comes before a despesa.
     expect(ids(rows)).toEqual([
       "e-future",
       "r-pending",
       "r-received",
       "e-paid-lot",
-      TREATMENT_ID,
       "s-sale",
       "e-overdue",
       "s-entry",
@@ -183,7 +194,7 @@ describe("ledgerRows", () => {
     ]);
   });
 
-  it("leaves out entries dated outside the window, unpriced movements, transfers and treatments without cost", () => {
+  it("leaves out entries dated outside the window, unpriced movements and transfers", () => {
     expect(ids(rows)).not.toContain("e-old");
     expect(ids(rows)).not.toContain("mov-unpriced");
     expect(ids(rows)).not.toContain("mov-transfer");
@@ -195,7 +206,6 @@ describe("ledgerRows", () => {
       "r-pending": "receivable",
       "r-received": "received",
       "e-paid-lot": "paid",
-      [TREATMENT_ID]: "paid",
       "s-sale": "received",
       "e-overdue": "overdue",
       "s-entry": "paid",
@@ -230,7 +240,7 @@ describe("ledgerRows", () => {
     });
     expect(row("r-received")).toMatchObject({
       kind: "revenue",
-      group: "revenue",
+      group: "receitas",
       groupLabel: "Receitas",
       account: "Aluguel de pasto",
       lotId: null,
@@ -326,7 +336,6 @@ describe("ledgerRows", () => {
       {
         ...input,
         expenses: [],
-        treatments: [],
         manejoSessions: [lotSale],
         movements: [{ id: "s-lot", type: "sale", date: "2026-09-09", quantity: 1, origin: "Lote do Rio", destination: "Vizinho", amountBrl: 5000 }],
       },
@@ -336,42 +345,23 @@ describe("ledgerRows", () => {
     expect(only).toMatchObject({ document: "manejo · 1 animal", headCount: 1, lotId: "lot-1" });
   });
 
-  it("sums a day's done treatments with cost into one Sanidade row", () => {
-    expect(row(TREATMENT_ID)).toEqual({
-      id: TREATMENT_ID,
-      kind: "treatment",
-      inflow: false,
-      date: "2026-09-08",
-      dueDate: "2026-09-08",
-      paidAt: "2026-09-08",
-      status: "paid",
-      group: "health",
-      groupLabel: "Sanidade",
-      account: null,
-      bankAccountId: null,
-      history: null,
-      counterparty: null,
-      document: null,
-      lotId: null,
-      lotName: null,
-      amountBrl: 15,
-      notes: "Vacina aftosa",
-      locked: true,
-      headCount: 3,
-      expense: null,
-    });
+  it("writes no row for a tratamento with cost: it stays in Sanidade", () => {
+    // The store's data has the tratamentos; handed in whole, they still make no line.
+    const withTreatments = {
+      ...input,
+      treatments: [makeTreatment({ animalEarTag: "BR-101", date: "2026-09-08", status: "done", costBrl: 5 })],
+    };
+    expect(ledgerRows(withTreatments, PERIOD, TODAY)).toEqual(rows);
+    expect(cashSummary(withTreatments, PERIOD, TODAY)).toEqual(cashSummary(input, PERIOD, TODAY));
   });
 });
 
 describe("ledgerRows with the farm's grupos", () => {
-  it("names a farm grupo, archived or not, and reads Grupo removido for a grupo that is gone", () => {
-    const groups: ExpenseGroup[] = [
-      { id: "g-maq", name: "Máquinas e veículos", archivedAt: "2026-09-15T00:00:00.000Z", createdAt: "2026-01-10T00:00:00.000Z" },
-    ];
+  it("names a grupo, archived or not, and reads Grupo removido for a grupo that is gone", () => {
     const farmRows = ledgerRows(
       {
         ...input,
-        expenseGroups: groups,
+        planGroups: [...planGroups, group("g-maq", "expense", "Máquinas e veículos", "2026-09-15T00:00:00.000Z")],
         expenses: [expense({ id: "e-maq", category: "g-maq" }), expense({ id: "e-gone", category: "g-gone" })],
       },
       PERIOD,
@@ -390,11 +380,11 @@ describe("cashSummary", () => {
       received: 17880, // receita 2.000 + vendas 9.880 + 6.000
       receivable: 700,
       receivableCount: 1,
-      paid: 12615, // 1.200 + 3.000 + 400 (dated June, paid July) + treatments 15 + compra 8.000
+      paid: 12600, // 1.200 + 3.000 + 400 (dated June, paid July) + compra 8.000
       payable: 1300,
       payableCount: 2,
       overdueCount: 1,
-      balance: 5265,
+      balance: 5280,
     });
   });
 
@@ -449,36 +439,40 @@ describe("effectiveDueDate", () => {
 describe("money outside the resultado", () => {
   const capitalAccounts: Account[] = [
     ...accounts,
-    { id: "acc-maq", group: "investment", name: "Máquinas e implementos" },
-    { id: "acc-pronaf", group: "financing", name: "Pronaf custeio" },
-    { id: "acc-lucro", group: "partners", name: "Distribuição de lucro" },
+    { id: "acc-maq", group: "investimentos", name: "Máquinas e implementos" },
+    { id: "acc-pronaf", group: "financiamentos", name: "Pronaf custeio" },
+    { id: "acc-lucro", group: "socios", name: "Distribuição de lucro" },
   ];
+  const investment = { kind: "investment", category: "investimentos", accountId: "acc-maq" } as const;
+  const financing = { kind: "financing", category: "financiamentos", accountId: "acc-pronaf" } as const;
+  const partners = { kind: "partners", category: "socios", accountId: "acc-lucro" } as const;
   const capital: Expense[] = [
-    expense({ id: "c-trator", kind: "investment", flow: "out", date: "2026-09-10", amountBrl: 50000, paidAt: "2026-09-10", accountId: "acc-maq" }),
-    expense({ id: "c-sucata", kind: "investment", flow: "in", date: "2026-09-11", amountBrl: 2000, paidAt: "2026-09-11", accountId: "acc-maq" }),
+    expense({ id: "c-trator", ...investment, flow: "out", date: "2026-09-10", amountBrl: 50000, paidAt: "2026-09-10" }),
+    expense({ id: "c-sucata", ...investment, flow: "in", date: "2026-09-11", amountBrl: 2000, paidAt: "2026-09-11" }),
     // Pending, due after today: a receber.
-    expense({ id: "c-liberacao", kind: "financing", flow: "in", date: "2026-09-20", dueDate: "2026-10-05", amountBrl: 80000, accountId: "acc-pronaf" }),
+    expense({ id: "c-liberacao", ...financing, flow: "in", date: "2026-09-20", dueDate: "2026-10-05", amountBrl: 80000 }),
     // Pending, past due: vencida.
-    expense({ id: "c-parcela", kind: "financing", flow: "out", date: "2026-09-05", dueDate: "2026-09-15", amountBrl: 4000, accountId: "acc-pronaf" }),
-    expense({ id: "c-retirada", kind: "partners", flow: "out", date: "2026-09-12", amountBrl: 6000, paidAt: "2026-09-12", accountId: "acc-lucro" }),
-    expense({ id: "c-aporte", kind: "partners", flow: "in", date: "2026-09-13", amountBrl: 10000, paidAt: "2026-09-13", accountId: "acc-lucro" }),
+    expense({ id: "c-parcela", ...financing, flow: "out", date: "2026-09-05", dueDate: "2026-09-15", amountBrl: 4000 }),
+    expense({ id: "c-retirada", ...partners, flow: "out", date: "2026-09-12", amountBrl: 6000, paidAt: "2026-09-12" }),
+    expense({ id: "c-aporte", ...partners, flow: "in", date: "2026-09-13", amountBrl: 10000, paidAt: "2026-09-13" }),
     // No flow: a compra (money out), pending and past its date.
-    expense({ id: "c-sem-flow", kind: "investment", date: "2026-09-14", amountBrl: 700, accountId: "acc-maq" }),
-    expense({ id: "c-rendimento", kind: "yield", date: "2026-09-22", amountBrl: 312.5, paidAt: "2026-09-22", bankAccountId: "aplic" }),
+    expense({ id: "c-sem-flow", ...investment, date: "2026-09-14", amountBrl: 700 }),
+    // A rendimento as the API maps it: no grupo at all.
+    { id: "c-rendimento", kind: "yield", date: "2026-09-22", amountBrl: 312.5, paidAt: "2026-09-22", bankAccountId: "aplic" },
   ];
-  const capitalInput: LedgerInputs = { ...input, expenses: capital, accounts: capitalAccounts, movements: [], treatments: [] };
+  const capitalInput: LedgerInputs = { ...input, expenses: capital, accounts: capitalAccounts, movements: [] };
   const capitalRows = ledgerRows(capitalInput, PERIOD, TODAY);
 
   it("gives each row its grupo, its conta, its direction and a status by direction", () => {
     expect(capitalRows.map((r) => [r.id, r.kind, r.inflow, r.group, r.groupLabel, r.account, r.status])).toEqual([
       ["c-rendimento", "yield", true, "capital", "Rendimento", null, "received"],
-      ["c-liberacao", "financing", true, "financing", "Financiamentos", "Pronaf custeio", "receivable"],
-      ["c-sem-flow", "investment", false, "investment", "Investimentos", "Máquinas e implementos", "overdue"],
-      ["c-aporte", "partners", true, "partners", "Sócios", "Distribuição de lucro", "received"],
-      ["c-retirada", "partners", false, "partners", "Sócios", "Distribuição de lucro", "paid"],
-      ["c-sucata", "investment", true, "investment", "Investimentos", "Máquinas e implementos", "received"],
-      ["c-trator", "investment", false, "investment", "Investimentos", "Máquinas e implementos", "paid"],
-      ["c-parcela", "financing", false, "financing", "Financiamentos", "Pronaf custeio", "overdue"],
+      ["c-liberacao", "financing", true, "financiamentos", "Financiamentos", "Pronaf custeio", "receivable"],
+      ["c-sem-flow", "investment", false, "investimentos", "Investimentos", "Máquinas e implementos", "overdue"],
+      ["c-aporte", "partners", true, "socios", "Sócios", "Distribuição de lucro", "received"],
+      ["c-retirada", "partners", false, "socios", "Sócios", "Distribuição de lucro", "paid"],
+      ["c-sucata", "investment", true, "investimentos", "Investimentos", "Máquinas e implementos", "received"],
+      ["c-trator", "investment", false, "investimentos", "Investimentos", "Máquinas e implementos", "paid"],
+      ["c-parcela", "financing", false, "financiamentos", "Financiamentos", "Pronaf custeio", "overdue"],
     ]);
   });
 

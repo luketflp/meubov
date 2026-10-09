@@ -1,7 +1,7 @@
 /**
- * deleteSemenPurchase: removes a purchase and the expense it wrote, under the
- * bull's row lock, and refuses when the doses left would not cover the ones
- * already used.
+ * deleteSemenPurchase: removes a purchase under the bull's row lock, and
+ * refuses when the doses left would not cover the ones already used. Nothing
+ * in the Financeiro goes with it.
  *
  * Same chainable db stub as the other use-case tests: selects answer from a
  * queued list of rows, deletes record the table they hit.
@@ -52,8 +52,6 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-import { memoryBlobStore } from "@/lib/api/__tests__/memoryBlob";
-
 import { DeletePurchaseUseCase } from "../DeletePurchase.useCase";
 
 const BULL_ROW = {
@@ -68,15 +66,10 @@ const BULL_ROW = {
 /** The bull lock and its counts: 60 doses bought over two purchases. */
 const stockSelects = (used: number) => [[BULL_ROW], [{ bought: 60 }], [{ used }]];
 
-const PURCHASE_ROW = {
-  id: "p-2",
-  bullId: "bull-1",
-  date: "2026-08-20",
-  doses: 30,
-  totalBrl: 1140,
-  seller: null,
-  expenseId: "e-2",
-};
+const PURCHASE_ROW = { id: "p-2", doses: 30 };
+
+const run = (purchaseId = "p-2") =>
+  new DeletePurchaseUseCase().run({ farmId: 7, bullId: "bull-1", purchaseId });
 
 beforeEach(() => {
   state.selectResults = [];
@@ -85,40 +78,11 @@ beforeEach(() => {
 });
 
 describe("deleteSemenPurchase", () => {
-  it("deletes the purchase, then its expense", async () => {
+  it("deletes the purchase only, and answers its id", async () => {
     state.selectResults = [...stockSelects(30), [PURCHASE_ROW]];
 
-    const result = await new DeletePurchaseUseCase().run({
-      farmId: 7,
-      bullId: "bull-1",
-      purchaseId: "p-2",
-    });
-
-    expect(result).toEqual({ id: "p-2", expenseId: "e-2" });
+    expect(await run()).toEqual({ id: "p-2" });
     expect(state.locked).toBe(true);
-    expect(state.deletes).toEqual(["semen_purchases", "expenses"]);
-  });
-
-  it("deletes the anexos' files of its expense after the rows", async () => {
-    const PATH = "farms/7/expenses/e-2/u-nf.pdf";
-    const blob = memoryBlobStore({ [PATH]: { size: 1, contentType: "application/pdf" } });
-    state.selectResults = [...stockSelects(30), [PURCHASE_ROW], [{ pathname: PATH }]];
-
-    await new DeletePurchaseUseCase(undefined, blob.store).run({ farmId: 7, bullId: "bull-1", purchaseId: "p-2" });
-
-    expect(blob.deleted).toEqual([PATH]);
-  });
-
-  it("deletes only the purchase when its expense is already gone", async () => {
-    state.selectResults = [...stockSelects(0), [{ ...PURCHASE_ROW, expenseId: null }]];
-
-    const result = await new DeletePurchaseUseCase().run({
-      farmId: 7,
-      bullId: "bull-1",
-      purchaseId: "p-2",
-    });
-
-    expect(result).toEqual({ id: "p-2", expenseId: null });
     expect(state.deletes).toEqual(["semen_purchases"]);
   });
 
@@ -126,39 +90,21 @@ describe("deleteSemenPurchase", () => {
     // 60 − 30 = 30 left to cover 31 used doses.
     state.selectResults = [...stockSelects(31), [PURCHASE_ROW]];
 
-    const result = await new DeletePurchaseUseCase().run({
-      farmId: 7,
-      bullId: "bull-1",
-      purchaseId: "p-2",
-    });
-
-    expect(result).toBe("stock_negative");
+    expect(await run()).toBe("stock_negative");
     expect(state.deletes).toEqual([]);
   });
 
   it("answers not_found for a bull that is not on the farm", async () => {
     state.selectResults = [[]];
 
-    const result = await new DeletePurchaseUseCase().run({
-      farmId: 7,
-      bullId: "bull-9",
-      purchaseId: "p-2",
-    });
-
-    expect(result).toBe("not_found");
+    expect(await run()).toBe("not_found");
     expect(state.deletes).toEqual([]);
   });
 
   it("answers not_found for a purchase that is not of this bull", async () => {
     state.selectResults = [...stockSelects(0), []];
 
-    const result = await new DeletePurchaseUseCase().run({
-      farmId: 7,
-      bullId: "bull-1",
-      purchaseId: "p-9",
-    });
-
-    expect(result).toBe("not_found");
+    expect(await run("p-9")).toBe("not_found");
     expect(state.deletes).toEqual([]);
   });
 });

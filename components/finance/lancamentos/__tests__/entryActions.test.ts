@@ -14,7 +14,14 @@ const sicredi: BankAccount = {
   pendingLines: 0,
 };
 
-const carreta: Expense = { id: "e1", kind: "investment", flow: "out", date: "2026-09-05", category: "other", amountBrl: 19500 };
+const carreta: Expense = {
+  id: "e1",
+  kind: "investment",
+  flow: "out",
+  date: "2026-09-05",
+  category: "grp-investimentos",
+  amountBrl: 19500,
+};
 
 /** The ledger row of a lançamento, or of a venda of the manejos when `expense` is null. */
 function ledgerRow(expense: Expense | null, patch: Partial<LedgerRow> = {}): LedgerRow {
@@ -25,7 +32,7 @@ function ledgerRow(expense: Expense | null, patch: Partial<LedgerRow> = {}): Led
     dueDate: "2026-11-05",
     paidAt: expense?.paidAt ?? null,
     status: expense?.paidAt ? "paid" : "payable",
-    group: "investment",
+    group: "grp-investimentos",
     groupLabel: "Investimentos",
     account: "Máquinas e implementos",
     history: expense?.history ?? null,

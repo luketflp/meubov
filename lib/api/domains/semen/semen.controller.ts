@@ -2,12 +2,10 @@
  * Semen bulls — the bulls a farm buys semen from, and each purchase of doses.
  *
  * Stock is not a column: it derives from the purchases and the coberturas that
- * used a dose, so there is no route to set it. Every purchase also writes a
- * Reprodução expense, returned alongside so the client can merge Financeiro.
- * That makes a purchase money: the purchase routes ask Financeiro edit in the
- * route table, a new bull asks it here when it brings its first purchase, a
- * bull delete asks it here when its purchases still have their expenses, and
- * a member who does not see Financeiro gets the bull back without the totals.
+ * used a dose, so there is no route to set it. A purchase is stock, not money
+ * in the Financeiro: every route here asks Reprodução edit in the route table
+ * and nothing more. A member who does not see Financeiro still gets the bull
+ * and the purchase back without their totals.
  */
 import { Elysia } from "elysia";
 
@@ -31,15 +29,11 @@ export const semenController = new Elysia({ prefix: "/semen-bulls" })
   .post(
     "/",
     async ({ farmId, permissions, body, status }) => {
-      // The first purchase writes an expense, as a purchase of its own would.
-      if (body.firstPurchase !== undefined && !can(permissions, "finance", "edit")) {
-        return status(403, { error: "forbidden", area: "finance" });
-      }
       const result = await new AddBullUseCase().run({ farmId, input: body });
       if (result === "duplicate_name") return status(409, { error: result });
       return can(permissions, "finance", "view")
         ? result
-        : { ...result, bull: redactSemenBull(result.bull) };
+        : { bull: redactSemenBull(result.bull) };
     },
     { farm: true, body: NewSemenBullBody }
   )
@@ -59,16 +53,9 @@ export const semenController = new Elysia({ prefix: "/semen-bulls" })
   )
   .delete(
     "/:id",
-    async ({ farmId, permissions, params, status }) => {
-      const result = await new DeleteBullUseCase().run({
-        farmId,
-        id: params.id,
-        canRemoveExpenses: can(permissions, "finance", "edit"),
-      });
+    async ({ farmId, params, status }) => {
+      const result = await new DeleteBullUseCase().run({ farmId, id: params.id });
       if (result === "not_found") return status(404, { error: result });
-      if (result === "finance_forbidden") {
-        return status(403, { error: "forbidden", area: "finance" });
-      }
       if (result === "doses_used" || result === "open_insemination") {
         return status(409, { error: result });
       }
@@ -78,14 +65,18 @@ export const semenController = new Elysia({ prefix: "/semen-bulls" })
   )
   .post(
     "/:id/purchases",
-    async ({ farmId, params, body, status }) => {
+    async ({ farmId, permissions, params, body, status }) => {
       const result = await new AddPurchaseUseCase().run({
         farmId,
         bullId: params.id,
         input: body,
       });
       if (result === "not_found") return status(404, { error: result });
-      return result;
+      if (can(permissions, "finance", "view")) return result;
+      // The member typed the total, but it stays out of their store as on load.
+      const purchase = { ...result.purchase };
+      delete purchase.totalBrl;
+      return { purchase };
     },
     { farm: true, body: SemenPurchaseBody }
   )

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Account } from "@/lib/types";
-import { legacyNode, nodeParam, type PlanInputs } from "@/lib/domain/planTree";
+import type { Account, PlanGroup } from "@/lib/types";
+import type { PlanInputs } from "@/lib/domain/planTree";
 import { legacySearch, resolveNode } from "@/components/finance/lancamentos/legacySearch";
 
 const query = (old: Record<string, string | string[] | undefined>) =>
@@ -29,12 +29,16 @@ describe("legacySearch", () => {
     expect(query({ conta: "acc-1" })).toEqual({ conta: "conta:acc-1" });
   });
 
-  it("turns grupo=capital and tipo=treatment into the nó legacyNode picks", () => {
-    // planTree.test pins which nó each one is; here, that the redirect carries it.
-    for (const old of [{ grupo: "capital" }, { tipo: "treatment" }]) {
-      const node = legacyNode(old);
-      expect(node).not.toBeNull();
-      expect(query(old)).toEqual({ conta: nodeParam(node!) });
+  it("turns an old tipo into its tipo or automatic line", () => {
+    expect(query({ tipo: "expense" })).toEqual({ conta: "despesas" });
+    expect(query({ tipo: "revenue" })).toEqual({ conta: "receitas" });
+    expect(query({ tipo: "sale" })).toEqual({ conta: "venda-de-gado" });
+    expect(query({ tipo: "purchase" })).toEqual({ conta: "compra-de-gado" });
+  });
+
+  it("drops the old grupo keys and tipo=treatment: they name nothing now", () => {
+    for (const old of [{ grupo: "capital" }, { grupo: "nutrition" }, { grupo: "revenue" }, { tipo: "treatment" }]) {
+      expect(query(old)).toEqual({});
     }
   });
 
@@ -48,25 +52,25 @@ describe("legacySearch", () => {
   });
 });
 
-const sal: Account = { id: "acc-1", group: "nutrition", name: "Sal mineral" };
+const NUTRICAO: PlanGroup = { id: "grp-nutricao", kind: "expense", name: "Nutrição", createdAt: "2026-01-01T00:00:00.000Z" };
+const sal: Account = { id: "acc-1", group: NUTRICAO.id, name: "Sal mineral" };
 const inputs: PlanInputs = {
   expenses: [],
   accounts: [sal],
   movements: [],
   manejoSessions: [],
   animals: [],
-  treatments: [],
   lots: [],
   bankAccounts: [],
   transfers: [],
-  expenseGroups: [],
+  planGroups: [NUTRICAO],
 };
 const period = { start: "2025-10-01", end: "2026-09-30" };
 const TODAY = "2026-09-30";
 
 describe("resolveNode", () => {
   it("falls back to todos when conta is absent, malformed or gone", () => {
-    for (const param of [null, "", "nope", "banco:", "grupo:revenue", "conta:deleted"]) {
+    for (const param of [null, "", "nope", "banco:", "grupo:", "conta:deleted"]) {
       const resolved = resolveNode(param, inputs, period, TODAY);
       expect(resolved.picked).toBeNull();
       expect(resolved.node).toEqual({ type: "all" });
@@ -74,17 +78,20 @@ describe("resolveNode", () => {
     }
   });
 
-  it("picks a group and a conta that exist", () => {
-    expect(resolveNode("despesas", inputs, period, TODAY).picked).toEqual({ type: "group", group: "expenses" });
+  it("picks a tipo, a grupo and a conta that exist", () => {
+    expect(resolveNode("despesas", inputs, period, TODAY).picked).toEqual({ type: "kind", kind: "expense" });
+    const grupo = resolveNode(`grupo:${NUTRICAO.id}`, inputs, period, TODAY);
+    expect(grupo.picked).toEqual({ type: "group", id: NUTRICAO.id });
+    expect(grupo.summary).toMatchObject({ crumb: "Despesas", title: "Nutrição" });
     const conta = resolveNode("conta:acc-1", inputs, period, TODAY);
     expect(conta.picked).toEqual({ type: "account", id: "acc-1" });
     expect(conta.node).toEqual({ type: "account", id: "acc-1" });
     expect(conta.summary.title).toBe("Sal mineral");
   });
 
-  it("opens a grupo key that names no grupo as an empty Grupo removido", () => {
+  it("opens a grupo id that names no grupo as an empty Grupo removido", () => {
     const gone = resolveNode("grupo:nope", inputs, period, TODAY);
-    expect(gone.picked).toEqual({ type: "group", group: "nope" });
-    expect(gone.summary).toMatchObject({ crumb: "Despesas", title: "Grupo removido" });
+    expect(gone.picked).toEqual({ type: "group", id: "nope" });
+    expect(gone.summary.title).toBe("Grupo removido");
   });
 });

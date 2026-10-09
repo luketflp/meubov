@@ -18,7 +18,6 @@ import {
   PiggyBank,
   Printer,
   Receipt,
-  Syringe,
   Tractor,
   Users,
   type LucideIcon,
@@ -55,14 +54,12 @@ const KIND_ICON: Record<LedgerKind, LucideIcon> = {
   yield: PiggyBank,
   sale: Banknote,
   purchase: Beef,
-  treatment: Syringe,
 };
 
 const KIND_LABEL: Record<LedgerKind, string> = {
   ...ENTRY_KIND_LABEL,
   sale: "Venda de gado",
   purchase: "Compra de gado",
-  treatment: "Sanidade",
 };
 
 const inDays = (n: number) => (n === 1 ? "1 dia" : `${n} dias`);
@@ -288,7 +285,7 @@ export function EntryDetailDialog({ row, node, onOpenChange }: EntryDetailDialog
               {ledger?.locked ? (
                 <p className="flex items-center gap-2 text-sm text-ink-soft">
                   <Lock className="size-4 shrink-0" aria-hidden />
-                  Vendas, compras e tratamentos vêm dos manejos: aqui só muda a conta.
+                  Vendas e compras vêm dos manejos: aqui só muda a conta.
                 </p>
               ) : null}
 

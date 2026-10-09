@@ -1,6 +1,6 @@
 /**
  * Farm lançamentos, with their vencimento, pagamento, conta and lote:
- * - the despesas that do not arrive through a sanitary treatment;
+ * - the despesas;
  * - the receitas that do not come from a venda;
  * - the money fora do resultado (investimentos, financiamentos, sócios,
  *   rendimentos).

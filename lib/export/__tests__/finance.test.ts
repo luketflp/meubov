@@ -7,7 +7,12 @@ import {
 import { withoutMoney } from "@/lib/export/table";
 import type { Indicators } from "@/lib/domain/economics";
 import type { LotEconomics } from "@/lib/domain/lotEconomics";
-import type { Expense } from "@/lib/types";
+import type { Expense, PlanGroup } from "@/lib/types";
+
+const GROUPS: PlanGroup[] = [
+  { id: "nutrition", kind: "expense", name: "Nutrição", createdAt: "2026-01-01T00:00:00.000Z" },
+  { id: "labor", kind: "expense", name: "Mão de obra", createdAt: "2026-01-01T00:00:00.000Z" },
+];
 
 describe("expensesExportTable", () => {
   it("writes every despesa newest first, value as money", () => {
@@ -15,7 +20,7 @@ describe("expensesExportTable", () => {
       { id: "e1", kind: "expense", date: "2026-01-05", category: "nutrition", amountBrl: 1200.5, notes: "Sal mineral" },
       { id: "e2", kind: "expense", date: "2026-08-10", category: "labor", amountBrl: 3000 },
     ];
-    const table = expensesExportTable(expenses);
+    const table = expensesExportTable(expenses, "Despesas", GROUPS);
     expect(table.title).toBe("Despesas");
     expect(table.columns.map((c) => [c.header, c.kind])).toEqual([
       ["Data", "date"],
@@ -32,34 +37,42 @@ describe("expensesExportTable", () => {
 
 describe("expensesExportTable with receitas", () => {
   it("leaves the receitas out of the Despesas sheet", () => {
-    const table = expensesExportTable([
-      { id: "e1", kind: "expense", date: "2026-01-05", category: "nutrition", amountBrl: 100 },
-      { id: "r1", kind: "revenue", date: "2026-02-05", category: "other", amountBrl: 900 },
-    ]);
+    const table = expensesExportTable(
+      [
+        { id: "e1", kind: "expense", date: "2026-01-05", category: "nutrition", amountBrl: 100 },
+        { id: "r1", kind: "revenue", date: "2026-02-05", category: "receitas", amountBrl: 900 },
+      ],
+      "Despesas",
+      GROUPS
+    );
     expect(table.rows).toEqual([["2026-01-05", "Nutrição", null, 100]]);
   });
 });
 
 describe("expensesExportTable with money outside the resultado", () => {
-  it("leaves investimentos and rendimentos out of the Despesas sheet", () => {
-    const table = expensesExportTable([
-      { id: "e1", kind: "expense", date: "2026-01-05", category: "nutrition", amountBrl: 100 },
-      { id: "i1", kind: "investment", flow: "out", date: "2026-02-05", category: "other", amountBrl: 50000 },
-      { id: "y1", kind: "yield", date: "2026-02-06", category: "other", amountBrl: 312.5, paidAt: "2026-02-06" },
-    ]);
+  it("leaves investimentos and rendimentos (no grupo) out of the Despesas sheet", () => {
+    const table = expensesExportTable(
+      [
+        { id: "e1", kind: "expense", date: "2026-01-05", category: "nutrition", amountBrl: 100 },
+        { id: "i1", kind: "investment", flow: "out", date: "2026-02-05", category: "investimentos", amountBrl: 50000 },
+        { id: "y1", kind: "yield", date: "2026-02-06", amountBrl: 312.5, paidAt: "2026-02-06" },
+      ],
+      "Despesas",
+      GROUPS
+    );
     expect(table.rows).toEqual([["2026-01-05", "Nutrição", null, 100]]);
   });
 });
 
 describe("expensesExportTable with the farm's grupos", () => {
-  it("names a farm grupo and writes Grupo removido for one that is gone", () => {
+  it("names a grupo, archived or not, and writes Grupo removido for one that is gone", () => {
     const table = expensesExportTable(
       [
         { id: "e1", kind: "expense", date: "2026-01-05", category: "g-maq", amountBrl: 100 },
         { id: "e2", kind: "expense", date: "2026-01-04", category: "g-gone", amountBrl: 50 },
       ],
       "Despesas",
-      [{ id: "g-maq", name: "Máquinas e veículos", createdAt: "2026-01-01T00:00:00.000Z" }]
+      [{ id: "g-maq", kind: "expense", name: "Máquinas e veículos", archivedAt: "2026-02-01T00:00:00.000Z", createdAt: "2026-01-01T00:00:00.000Z" }]
     );
     expect(table.rows).toEqual([
       ["2026-01-05", "Máquinas e veículos", null, 100],

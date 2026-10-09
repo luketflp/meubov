@@ -34,7 +34,7 @@ describe("listBudgets", () => {
         {
           id: "b-1",
           farmId: 7,
-          category: "admin",
+          category: "grp-administrativo",
           accountId: null,
           month: "2025-10-01",
           amountBrl: 1500,
@@ -54,7 +54,7 @@ describe("listBudgets", () => {
     // Safra 2025/26 starting in outubro.
     expect(query.params).toEqual([7, "2025-10-01", "2026-09-30"]);
     expect(result).toEqual([
-      { id: "b-1", category: "admin", month: "2025-10-01", amountBrl: 1500, distribution: "equal" },
+      { id: "b-1", category: "grp-administrativo", month: "2025-10-01", amountBrl: 1500, distribution: "equal" },
     ]);
   });
 

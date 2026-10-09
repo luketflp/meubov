@@ -49,7 +49,7 @@ export function SeriesScopeDialog({
 }: SeriesScopeDialogProps) {
   const accounts = useHerdStore((s) => s.accounts);
   const expenses = useHerdStore((s) => s.expenses);
-  const expenseGroups = useHerdStore((s) => s.expenseGroups);
+  const planGroups = useHerdStore((s) => s.planGroups);
   const [scope, setScope] = useState<SeriesScope>("following");
 
   const recurring = expense.seriesFrequency !== undefined;
@@ -60,7 +60,7 @@ export function SeriesScopeDialog({
   const firstDue = rows.map(effectiveDueDate).sort()[0] ?? effectiveDueDate(expense);
   const due = effectiveDueDate(expense);
   const group = entryGroup(expense);
-  const grupo = group ? groupLabel(group, expenseGroups) : ENTRY_KIND_LABEL.yield;
+  const grupo = group ? groupLabel(group, planGroups) : ENTRY_KIND_LABEL.yield;
   const name = [accountName(expense.accountId, accounts) ?? grupo, expense.counterparty]
     .filter(Boolean)
     .join(" · ");

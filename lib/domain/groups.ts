@@ -1,80 +1,59 @@
 /**
- * Grupos de despesa: the seven built-in ones, written as their key
- * ("nutrition"), and the farm's own, written as their ExpenseGroup id. The
- * single source of grupo order and labels, Receitas and the three outside the
- * resultado included. Pure.
+ * Grupos of the plano de contas: rows of the farm, each under one fixed tipo
+ * (GroupKind), named, archived and deleted by the farmer. Every column that
+ * holds a grupo holds its id. Pure.
  */
-import type { AccountGroup, BuiltinCategory, CapitalGroup, ExpenseCategory, ExpenseGroup } from "@/lib/types";
-import { BUILTIN_CATEGORY_LABEL } from "@/lib/domain/labels";
-import { CAPITAL_GROUPS } from "@/lib/domain/entries";
+import type { GroupKind, PlanGroup } from "@/lib/types";
 
-/** The seven built-in grupos; screens list them through `despesaGroups`, alphabetically. */
-export const BUILTIN_CATEGORIES: readonly BuiltinCategory[] = Object.keys(BUILTIN_CATEGORY_LABEL) as BuiltinCategory[];
+/** Every tipo, in the order the Plano de contas and the tree show them. */
+export const GROUP_KINDS: readonly GroupKind[] = ["revenue", "expense", "investment", "financing", "partners"];
 
-/** Receitas and the three grupos outside the resultado. */
-export const TOP_GROUP_LABEL: Record<"revenue" | CapitalGroup, string> = {
+export const GROUP_KIND_LABEL: Record<GroupKind, string> = {
   revenue: "Receitas",
+  expense: "Despesas",
   investment: "Investimentos",
   financing: "Financiamentos",
   partners: "Sócios",
 };
 
-/** Max length of a farm grupo name. */
+/** The eleven grupos a farm starts with. */
+export const DEFAULT_GROUPS: readonly { kind: GroupKind; name: string }[] = [
+  { kind: "revenue", name: "Receitas" },
+  { kind: "expense", name: "Nutrição" },
+  { kind: "expense", name: "Pastagem" },
+  { kind: "expense", name: "Mão de obra" },
+  { kind: "expense", name: "Sanidade" },
+  { kind: "expense", name: "Reprodução" },
+  { kind: "expense", name: "Administrativo" },
+  { kind: "expense", name: "Outros" },
+  { kind: "investment", name: "Investimentos" },
+  { kind: "financing", name: "Financiamentos" },
+  { kind: "partners", name: "Sócios" },
+];
+
+/** Max length of a grupo name. */
 export const GROUP_NAME_MAX = 40;
 
-/** Every fixed grupo's label by key. */
-const FIXED_LABEL = new Map<string, string>([
-  ...Object.entries(BUILTIN_CATEGORY_LABEL),
-  ...Object.entries(TOP_GROUP_LABEL),
-]);
+/** Alphabetical, pt-BR. */
+export const byGroupName = (a: PlanGroup, b: PlanGroup): number => a.name.localeCompare(b.name, "pt-BR");
 
-/** The same labels, lowercased: no farm grupo may take one. */
-const FIXED_NAMES = new Set([...FIXED_LABEL.values()].map((label) => label.toLowerCase()));
-
-export function isBuiltinCategory(key: string): key is BuiltinCategory {
-  return (BUILTIN_CATEGORIES as readonly string[]).includes(key);
+/** The grupos of a tipo by name. Archived ones only with `archived: true`, or the one whose id is `keep` (a row already in it). */
+export function groupsOf(
+  groups: readonly PlanGroup[],
+  kind: GroupKind,
+  opts: { archived?: boolean; keep?: string } = {}
+): PlanGroup[] {
+  return groups
+    .filter((g) => g.kind === kind && (opts.archived || g.archivedAt === undefined || g.id === opts.keep))
+    .sort(byGroupName);
 }
 
-/**
- * A grupo of Despesas: anything but "revenue", a CapitalGroup, the tree's
- * "expenses" or the ledger's "capital" (a compra de gado). A farm grupo's key
- * is a uuid, so it never clashes with these.
- */
-export function isDespesaGroup(key: string): boolean {
-  return (
-    key !== "revenue" && key !== "expenses" && key !== "capital" && !(CAPITAL_GROUPS as readonly string[]).includes(key)
-  );
+/** Name of a grupo; "Grupo removido" when the id names nothing. */
+export function groupLabel(id: string, groups: readonly PlanGroup[]): string {
+  return groups.find((g) => g.id === id)?.name ?? "Grupo removido";
 }
 
-export interface DespesaGroup {
-  key: ExpenseCategory;
-  label: string;
-  /** The farm's own: it shows "da fazenda" on the Plano de contas and in the form's picker. */
-  custom: boolean;
-  archived: boolean;
-}
-
-/** The seven built-ins and the farm's own in alphabetical order, Outros last as the catch-all. Archived farm
- *  grupos only with `archived: true`, or the one whose key is `keep` (a row already in it). */
-export function despesaGroups(
-  groups: readonly ExpenseGroup[],
-  opts: { archived?: boolean; keep?: ExpenseCategory } = {}
-): DespesaGroup[] {
-  const farm = groups
-    .filter((g) => opts.archived || g.archivedAt === undefined || g.id === opts.keep)
-    .map((g) => ({ key: g.id, label: g.name, custom: true, archived: g.archivedAt !== undefined }));
-  const builtin = BUILTIN_CATEGORIES.map((key) => ({ key, label: BUILTIN_CATEGORY_LABEL[key], custom: false, archived: false }));
-  return [...builtin, ...farm].sort(
-    (a, b) => Number(a.key === "other") - Number(b.key === "other") || a.label.localeCompare(b.label, "pt-BR")
-  );
-}
-
-/** Label of any grupo key: a built-in, Receitas/capital, a farm grupo's name; "Grupo removido" when it resolves to nothing. */
-export function groupLabel(key: AccountGroup, groups: readonly ExpenseGroup[]): string {
-  return FIXED_LABEL.get(key) ?? groups.find((g) => g.id === key)?.name ?? "Grupo removido";
-}
-
-/** True when `name` (trimmed, any case) equals a built-in or top grupo label: such a name is refused. */
-export function clashesWithFixedGroup(name: string): boolean {
-  return FIXED_NAMES.has(name.trim().toLowerCase());
+/** Tipo of a grupo; null when the id names nothing. */
+export function groupKind(id: string, groups: readonly PlanGroup[]): GroupKind | null {
+  return groups.find((g) => g.id === id)?.kind ?? null;
 }

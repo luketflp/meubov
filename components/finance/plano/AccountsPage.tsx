@@ -1,24 +1,25 @@
 "use client";
 
 /**
- * /settings/plano-de-contas: the farm's contas inside their grupos.
- * Receitas (Venda de gado is automatic, from the manejos) and Fora do
- * resultado (Investimentos with the automatic Compra de gado, Financiamentos,
- * Sócios) on the left, Despesas (COE) on the right, one block per grupo: the
- * seven of the system, then the farm's own ("+ Grupo", each with its
- * GroupHeader), then "Grupos arquivados". A conta shows its last 12 months
- * and lançamento count; a financiamento shows its saldo devedor today
+ * /settings/plano-de-contas: the farm's contas inside their grupos, every
+ * grupo the farm's, each with its GroupHeader (Renomear, Arquivar, Excluir
+ * while unused, "+ Conta"). Receitas (Venda de gado is automatic, from the
+ * manejos, then the grupos de receita) and Fora do resultado (Compra de gado,
+ * then the grupos de investimento, financiamento and sócios by name, each
+ * naming its tipo) on the left, Despesas (COE) on the right; each card has its
+ * "+ Grupo" and closes with its "Grupos arquivados". A conta shows its last 12
+ * months and lançamento count; a financiamento shows its saldo devedor today
  * instead, its saldo inicial under the name, and edits the saldo inicial
  * beside the name. A conta or grupo with lançamentos is archived, which hides
  * it from the forms and keeps history; one without them may be deleted.
  */
-import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { useState, type KeyboardEvent } from "react";
 import Link from "next/link";
 import { Archive, ArchiveRestore, ArrowLeft, ChevronDown, Info, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
-import type { Account, AccountGroup, ExpenseCategory } from "@/lib/types";
+import type { Account, GroupKind, PlanGroup } from "@/lib/types";
 import { accountsByGroup } from "@/lib/domain/accounts";
 import { CAPITAL_GROUPS, isCapitalKind, isInflow } from "@/lib/domain/entries";
-import { TOP_GROUP_LABEL, despesaGroups, type DespesaGroup } from "@/lib/domain/groups";
+import { byGroupName, groupsOf } from "@/lib/domain/groups";
 import { debtBalance } from "@/lib/domain/planTree";
 import { formatDate, todayISO } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
@@ -46,16 +47,7 @@ import {
   type AccountPlace,
 } from "@/components/finance/plano/NewAccountDialog";
 import { NewGroupDialog } from "@/components/finance/plano/NewGroupDialog";
-import { AddAccountButton, GroupHeader, groupEntryCount } from "@/components/finance/plano/GroupHeader";
-
-/** Where the app writes into a grupo by itself, or what a grupo holds. */
-const GROUP_HINT: Partial<Record<AccountGroup, string>> = {
-  health: "Tratamentos com custo entram aqui sozinhos",
-  breeding: "Compras de sêmen entram aqui sozinhas",
-  investment: "Benfeitorias, máquinas e equipamentos",
-  financing: "Empréstimos, financiamentos e consórcios",
-  partners: "Retiradas, distribuição de lucro e aportes",
-};
+import { GroupHeader, groupEntryCount } from "@/components/finance/plano/GroupHeader";
 
 interface AccountStats {
   /** Last 12 months, a venda do bem or an aporte taken off; a financiamento's saldo devedor today. */
@@ -66,12 +58,13 @@ interface AccountStats {
 export function AccountsPage() {
   const accounts = useHerdStore((s) => s.accounts);
   const expenses = useHerdStore((s) => s.expenses);
-  const expenseGroups = useHerdStore((s) => s.expenseGroups);
+  const planGroups = useHerdStore((s) => s.planGroups);
   const seedDefaultAccounts = useHerdStore((s) => s.seedDefaultAccounts);
   const canEdit = useCan("finance", "edit");
   const { addToast } = useToast();
-  const [adding, setAdding] = useState<{ place: AccountPlace; category?: ExpenseCategory } | null>(null);
-  const [addingGroup, setAddingGroup] = useState(false);
+  const [adding, setAdding] = useState<{ place: AccountPlace; group?: string } | null>(null);
+  /** The tipos the open "+ Grupo" offers: its card's. */
+  const [addingGroup, setAddingGroup] = useState<readonly GroupKind[] | null>(null);
 
   const today = todayISO();
   const window12m = defaultPeriod(today);
@@ -87,15 +80,18 @@ export function AccountsPage() {
   // Any lançamento ever, not only the 12 months above, keeps a conta from being deleted.
   const used = new Set(expenses.map((e) => e.accountId));
   const byGroup = accountsByGroup(accounts, true);
-  const groups = despesaGroups(expenseGroups, { archived: true });
-  const archivedGroups = groups.filter((group) => group.archived);
-  const entriesIn = (key: string) => groupEntryCount(key, expenses, accounts);
+  const entriesIn = (id: string) => groupEntryCount(id, expenses, accounts);
+  const capitalGroups = CAPITAL_GROUPS.flatMap((kind) => groupsOf(planGroups, kind, { archived: true })).sort(
+    byGroupName
+  );
   // A financiamento shows what is still owed today instead of its 12 months.
-  for (const account of byGroup.financing) {
-    stats.set(account.id, {
-      amount: debtBalance(account, expenses, today),
-      count: stats.get(account.id)?.count ?? 0,
-    });
+  for (const group of capitalGroups.filter((g) => g.kind === "financing")) {
+    for (const account of byGroup[group.id] ?? []) {
+      stats.set(account.id, {
+        amount: debtBalance(account, expenses, today),
+        count: stats.get(account.id)?.count ?? 0,
+      });
+    }
   }
 
   async function onSuggest() {
@@ -110,6 +106,47 @@ export function AccountsPage() {
             : `${created} contas criadas`,
     });
   }
+
+  /** A card's grupos, each with its header and contas, then "Grupos arquivados". */
+  const groupBlocks = (groups: PlanGroup[]) => {
+    const active = groups.filter((g) => !g.archivedAt);
+    const archived = groups.filter((g) => g.archivedAt);
+    return (
+      <>
+        {active.length === 0 ? <p className="py-4 text-xs text-ink-soft">Nenhum grupo ativo.</p> : null}
+        {active.map((group) => {
+          const contas = byGroup[group.id] ?? [];
+          return (
+            <section key={group.id} className="py-4">
+              <GroupHeader
+                group={group}
+                contas={contas.filter((a) => !a.archivedAt).length}
+                entries={entriesIn(group.id)}
+                onAdd={canEdit ? () => setAdding({ place: group.kind, group: group.id }) : undefined}
+              />
+              <AccountList
+                accounts={contas}
+                stats={stats}
+                used={used}
+                canEdit={canEdit}
+                financing={group.kind === "financing"}
+                empty={isCapitalKind(group.kind) ? "Sem contas — crie uma para lançar aqui" : undefined}
+              />
+            </section>
+          );
+        })}
+        {archived.length > 0 ? <ArchivedGroups groups={archived} entriesIn={entriesIn} canEdit={canEdit} /> : null}
+      </>
+    );
+  };
+
+  const addGroup = (kinds: readonly GroupKind[]) =>
+    canEdit ? (
+      <Button variant="outline" size="sm" className="min-h-11 md:min-h-0" onClick={() => setAddingGroup(kinds)}>
+        <Plus data-icon="inline-start" aria-hidden />
+        Grupo
+      </Button>
+    ) : null;
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8">
@@ -126,7 +163,7 @@ export function AccountsPage() {
 
         <PageHeader
           title="Plano de contas"
-          subtitle="As contas de cada grupo. Os sete grupos de despesa do sistema não mudam; a fazenda pode criar os seus, que entram no custo (COE) do mesmo jeito."
+          subtitle="As contas de cada grupo. Todos os grupos são da fazenda: renomeie, arquive ou exclua os que não usa."
           badges={canEdit ? undefined : <ReadOnlyPill />}
           actions={
             canEdit ? (
@@ -146,88 +183,37 @@ export function AccountsPage() {
 
         <div className="grid items-start gap-4 lg:grid-cols-5">
           <div className="flex flex-col gap-4 lg:col-span-2">
-            <SectionCard
-              title="Receitas"
-              subtitle="Entradas de dinheiro além das vendas"
-              action={canEdit ? <AddAccountButton onClick={() => setAdding({ place: "revenue" })} /> : null}
-            >
-              <ul className="-mx-4 -mt-4 divide-y divide-hairline">
-                <AutomaticLine name="Venda de gado" className="px-4" />
-              </ul>
-              <AccountList accounts={byGroup.revenue} stats={stats} used={used} canEdit={canEdit} />
+            <SectionCard title="Receitas" subtitle="Entradas de dinheiro além das vendas" action={addGroup(["revenue"])}>
+              <div className="-my-4 divide-y divide-hairline">
+                <ul>
+                  <AutomaticLine name="Venda de gado" />
+                </ul>
+                {groupBlocks(groupsOf(planGroups, "revenue", { archived: true }))}
+              </div>
             </SectionCard>
 
             <SectionCard
               title="Fora do resultado"
               subtitle="Fora do custo (COE) · financiamentos mostram o saldo devedor de hoje"
+              action={addGroup(CAPITAL_GROUPS)}
             >
               <div className="-my-4 divide-y divide-hairline">
-                {CAPITAL_GROUPS.map((group) => (
-                  <GroupSection
-                    key={group}
-                    group={group}
-                    label={TOP_GROUP_LABEL[group]}
-                    onAdd={canEdit ? () => setAdding({ place: group }) : undefined}
-                  >
-                    {group === "investment" ? (
-                      <ul className="mt-2 divide-y divide-hairline">
-                        <AutomaticLine name="Compra de gado" />
-                      </ul>
-                    ) : null}
-                    <AccountList
-                      accounts={byGroup[group]}
-                      stats={stats}
-                      used={used}
-                      canEdit={canEdit}
-                      empty="Sem contas — crie uma para lançar aqui"
-                    />
-                  </GroupSection>
-                ))}
+                <ul>
+                  <AutomaticLine name="Compra de gado" />
+                </ul>
+                {groupBlocks(capitalGroups)}
               </div>
             </SectionCard>
           </div>
 
           <SectionCard
             title="Despesas (COE)"
-            subtitle={
-              canEdit ? "Valores dos últimos 12 meses · + Grupo cria um grupo da fazenda" : "Valores dos últimos 12 meses"
-            }
-            action={
-              canEdit ? (
-                <Button variant="outline" size="sm" className="min-h-11 md:min-h-0" onClick={() => setAddingGroup(true)}>
-                  <Plus data-icon="inline-start" aria-hidden />
-                  Grupo
-                </Button>
-              ) : null
-            }
+            subtitle="Valores dos últimos 12 meses"
+            action={addGroup(["expense"])}
             className="lg:col-span-3"
           >
             <div className="-my-4 divide-y divide-hairline">
-              {groups
-                .filter((group) => !group.archived)
-                .map((group) => {
-                  const contas = byGroup[group.key] ?? [];
-                  const onAdd = canEdit ? () => setAdding({ place: "expense", category: group.key }) : undefined;
-                  const list = <AccountList accounts={contas} stats={stats} used={used} canEdit={canEdit} />;
-                  return group.custom ? (
-                    <section key={group.key} className="py-4">
-                      <GroupHeader
-                        group={group}
-                        contas={contas.filter((a) => !a.archivedAt).length}
-                        entries={entriesIn(group.key)}
-                        onAdd={onAdd}
-                      />
-                      {list}
-                    </section>
-                  ) : (
-                    <GroupSection key={group.key} group={group.key} label={group.label} onAdd={onAdd}>
-                      {list}
-                    </GroupSection>
-                  );
-                })}
-              {archivedGroups.length > 0 ? (
-                <ArchivedGroups groups={archivedGroups} entriesIn={entriesIn} canEdit={canEdit} />
-              ) : null}
+              {groupBlocks(groupsOf(planGroups, "expense", { archived: true }))}
             </div>
           </SectionCard>
         </div>
@@ -248,48 +234,30 @@ export function AccountsPage() {
           if (!open) setAdding(null);
         }}
         defaultPlace={adding?.place}
-        defaultCategory={adding?.category}
+        defaultGroup={adding?.group}
       />
-      <NewGroupDialog open={addingGroup} onOpenChange={setAddingGroup} />
+      {addingGroup ? (
+        <NewGroupDialog
+          open
+          kinds={addingGroup}
+          onOpenChange={(open) => {
+            if (!open) setAddingGroup(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
 
 /** A line the manejos write by themselves (Venda de gado, Compra de gado). */
-function AutomaticLine({ name, className }: { name: string; className?: string }) {
+function AutomaticLine({ name }: { name: string }) {
   return (
-    <li className={cn("flex min-h-11 items-center gap-2 py-2", className)}>
+    <li className="flex min-h-11 items-center gap-2 py-2">
       <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{name}</span>
       <span className="inline-flex items-center rounded-md bg-brand-soft px-2 py-0.5 text-[11px] font-medium text-brand">
         automática
       </span>
     </li>
-  );
-}
-
-/** One grupo of the system inside a card: its name, its hint, "+ Conta" and what follows. */
-function GroupSection({
-  group,
-  label,
-  onAdd,
-  children,
-}: {
-  group: AccountGroup;
-  label: string;
-  onAdd?: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <section className="py-4">
-      <header className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-ink">{label}</h3>
-          {GROUP_HINT[group] ? <p className="text-xs text-ink-soft">{GROUP_HINT[group]}</p> : null}
-        </div>
-        {onAdd ? <AddAccountButton onClick={onAdd} /> : null}
-      </header>
-      {children}
-    </section>
   );
 }
 
@@ -299,17 +267,17 @@ function ArchivedGroups({
   entriesIn,
   canEdit,
 }: {
-  groups: DespesaGroup[];
+  groups: PlanGroup[];
   /** Lançamentos ever made in a grupo. */
-  entriesIn(key: string): number;
+  entriesIn(id: string): number;
   canEdit: boolean;
 }) {
-  const updateExpenseGroup = useHerdStore((s) => s.updateExpenseGroup);
+  const updatePlanGroup = useHerdStore((s) => s.updatePlanGroup);
   const { addToast } = useToast();
 
-  async function onRestore(group: DespesaGroup) {
+  async function onRestore(group: PlanGroup) {
     try {
-      await updateExpenseGroup(group.key, { archived: false });
+      await updatePlanGroup(group.id, { archived: false });
       addToast({ messageType: "success", text: "Grupo restaurado" });
     } catch {
       // apiFail already told the user.
@@ -324,11 +292,11 @@ function ArchivedGroups({
       </summary>
       <ul className="mt-1 divide-y divide-hairline">
         {groups.map((group) => {
-          const count = entriesIn(group.key);
+          const count = entriesIn(group.id);
           return (
-            <li key={group.key} className="flex min-h-11 items-center gap-3 py-2">
+            <li key={group.id} className="flex min-h-11 items-center gap-3 py-2">
               <span className="min-w-0 flex-1 text-sm break-words text-ink-soft">
-                {group.label}
+                {group.name}
                 <span className="block text-xs">
                   {formatNumber(count)} {count === 1 ? "lançamento" : "lançamentos"}
                 </span>
@@ -338,7 +306,7 @@ function ArchivedGroups({
                   size="icon"
                   variant="ghost"
                   className="size-11 md:size-8"
-                  aria-label={`Restaurar o grupo ${group.label}`}
+                  aria-label={`Restaurar o grupo ${group.name}`}
                   title="Restaurar grupo"
                   onClick={() => void onRestore(group)}
                 >
@@ -359,6 +327,7 @@ function AccountList({
   stats,
   used,
   canEdit,
+  financing,
   empty = "Sem contas — lançamentos ficam só no grupo",
 }: {
   accounts: Account[];
@@ -366,6 +335,8 @@ function AccountList({
   /** Contas some lançamento points at. */
   used: ReadonlySet<string | undefined>;
   canEdit: boolean;
+  /** A grupo de financiamento: its contas carry a saldo devedor. */
+  financing: boolean;
   /** What an empty grupo says. */
   empty?: string;
 }) {
@@ -384,6 +355,7 @@ function AccountList({
               stats={stats.get(account.id)}
               deletable={!used.has(account.id)}
               canEdit={canEdit}
+              financing={financing}
             />
           ))}
         </ul>
@@ -395,13 +367,14 @@ function AccountList({
           </summary>
           <ul className="divide-y divide-hairline">
             {archived.map((account) => (
-              <AccountRow
-              key={account.id}
-              account={account}
-              stats={stats.get(account.id)}
-              deletable={!used.has(account.id)}
-              canEdit={canEdit}
-            />
+                <AccountRow
+                key={account.id}
+                account={account}
+                stats={stats.get(account.id)}
+                deletable={!used.has(account.id)}
+                canEdit={canEdit}
+                financing={financing}
+              />
             ))}
           </ul>
         </details>
@@ -415,12 +388,15 @@ function AccountRow({
   stats,
   deletable,
   canEdit,
+  financing,
 }: {
   account: Account;
   stats: AccountStats | undefined;
   /** No lançamento points at it; the server still refuses one a recorrência keeps. */
   deletable: boolean;
   canEdit: boolean;
+  /** A conta de financiamento: it edits its saldo devedor inicial too. */
+  financing: boolean;
 }) {
   const updateAccount = useHerdStore((s) => s.updateAccount);
   const removeAccount = useHerdStore((s) => s.removeAccount);
@@ -430,7 +406,6 @@ function AccountRow({
   /** Renaming; a financiamento also edits its saldo devedor inicial and its day. */
   const [draft, setDraft] = useState<{ name: string; opening: string; openingDate: string } | null>(null);
   const archived = Boolean(account.archivedAt);
-  const financing = account.group === "financing";
   const count = stats?.count ?? 0;
 
   function startEdit() {

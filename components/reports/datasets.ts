@@ -102,7 +102,7 @@ export function reportDatasets(data: HerdData, todayIso: string, seeMoney: boole
   ];
   if (seeMoney) {
     datasets.push({
-      ...one("expenses", "Despesas", expensesExportTable(data.expenses, "Despesas", data.expenseGroups)),
+      ...one("expenses", "Despesas", expensesExportTable(data.expenses, "Despesas", data.planGroups ?? [])),
       finance: true,
     });
   }

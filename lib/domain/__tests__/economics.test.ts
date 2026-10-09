@@ -5,7 +5,7 @@ import {
   arrobasSold,
   averageCalfPrice,
   coe,
-  costBreakdown,
+  costBreakdownBetween,
   costPerArroba,
   exchangeRatio,
   farmSystem,
@@ -25,9 +25,8 @@ import type {
   ManejoSession,
   ManejoSessionAnimal,
   Movement,
-  Treatment,
 } from "@/lib/types";
-import { makeAnimal, makeManejoSession } from "./fixtures";
+import { makeAnimal, makeManejoSession, makeTreatment } from "./fixtures";
 
 /** Fixed reference date for deterministic assertions. */
 const REF = "2026-07-24";
@@ -54,18 +53,6 @@ const expense = (partial: Partial<Expense>): Expense => ({
   date: "2026-06-05",
   category: "nutrition",
   amountBrl: 500,
-  ...partial,
-});
-
-const treatment = (partial: Partial<Treatment>): Treatment => ({
-  id: "t-1",
-  animalEarTag: "BR-1",
-  type: "vaccine",
-  name: "Vacina",
-  date: "2026-06-15",
-  status: "done",
-  withdrawalDays: 0,
-  costBrl: 100,
   ...partial,
 });
 
@@ -184,11 +171,8 @@ const expenses: Expense[] = [
   expense({ id: "e-2", date: "2026-03-10", category: "labor", amountBrl: 1000 }),
   expense({ id: "e-3", kind: "revenue", date: "2026-04-01", category: "other", amountBrl: 500 }),
   expense({ id: "e-4", date: "2025-12-15", amountBrl: 800 }),
-];
-
-const treatments: Treatment[] = [
-  treatment({ animalEarTag: "A", date: "2026-03-01", costBrl: 50 }),
-  treatment({ id: "t-2", status: "scheduled", date: "2026-03-01", costBrl: 30 }),
+  // A vacina typed by hand in Sanidade: the only way its cost reaches the COE.
+  expense({ id: "e-5", date: "2026-03-01", category: "health", amountBrl: 50 }),
 ];
 
 const movements: Movement[] = [
@@ -209,7 +193,6 @@ const input: EconomicsInputs = {
   animals: herd,
   manejoSessions: sessions,
   movements,
-  treatments,
   expenses,
   invernadas: [{ id: "inv-1", code: "01", grass: "Braquiária", hectares: 50 }],
   lots: [],
@@ -219,14 +202,13 @@ const empty: EconomicsInputs = {
   animals: [],
   manejoSessions: [],
   movements: [],
-  treatments: [],
   expenses: [],
   invernadas: [],
   lots: [],
 };
 
 describe("monthlyRevenueCost", () => {
-  it("buckets priced sales, expenses and done treatment costs by month", () => {
+  it("buckets priced sales and despesas by month", () => {
     const series = monthlyRevenueCost(
       [
         movement({ date: "2026-06-10", amountBrl: 8000 }),
@@ -234,7 +216,6 @@ describe("monthlyRevenueCost", () => {
         movement({ id: "m-3", type: "transfer", date: "2026-06-13", amountBrl: undefined }),
         movement({ id: "m-4", date: "2026-05-02", amountBrl: 3000 }),
       ],
-      [treatment({ date: "2026-06-15", costBrl: 100 })],
       [expense({ date: "2026-06-05", amountBrl: 500 })],
       3,
       REF
@@ -242,18 +223,17 @@ describe("monthlyRevenueCost", () => {
     expect(series).toHaveLength(3);
     expect(series[0]).toMatchObject({ date: "2026-05-01", revenue: 3000, cost: 0 });
     // Purchases are capital: only the sale counts as June revenue.
-    expect(series[1]).toMatchObject({ date: "2026-06-01", revenue: 8000, cost: 600 });
+    expect(series[1]).toMatchObject({ date: "2026-06-01", revenue: 8000, cost: 500 });
     expect(series[2]).toMatchObject({ date: "2026-07-01", revenue: 0, cost: 0 });
   });
 
   it("excludes legacy sales without a value", () => {
-    const series = monthlyRevenueCost([movement({ amountBrl: undefined })], [], [], 3, REF);
+    const series = monthlyRevenueCost([movement({ amountBrl: undefined })], [], 3, REF);
     expect(series.every((m) => m.revenue === 0)).toBe(true);
   });
 
   it("adds receitas to revenue and keeps them out of cost", () => {
     const series = monthlyRevenueCost(
-      [],
       [],
       [
         expense({ id: "e-1", kind: "revenue", category: "other", date: "2026-06-20", amountBrl: 700 }),
@@ -266,45 +246,10 @@ describe("monthlyRevenueCost", () => {
   });
 });
 
-describe("costBreakdown", () => {
-  it("splits by category, folding done treatments into health", () => {
-    const slices = costBreakdown(
-      [
-        expense({ category: "nutrition", amountBrl: 600 }),
-        expense({ id: "e-2", category: "labor", amountBrl: 300 }),
-      ],
-      [treatment({ costBrl: 100 })],
-      12,
-      REF
-    );
-    expect(slices[0]).toMatchObject({ category: "nutrition", amountBrl: 600, pct: 60 });
-    expect(slices[1]).toMatchObject({ category: "labor", amountBrl: 300, pct: 30 });
-    expect(slices[2]).toMatchObject({ category: "health", amountBrl: 100, pct: 10 });
-  });
-
-  it("returns empty when there is no cost", () => {
-    expect(costBreakdown([], [treatment({ status: "scheduled" })], 12, REF)).toEqual([]);
-  });
-
-  it("skips receitas", () => {
-    expect(
-      costBreakdown(
-        [
-          expense({ kind: "revenue", category: "other", amountBrl: 900 }),
-          expense({ id: "e-2", amountBrl: 100 }),
-        ],
-        [],
-        12,
-        REF
-      )
-    ).toEqual([{ category: "nutrition", amountBrl: 100, pct: 100 }]);
-  });
-});
-
 describe("coe and periodRevenue", () => {
-  it("sums despesas by date (paid or not) and done treatment costs, never receitas", () => {
-    expect(coe(expenses, treatments, P)).toBe(4050);
-    expect(coe([], [], P)).toBe(0);
+  it("sums despesas by date (paid or not), never receitas", () => {
+    expect(coe(expenses, P)).toBe(4050);
+    expect(coe([], P)).toBe(0);
   });
 
   it("splits revenue into priced sales and receitas", () => {
@@ -328,16 +273,25 @@ const withOutside = [...expenses, ...outsideResult];
 
 describe("money outside the resultado", () => {
   it("changes neither the COE, the receita nor the Placar", () => {
-    expect(coe(withOutside, treatments, P)).toBe(4050);
+    expect(coe(withOutside, P)).toBe(4050);
     expect(periodRevenue(withOutside, movements, P)).toEqual({ total: 9500, sales: 9000, other: 500 });
     expect(indicators({ ...input, expenses: withOutside }, P, 300, TODAY)).toEqual(indicators(input, P, 300, TODAY));
   });
 
   it("changes neither the monthly series nor the composição", () => {
-    expect(monthlyRevenueCost(movements, treatments, withOutside, 6, REF)).toEqual(
-      monthlyRevenueCost(movements, treatments, expenses, 6, REF)
-    );
-    expect(costBreakdown(withOutside, treatments, 12, REF)).toEqual(costBreakdown(expenses, treatments, 12, REF));
+    expect(monthlyRevenueCost(movements, withOutside, 6, REF)).toEqual(monthlyRevenueCost(movements, expenses, 6, REF));
+    expect(costBreakdownBetween(withOutside, "0000-01-01", REF)).toEqual(costBreakdownBetween(expenses, "0000-01-01", REF));
+  });
+});
+
+describe("a tratamento with cost", () => {
+  it("stays out of the COE and the Placar, even when the farm's data carries it", () => {
+    // The store's data has the tratamentos; handed in whole, they still count for nothing.
+    const withTreatments = {
+      ...input,
+      treatments: [makeTreatment({ animalEarTag: "A", date: "2026-03-01", status: "done", costBrl: 999 })],
+    };
+    expect(indicators(withTreatments, P, 300, TODAY)).toEqual(indicators(input, P, 300, TODAY));
   });
 });
 

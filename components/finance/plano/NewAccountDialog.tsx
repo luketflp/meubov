@@ -1,17 +1,17 @@
 "use client";
 
 /**
- * "Nova conta": where it sits in the plano — Banco ou caixa, Investimento,
- * Financiamento, Sócios, Despesa (with its grupo: one of the system's or the
- * farm's, archived ones left out) or Receita — then its name.
+ * "Nova conta": where it sits in the plano — Banco ou caixa, or a tipo
+ * (Investimento, Financiamento, Sócios, Despesa, Receita) and one of its
+ * grupos, archived ones left out — then its name.
  * A financiamento may take the saldo devedor it had on a day. "Banco ou
  * caixa" hands over to the conta bancária form (BankAccountDialog), rendered
  * from here so callers need nothing else.
  */
 import { useState, type FormEvent } from "react";
 import { Banknote, HandCoins, Landmark, Receipt, Tractor, Users, type LucideIcon } from "lucide-react";
-import type { AccountGroup, CapitalGroup, ExpenseCategory } from "@/lib/types";
-import { despesaGroups } from "@/lib/domain/groups";
+import type { GroupKind } from "@/lib/types";
+import { groupsOf } from "@/lib/domain/groups";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useToast } from "@/components/providers/Toasts";
 import { parseAmount } from "@/components/finance/parseAmount";
@@ -31,7 +31,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-export type AccountPlace = "bank" | CapitalGroup | "expense" | "revenue";
+/** Banco ou caixa, or the tipo of the grupo the conta goes in. */
+export type AccountPlace = "bank" | GroupKind;
 
 const PLACES: readonly { place: AccountPlace; label: string; hint: string; Icon: LucideIcon }[] = [
   { place: "bank", label: "Banco ou caixa", hint: "conta corrente, caixa, cartão, aplicação · tem saldo", Icon: Landmark },
@@ -72,12 +73,13 @@ export function NewAccountDialog({
   open,
   onOpenChange,
   defaultPlace = "expense",
-  defaultCategory = "nutrition",
+  defaultGroup,
 }: {
   open: boolean;
   onOpenChange(open: boolean): void;
   defaultPlace?: AccountPlace;
-  defaultCategory?: ExpenseCategory;
+  /** The grupo picked first, a PlanGroup id of `defaultPlace` ("+ Conta" of a grupo). */
+  defaultGroup?: string;
 }) {
   /** "Banco ou caixa" was confirmed: the conta bancária form takes over. */
   const [bank, setBank] = useState(false);
@@ -100,7 +102,7 @@ export function NewAccountDialog({
           </DialogHeader>
           <NewAccountForm
             defaultPlace={defaultPlace}
-            defaultCategory={defaultCategory}
+            defaultGroup={defaultGroup}
             onBank={() => setBank(true)}
             onDone={close}
           />
@@ -120,34 +122,37 @@ export function NewAccountDialog({
 
 function NewAccountForm({
   defaultPlace,
-  defaultCategory,
+  defaultGroup,
   onBank,
   onDone,
 }: {
   defaultPlace: AccountPlace;
-  defaultCategory: ExpenseCategory;
+  defaultGroup?: string;
   onBank(): void;
   onDone(): void;
 }) {
   const addAccount = useHerdStore((s) => s.addAccount);
-  const expenseGroups = useHerdStore((s) => s.expenseGroups);
+  const planGroups = useHerdStore((s) => s.planGroups);
   const { addToast } = useToast();
   const [place, setPlace] = useState<AccountPlace>(defaultPlace);
-  const [category, setCategory] = useState<ExpenseCategory>(defaultCategory);
+  const [picked, setPicked] = useState(defaultGroup ?? "");
   const [name, setName] = useState("");
   const [opening, setOpening] = useState("");
   const [openingDate, setOpeningDate] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const groupOptions = place === "bank" ? [] : groupsOf(planGroups, place);
+  // Another place drops a grupo that is not of its tipo for the tipo's first.
+  const group = groupOptions.some((g) => g.id === picked) ? picked : (groupOptions[0]?.id ?? "");
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (place === "bank") return onBank();
+    if (group === "") return;
     const clean = name.trim();
     if (clean === "") return setError("Informe o nome da conta.");
     const start = place === "financing" ? openingFromFields(opening, openingDate) : null;
     if (typeof start === "string") return setError(start);
-    const group: AccountGroup = place === "expense" ? category : place;
     setError(null);
     setBusy(true);
     let created;
@@ -204,23 +209,21 @@ function NewAccountForm({
         <p className="text-xs text-ink-soft">Continue para escolher entre conta corrente, caixa, cartão e aplicação.</p>
       ) : (
         <>
-          {place === "expense" ? (
-            <div className="grid gap-1.5">
-              <Label htmlFor="new-account-group">Grupo</Label>
-              <Select value={category} onValueChange={(value) => setCategory(value as ExpenseCategory)}>
-                <SelectTrigger id="new-account-group" className="min-h-11 w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {despesaGroups(expenseGroups).map((g) => (
-                    <SelectItem key={g.key} value={g.key}>
-                      {g.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
+          <div className="grid gap-1.5">
+            <Label htmlFor="new-account-group">Grupo</Label>
+            <Select value={group} onValueChange={setPicked} disabled={groupOptions.length === 0}>
+              <SelectTrigger id="new-account-group" className="min-h-11 w-full">
+                <SelectValue placeholder="Nenhum grupo — crie um no Plano de contas" />
+              </SelectTrigger>
+              <SelectContent>
+                {groupOptions.map((g) => (
+                  <SelectItem key={g.id} value={g.id}>
+                    {g.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="grid gap-1.5">
             <Label htmlFor="new-account-name">Nome</Label>
             <Input
@@ -276,7 +279,7 @@ function NewAccountForm({
             Cancelar
           </Button>
         </DialogClose>
-        <Button type="submit" className="min-h-11" disabled={busy}>
+        <Button type="submit" className="min-h-11" disabled={busy || (place !== "bank" && group === "")}>
           {place === "bank" ? "Continuar" : "Criar conta"}
         </Button>
       </DialogFooter>

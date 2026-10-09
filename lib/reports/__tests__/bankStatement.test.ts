@@ -73,9 +73,11 @@ const INPUTS: PlanInputs = {
   ],
   manejoSessions: [],
   animals: [],
-  treatments: [],
   lots: [],
-  expenseGroups: [],
+  planGroups: [
+    { id: "nutrition", kind: "expense", name: "Nutrição", createdAt: "2026-01-01T00:00:00.000Z" },
+    { id: "admin", kind: "expense", name: "Administrativo", createdAt: "2026-01-01T00:00:00.000Z" },
+  ],
 };
 
 const all = bankStatement(INPUTS, "all", SEPTEMBER, TODAY);

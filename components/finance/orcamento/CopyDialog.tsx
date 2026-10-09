@@ -42,7 +42,7 @@ interface CopyDialogProps {
   /** The safra copied into; the source is the one before it. */
   safra: number;
   startMonth: number;
-  /** This safra's budgets and the farm's lançamentos, treatments and contas. */
+  /** This safra's budgets and the farm's lançamentos, contas and grupos. */
   inputs: BudgetInputs;
   /** The previous safra's budgets; undefined while they load. */
   source: Budget[] | undefined;

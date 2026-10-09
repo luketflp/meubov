@@ -11,15 +11,13 @@
  * never read from a counter: a cobertura recorded anywhere in the app shows up
  * here at once.
  *
- * "Novo touro" needs Reprodução edit; "Registrar compra" writes an expense, so
- * it needs Financeiro edit on top, and the cost per dose shows only to whoever
- * sees Financeiro. Excluir takes the bull's purchases and their expenses
- * along, so with a purchase it asks Financeiro edit as well.
+ * "Novo touro", "Registrar compra" and Excluir need Reprodução edit: a
+ * purchase is stock, not money in the Financeiro, and a deleted bull takes its
+ * purchases along. The cost per dose shows only to whoever sees Financeiro.
  */
 import { useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import { Dna } from "lucide-react";
-import type { SemenBull } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
 import { formatDate } from "@/lib/domain/dates";
@@ -68,11 +66,7 @@ export function SemenBullsList() {
   const semenBulls = useHerdStore((s) => s.semenBulls);
   const animals = useHerdStore((s) => s.animals);
   const canEdit = useCan("reproduction", "edit");
-  const canEditFinance = useCan("finance", "edit");
   const seeMoney = useCan("finance", "view");
-  const canBuy = canEdit && canEditFinance;
-  const canDelete = (bull: SemenBull) =>
-    canEdit && (bull.purchases.length === 0 || canEditFinance);
   // A bull registered here is appended unsorted; the list reads by name.
   const rows = useMemo(
     () =>
@@ -173,10 +167,8 @@ export function SemenBullsList() {
                     {canEdit ? (
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {canBuy ? <SemenPurchaseDialog bull={bull} variant="row" /> : null}
-                          {canDelete(bull) ? (
-                            <DeleteSemenBullButton bull={bull} variant="row" />
-                          ) : null}
+                          <SemenPurchaseDialog bull={bull} variant="row" />
+                          <DeleteSemenBullButton bull={bull} variant="row" />
                         </div>
                       </TableCell>
                     ) : null}
@@ -198,7 +190,7 @@ export function SemenBullsList() {
                     </Link>
                     <div className="flex items-center gap-2">
                       <StockPill left={stock.left} />
-                      {canDelete(bull) ? <DeleteSemenBullButton bull={bull} variant="card" /> : null}
+                      {canEdit ? <DeleteSemenBullButton bull={bull} variant="card" /> : null}
                     </div>
                   </div>
                   {identity.length > 0 ? (
@@ -225,7 +217,7 @@ export function SemenBullsList() {
                       <span className="font-mono text-ink">{formatDate(stock.lastPurchase)}</span>
                     </p>
                   )}
-                  {canBuy ? <SemenPurchaseDialog bull={bull} variant="card" /> : null}
+                  {canEdit ? <SemenPurchaseDialog bull={bull} variant="card" /> : null}
                 </li>
               );
             })}

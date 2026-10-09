@@ -5,8 +5,7 @@ import { t } from "elysia";
 import { DateString } from "@/lib/api/schemas/shared.schema";
 
 /**
- * Grupo of a conta: "revenue" (Receitas), one of the three fora do resultado,
- * or a despesa grupo (a built-in key or the id of one of the farm's grupos).
+ * Grupo of a conta: the id of one of the farm's grupos, of any kind.
  * AddAccount answers 400 `invalid_category` for anything else.
  */
 export const AccountGroupModel = t.String({ minLength: 1, maxLength: 64 });

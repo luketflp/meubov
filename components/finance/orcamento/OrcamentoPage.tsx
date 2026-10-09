@@ -15,7 +15,7 @@ import { Copy, Plus, Target } from "lucide-react";
 import type { ExpenseCategory } from "@/lib/types";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
-import { despesaGroups } from "@/lib/domain/groups";
+import { groupsOf } from "@/lib/domain/groups";
 import { budgetView, safraLabel, safraOf, safraRange, type BudgetInputs, type BudgetView } from "@/lib/domain/budget";
 import { MONTH_ABBREV, formatDate, todayISO } from "@/lib/domain/dates";
 import { formatNumber } from "@/lib/domain/format";
@@ -46,9 +46,8 @@ export function OrcamentoPage() {
   // An offline snapshot from before the orçamento has no início da safra.
   const startMonth = useHerdStore((s) => s.farm.safraStartMonth ?? 10);
   const expenses = useHerdStore((s) => s.expenses);
-  const treatments = useHerdStore((s) => s.treatments);
   const accounts = useHerdStore((s) => s.accounts);
-  const expenseGroups = useHerdStore((s) => s.expenseGroups);
+  const planGroups = useHerdStore((s) => s.planGroups);
   const loadBudgets = useHerdStore((s) => s.loadBudgets);
   const today = todayISO();
 
@@ -88,8 +87,8 @@ export function OrcamentoPage() {
   }, [previousMissing, safra, loadBudgets]);
 
   const inputs = useMemo<BudgetInputs>(
-    () => ({ budgets: budgets ?? [], expenses, treatments, accounts, expenseGroups }),
-    [budgets, expenses, treatments, accounts, expenseGroups]
+    () => ({ budgets: budgets ?? [], expenses, accounts, planGroups }),
+    [budgets, expenses, accounts, planGroups]
   );
   const view = useMemo(
     () => (budgets ? budgetView(inputs, safra, startMonth, today) : null),
@@ -97,15 +96,13 @@ export function OrcamentoPage() {
   );
   const range = safraRange(safra, startMonth);
   const budgeted = view?.groups.some((group) => group.hasBudget) ?? false;
-  /** "Orçar um grupo": the first active grupo without an orçado, Nutrição on an empty safra. */
-  const orcar = () =>
-    setEditing({
-      category:
-        despesaGroups(expenseGroups).find(
-          ({ key }) => !view?.groups.some((g) => g.category === key && g.hasBudget)
-        )?.key ?? "nutrition",
-      pick: true,
-    });
+  /** "Orçar um grupo": the first active grupo without an orçado, else the first one; nothing without any. */
+  const orcar = () => {
+    const groups = groupsOf(planGroups, "expense");
+    const next =
+      groups.find(({ id }) => !view?.groups.some((g) => g.category === id && g.hasBudget)) ?? groups[0];
+    if (next) setEditing({ category: next.id, pick: true });
+  };
   const onEdit = (category: ExpenseCategory) => setEditing({ category, pick: false });
 
   return (
@@ -161,7 +158,12 @@ export function OrcamentoPage() {
                 <Copy aria-hidden />
                 Copiar da safra anterior
               </Button>
-              <Button className="min-h-11 md:min-h-8" onClick={orcar}>
+              <Button
+                className="min-h-11 md:min-h-8"
+                onClick={orcar}
+                disabled={groupsOf(planGroups, "expense").length === 0}
+                title={groupsOf(planGroups, "expense").length === 0 ? "Crie um grupo de despesa no Plano de contas" : undefined}
+              >
                 <Plus aria-hidden />
                 Orçar um grupo
               </Button>

@@ -278,13 +278,21 @@ async function seed(email: string, force: boolean): Promise<void> {
         );
       }
 
+      const groups = data.planGroups ?? [];
+      const groupIdMap = new Map(groups.map((g) => [g.id, randomUUID()]));
+      if (groups.length > 0) {
+        await tx.insert(schema.planGroups).values(
+          groups.map((g) => ({ id: groupIdMap.get(g.id)!, farmId, kind: g.kind, name: g.name }))
+        );
+      }
+
       const accountIdMap = new Map(data.accounts.map((a) => [a.id, randomUUID()]));
       if (data.accounts.length > 0) {
         await tx.insert(schema.accounts).values(
           data.accounts.map((a) => ({
             id: accountIdMap.get(a.id)!,
             farmId,
-            group: a.group,
+            group: groupIdMap.get(a.group)!,
             name: a.name,
           }))
         );
@@ -297,7 +305,7 @@ async function seed(email: string, force: boolean): Promise<void> {
             farmId,
             kind: e.kind,
             date: e.date,
-            category: e.category,
+            category: e.category === undefined ? undefined : groupIdMap.get(e.category)!,
             amountBrl: e.amountBrl,
             notes: e.notes,
             dueDate: e.dueDate,
@@ -317,7 +325,7 @@ async function seed(email: string, force: boolean): Promise<void> {
           `${data.invernadas.length} invernadas, ${data.lotPlacements.length} placements, ` +
           `${data.manejoSessions.length} manejo sessions, ` +
           `${data.movements.length} legacy movements, ` +
-          `${data.accounts.length} accounts, ` +
+          `${groups.length} grupos, ${data.accounts.length} accounts, ` +
           `${data.expenses.length} expenses.`
       );
     });

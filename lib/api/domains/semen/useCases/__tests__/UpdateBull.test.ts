@@ -81,7 +81,6 @@ const PURCHASE_ROW = {
   doses: 30,
   totalBrl: 1140,
   seller: null,
-  expenseId: "e-1",
 };
 
 beforeEach(() => {
@@ -109,7 +108,7 @@ describe("updateSemenBull", () => {
       breed: "Nelore",
       central: "CRV Lagoa",
       purchases: [
-        { id: "p-1", date: "2026-08-01", doses: 30, totalBrl: 1140, expenseId: "e-1" },
+        { id: "p-1", date: "2026-08-01", doses: 30, totalBrl: 1140 },
       ],
     });
   });

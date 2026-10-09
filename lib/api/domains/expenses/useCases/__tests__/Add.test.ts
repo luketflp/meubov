@@ -5,8 +5,9 @@
  * movimento; a rendimento takes its aplicação and is paid on its data.
  *
  * Same chainable db stub as the other use-case tests: selects answer from a
- * queued list of rows (a farm grupo when the category is not a built-in one,
- * the conta do plano, then "Pago por"), inserts record the row and echo it.
+ * queued list of rows (the grupo, the conta do plano, then "Pago por"),
+ * inserts record the row and echo it. The grupo rules themselves are
+ * entryRules.test.ts's.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -45,7 +46,11 @@ vi.mock("@/lib/db", () => ({ db: { select: selectBuilder, insert: insertBuilder 
 
 import { AddExpenseUseCase } from "../Add.useCase";
 
-const ENTRY = { farmId: 7, date: "2026-09-10", category: "nutrition" as const, amountBrl: 500 };
+const ENTRY = { farmId: 7, date: "2026-09-10", category: "grp-nutricao", amountBrl: 500 };
+/** A plan_groups row of the farm, as the grupo check reads it. */
+const grupo = (id: string, kind: string) =>
+  ({ id, farmId: 7, kind, name: id, archivedAt: null, createdAt: new Date(0) });
+const NUTRICAO = grupo("grp-nutricao", "expense");
 const add = (input: Parameters<AddExpenseUseCase["run"]>[0]) => new AddExpenseUseCase().run(input);
 
 beforeEach(() => {
@@ -55,12 +60,12 @@ beforeEach(() => {
 
 describe("addExpense", () => {
   it("writes every new column, a despesa by default", async () => {
-    state.selectResults = [[{ group: "nutrition" }]];
+    state.selectResults = [[NUTRICAO], [{ group: "grp-nutricao" }]];
 
     const result = await new AddExpenseUseCase().run({
       farmId: 7,
       date: "2026-09-10",
-      category: "nutrition",
+      category: "grp-nutricao",
       amountBrl: 500,
       notes: "Sal",
       dueDate: "2026-09-20",
@@ -76,7 +81,7 @@ describe("addExpense", () => {
       kind: "expense",
       flow: null,
       date: "2026-09-10",
-      category: "nutrition",
+      category: "grp-nutricao",
       amountBrl: 500,
       notes: "Sal",
       dueDate: "2026-09-20",
@@ -89,17 +94,20 @@ describe("addExpense", () => {
     expect(result).toMatchObject({ kind: "expense", dueDate: "2026-09-20" });
   });
 
-  it("writes absent optionals as null", async () => {
+  it("writes a receita in its grupo, absent optionals as null", async () => {
+    state.selectResults = [[grupo("grp-receitas", "revenue")]];
+
     await new AddExpenseUseCase().run({
       farmId: 7,
       kind: "revenue",
       date: "2026-09-10",
-      category: "other",
+      category: "grp-receitas",
       amountBrl: 800,
     });
 
     expect(state.inserts[0]).toMatchObject({
       kind: "revenue",
+      category: "grp-receitas",
       dueDate: null,
       paidAt: null,
       counterparty: null,
@@ -109,11 +117,18 @@ describe("addExpense", () => {
     });
   });
 
+  it("refuses a receita sent without grupo and inserts nothing", async () => {
+    expect(await add({ ...ENTRY, kind: "revenue", category: undefined })).toBe("invalid_category");
+    expect(state.inserts).toEqual([]);
+  });
+
   it("refuses a vencimento before the data and inserts nothing", async () => {
+    state.selectResults = [[NUTRICAO]];
+
     const result = await new AddExpenseUseCase().run({
       farmId: 7,
       date: "2026-09-10",
-      category: "nutrition",
+      category: "grp-nutricao",
       amountBrl: 500,
       dueDate: "2026-09-01",
     });
@@ -124,69 +139,62 @@ describe("addExpense", () => {
 });
 
 describe("addExpense — fora do resultado", () => {
-  it("refuses an investimento without conta, or with a conta of another group or farm", async () => {
-    const compra = { ...ENTRY, kind: "investment" as const, amountBrl: 38000 };
+  const INVESTIMENTOS = grupo("grp-investimentos", "investment");
+  const compra = { ...ENTRY, kind: "investment" as const, category: "grp-investimentos", amountBrl: 38000 };
+
+  it("refuses an investimento without conta, or with a conta of another grupo or farm", async () => {
+    state.selectResults = [[INVESTIMENTOS]];
     expect(await add(compra)).toBe("invalid_account");
-    state.selectResults = [[{ group: "financing" }]];
+    state.selectResults = [[INVESTIMENTOS], [{ group: "grp-financiamentos" }]];
     expect(await add({ ...compra, accountId: "acc-pronaf" })).toBe("invalid_account");
-    state.selectResults = [[]];
+    state.selectResults = [[INVESTIMENTOS], []];
     expect(await add({ ...compra, accountId: "acc-of-another-farm" })).toBe("invalid_account");
     expect(state.inserts).toEqual([]);
   });
 
-  it("stores a capital lançamento sent without movimento as a saída, without grupo or lote", async () => {
-    state.selectResults = [[{ group: "partners" }]];
+  it("stores a capital lançamento sent without movimento as a saída, in its grupo, without lote", async () => {
+    state.selectResults = [[grupo("grp-socios", "partners")], [{ group: "grp-socios" }]];
 
-    await add({ ...ENTRY, kind: "partners", accountId: "acc-retiradas", lotId: "lot-1" });
+    await add({ ...ENTRY, kind: "partners", category: "grp-socios", accountId: "acc-retiradas", lotId: "lot-1" });
 
     expect(state.inserts[0]).toMatchObject({
       kind: "partners",
       flow: "out",
-      category: "other",
+      category: "grp-socios",
       lotId: null,
       accountId: "acc-retiradas",
     });
   });
 
-  it("keeps a despesa or a receita out of the contas fora do resultado", async () => {
-    state.selectResults = [[{ group: "investment" }]];
-    expect(await add({ ...ENTRY, accountId: "acc-benfeitorias" })).toBe("invalid_account");
-    state.selectResults = [[{ group: "partners" }]];
-    expect(await add({ ...ENTRY, kind: "revenue", category: "other", accountId: "acc-aportes" })).toBe(
-      "invalid_account"
-    );
-    expect(state.inserts).toEqual([]);
-  });
-
   it("lets a cartão pay a compra, never a retirada or a venda do bem", async () => {
     const paidByCard = { paidAt: "2026-09-10", bankAccountId: "cartao" };
     const card = [{ kind: "card", archivedAt: null }];
-    state.selectResults = [[{ group: "partners" }], card];
-    expect(await add({ ...ENTRY, kind: "partners", accountId: "acc-retiradas", ...paidByCard })).toBe(
+    const retirada = { ...ENTRY, kind: "partners" as const, category: "grp-socios", accountId: "acc-retiradas" };
+    state.selectResults = [[grupo("grp-socios", "partners")], [{ group: "grp-socios" }], card];
+    expect(await add({ ...retirada, ...paidByCard })).toBe("invalid_bank_account");
+    state.selectResults = [[INVESTIMENTOS], [{ group: "grp-investimentos" }], card];
+    expect(await add({ ...compra, flow: "in", accountId: "acc-maquinas", ...paidByCard })).toBe(
       "invalid_bank_account"
     );
-    state.selectResults = [[{ group: "investment" }], card];
-    expect(
-      await add({ ...ENTRY, kind: "investment", flow: "in", accountId: "acc-maquinas", ...paidByCard })
-    ).toBe("invalid_bank_account");
     expect(state.inserts).toEqual([]);
 
-    state.selectResults = [[{ group: "investment" }], card];
-    expect(await add({ ...ENTRY, kind: "investment", accountId: "acc-maquinas", ...paidByCard })).toMatchObject({
+    state.selectResults = [[INVESTIMENTOS], [{ group: "grp-investimentos" }], card];
+    expect(await add({ ...compra, accountId: "acc-maquinas", ...paidByCard })).toMatchObject({
       kind: "investment",
       flow: "out",
       bankAccountId: "cartao",
     });
   });
 
-  it("keeps a rendimento in its aplicação, paid on its data, and refuses it anywhere else", async () => {
+  it("keeps a rendimento in its aplicação, paid on its data, without grupo, and refuses it anywhere else", async () => {
     const rendimento = { ...ENTRY, kind: "yield" as const, amountBrl: 812.4 };
+    // Only "Pago por" is read: a rendimento asks no grupo, even when the form sends one.
     state.selectResults = [[{ kind: "investment", archivedAt: null }]];
     await add({ ...rendimento, dueDate: "2026-09-30", lotId: "lot-1", bankAccountId: "cdb" });
     expect(state.inserts[0]).toMatchObject({
       kind: "yield",
       flow: null,
-      category: "other",
+      category: null,
       dueDate: null,
       paidAt: "2026-09-10",
       accountId: null,
@@ -199,46 +207,5 @@ describe("addExpense — fora do resultado", () => {
     expect(await add(rendimento)).toBe("invalid_bank_account");
     expect(await add({ ...rendimento, accountId: "acc-1", bankAccountId: "cdb" })).toBe("invalid_account");
     expect(state.inserts).toHaveLength(1);
-  });
-});
-
-describe("addExpense — grupo", () => {
-  it("takes a grupo of the farm with a conta of that grupo", async () => {
-    // The grupo (one of this farm's), then the conta do plano.
-    state.selectResults = [[{ id: "grp-maq" }], [{ group: "grp-maq" }]];
-
-    await add({ ...ENTRY, category: "grp-maq", accountId: "acc-trator" });
-
-    expect(state.inserts[0]).toMatchObject({ kind: "expense", category: "grp-maq", accountId: "acc-trator" });
-  });
-
-  it("refuses a grupo of another farm or an unknown key, before reading the conta", async () => {
-    // The farm filter finds no grupo by that id; the conta queued after it is never read.
-    state.selectResults = [[], [{ group: "grp-maq" }]];
-    expect(await add({ ...ENTRY, category: "grp-of-another-farm", accountId: "acc-trator" })).toBe(
-      "invalid_category"
-    );
-    expect(state.selectResults).toEqual([[{ group: "grp-maq" }]]);
-
-    state.selectResults = [[]];
-    expect(await add({ ...ENTRY, category: "fuel" })).toBe("invalid_category");
-    expect(state.inserts).toEqual([]);
-  });
-
-  it("keeps a despesa in a conta of its own grupo and a receita in a conta of Receitas", async () => {
-    // A built-in grupo asks nothing: the only select is the conta.
-    state.selectResults = [[{ group: "admin" }]];
-    expect(await add({ ...ENTRY, accountId: "acc-escritorio" })).toBe("invalid_account");
-    state.selectResults = [[{ id: "grp-maq" }], [{ group: "nutrition" }]];
-    expect(await add({ ...ENTRY, category: "grp-maq", accountId: "acc-sal" })).toBe("invalid_account");
-    state.selectResults = [[{ group: "nutrition" }]];
-    expect(await add({ ...ENTRY, kind: "revenue", category: "other", accountId: "acc-sal" })).toBe(
-      "invalid_account"
-    );
-    expect(state.inserts).toEqual([]);
-
-    state.selectResults = [[{ group: "revenue" }]];
-    await add({ ...ENTRY, kind: "revenue", category: "other", accountId: "acc-aluguel" });
-    expect(state.inserts[0]).toMatchObject({ kind: "revenue", category: "other", accountId: "acc-aluguel" });
   });
 });

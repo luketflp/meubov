@@ -11,12 +11,11 @@
  * asks nothing first — the server refuses it when its doses were already used,
  * and the toast says so.
  *
- * Editing the bull needs Reprodução edit; a purchase is an expense, so buying
- * and deleting one need Financeiro edit on top, as does deleting the bull once
- * it has a purchase — its purchases and their expenses go with it, and the
- * farmer lands back on the Touros tab. Every R$ — cost per dose, the valor
- * total of each purchase and of all of them — shows only to whoever sees
- * Financeiro.
+ * Editing the bull, buying and deleting a purchase and deleting the bull need
+ * Reprodução edit: a purchase is stock, not money in the Financeiro. A deleted
+ * bull takes its purchases along and the farmer lands back on the Touros tab.
+ * Every R$ — cost per dose, the valor total of each purchase and of all of
+ * them — shows only to whoever sees Financeiro.
  */
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -165,7 +164,7 @@ interface BullPurchasesProps {
   animals: Animal[];
   /** Financeiro at least view: valor total and por dose show. */
   seeMoney: boolean;
-  /** Reprodução and Financeiro edit: each purchase has its delete. */
+  /** Reprodução edit: each purchase has its delete. */
   canRemove: boolean;
 }
 
@@ -180,7 +179,7 @@ function BullPurchases({ bull, animals, seeMoney, canRemove }: BullPurchasesProp
     [bull.purchases]
   );
 
-  /** Deletes the purchase and its expense, unless its doses were already used. */
+  /** Deletes the purchase, unless its doses were already used. */
   async function onRemove(purchase: SemenPurchase) {
     setRemoving(true);
     try {
@@ -395,10 +394,7 @@ function BullRecord({ bull }: { bull: SemenBull }) {
   const animals = useHerdStore((s) => s.animals);
   const lots = useHerdStore((s) => s.lots);
   const canEdit = useCan("reproduction", "edit");
-  const canEditFinance = useCan("finance", "edit");
   const seeMoney = useCan("finance", "view");
-  const canBuy = canEdit && canEditFinance;
-  const canDelete = canEdit && (bull.purchases.length === 0 || canEditFinance);
   const router = useRouter();
   const inseminations = useMemo(() => bullInseminations(bull.id, animals), [bull.id, animals]);
   const subtitle = [bull.breed, bull.central].filter(Boolean).join(" · ");
@@ -446,14 +442,12 @@ function BullRecord({ bull }: { bull: SemenBull }) {
             {canEdit ? (
               <>
                 <SemenBullDialog bull={bull} />
-                {canBuy ? <SemenPurchaseDialog bull={bull} variant="header" /> : null}
-                {canDelete ? (
-                  <DeleteSemenBullButton
-                    bull={bull}
-                    variant="header"
-                    onDeleted={() => router.replace(TOUROS_TAB)}
-                  />
-                ) : null}
+                <SemenPurchaseDialog bull={bull} variant="header" />
+                <DeleteSemenBullButton
+                  bull={bull}
+                  variant="header"
+                  onDeleted={() => router.replace(TOUROS_TAB)}
+                />
               </>
             ) : null}
           </>
@@ -465,7 +459,7 @@ function BullRecord({ bull }: { bull: SemenBull }) {
         inseminations={inseminations}
         seeMoney={seeMoney}
       />
-      <BullPurchases bull={bull} animals={animals} seeMoney={seeMoney} canRemove={canBuy} />
+      <BullPurchases bull={bull} animals={animals} seeMoney={seeMoney} canRemove={canEdit} />
       <BullInseminations rows={inseminations} />
     </>
   );

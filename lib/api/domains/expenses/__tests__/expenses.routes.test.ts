@@ -6,8 +6,8 @@
  * - another farm's lançamento is a 404;
  * - a refusal is a 400 naming it.
  *
- * POST /expenses takes a farm grupo's id as its category (not just one of the
- * seven built-in keys) and answers 400 naming `invalid_category`.
+ * POST /expenses takes a grupo id as its category, or none (a rendimento),
+ * and answers 400 naming `invalid_category`: the use case judges the grupo.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FULL_PERMISSIONS, PRESETS } from "@/lib/domain/permissions";
@@ -103,5 +103,22 @@ describe("POST /expenses", () => {
     expect(add).toHaveBeenCalledWith({ farmId: 7, ...entry });
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "invalid_category" });
+  });
+
+  it("takes a body without category: a rendimento sends none", async () => {
+    state.membership = [{ role: "member", preset: null, permissions: FULL_PERMISSIONS }];
+    add.mockResolvedValueOnce({ id: "e-1" });
+    const entry = { date: "2026-09-10", kind: "yield", amountBrl: 812.4, bankAccountId: "cdb" };
+
+    const response = await herdApi.handle(
+      new Request("http://localhost/api/herd/expenses", {
+        method: "POST",
+        headers: { "x-farm-id": "7", "content-type": "application/json" },
+        body: JSON.stringify(entry),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(add).toHaveBeenCalledWith({ farmId: 7, ...entry });
   });
 });

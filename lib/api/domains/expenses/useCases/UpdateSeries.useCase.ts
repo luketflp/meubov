@@ -30,7 +30,7 @@ type CurrUseCase = _UseCase<UpdateSeriesUseCaseProps, UpdateSeriesUseCaseRespons
 
 type SharedFields = Partial<
   Pick<
-    typeof expenses.$inferInsert,
+    typeof expenseSeries.$inferInsert,
     "category" | "flow" | "accountId" | "lotId" | "history" | "counterparty" | "document" | "notes" | "amountBrl"
   >
 >;
@@ -45,7 +45,8 @@ function sharedFields(patch: ExpensePatchInput, recurring: boolean, row: Expense
   const fields: SharedFields = {
     category: category === undefined ? undefined : row.category,
     flow: flow === undefined ? undefined : (row.flow ?? null),
-    accountId,
+    // A new grupo takes the edited row's conta along (maybe none): a sibling never keeps a conta of the old grupo.
+    accountId: category === undefined && accountId === undefined ? undefined : (row.accountId ?? null),
     lotId: lotId === undefined ? undefined : (row.lotId ?? null),
     history,
     counterparty,

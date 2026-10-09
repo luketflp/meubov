@@ -26,7 +26,7 @@ const ROW = {
   farmId: 7,
   kind: "expense",
   date: "2026-09-10",
-  category: "nutrition",
+  category: "grp-nutricao",
   amountBrl: 4850,
   notes: null,
   dueDate: null,
@@ -40,7 +40,12 @@ const ROW = {
   bankAccountId: "sicredi",
 };
 
-const entry = { farmId: 7, date: "2026-09-18", category: "nutrition" as const, amountBrl: 4850 };
+const entry = { farmId: 7, date: "2026-09-18", category: "grp-nutricao", amountBrl: 4850 };
+/** A plan_groups row of the farm, as the grupo check reads it before "Pago por". */
+const grupo = (id: string, kind: string) =>
+  ({ id, farmId: 7, kind, name: id, archivedAt: null, createdAt: new Date(0) });
+const NUTRICAO = grupo("grp-nutricao", "expense");
+const RECEITAS = grupo("grp-receitas", "revenue");
 
 beforeEach(() => {
   state.selectResults = [];
@@ -51,7 +56,7 @@ beforeEach(() => {
 
 describe("AddExpenseUseCase with Pago por", () => {
   it("keeps the conta of a paid lançamento", async () => {
-    state.selectResults = [[{ kind: "checking", archivedAt: null }]];
+    state.selectResults = [[NUTRICAO], [{ kind: "checking", archivedAt: null }]];
     state.returning = [[ROW]];
     const created = await new AddExpenseUseCase().run({ ...entry, paidAt: "2026-09-18", bankAccountId: "sicredi" });
     expect(state.inserts[0]).toMatchObject({ paidAt: "2026-09-18", bankAccountId: "sicredi" });
@@ -59,20 +64,22 @@ describe("AddExpenseUseCase with Pago por", () => {
   });
 
   it("drops the conta of a pending lançamento without asking", async () => {
+    state.selectResults = [[NUTRICAO]];
     state.returning = [[{ ...ROW, paidAt: null, bankAccountId: null }]];
     await new AddExpenseUseCase().run({ ...entry, bankAccountId: "sicredi" });
     expect(state.inserts[0]).toMatchObject({ paidAt: null, bankAccountId: null });
   });
 
   it("refuses a conta of another farm and a cartão for a receita", async () => {
-    state.selectResults = [[]];
+    state.selectResults = [[NUTRICAO], []];
     expect(await new AddExpenseUseCase().run({ ...entry, paidAt: "2026-09-18", bankAccountId: "other" })).toBe(
       "invalid_bank_account"
     );
-    state.selectResults = [[{ kind: "card", archivedAt: null }]];
-    expect(
-      await new AddExpenseUseCase().run({ ...entry, kind: "revenue", paidAt: "2026-09-18", bankAccountId: "card" })
-    ).toBe("invalid_bank_account");
+    state.selectResults = [[RECEITAS], [{ kind: "card", archivedAt: null }]];
+    const receita = { ...entry, kind: "revenue" as const, category: "grp-receitas" };
+    expect(await new AddExpenseUseCase().run({ ...receita, paidAt: "2026-09-18", bankAccountId: "card" })).toBe(
+      "invalid_bank_account"
+    );
     expect(state.inserts).toEqual([]);
   });
 });
@@ -104,10 +111,10 @@ describe("UpdateExpenseUseCase with Pago por", () => {
   });
 
   it("checks the conta the row keeps when the kind changes: no receita on a cartão", async () => {
-    state.selectResults = [[{ ...ROW, bankAccountId: "card" }], [{ kind: "card", archivedAt: "2026-09-01" }]];
-    expect(await new UpdateExpenseUseCase().run({ farmId: 7, id: "e-1", patch: { kind: "revenue" } })).toBe(
-      "invalid_bank_account"
-    );
+    // The row, the receita grupo sent with the new kind, then the cartão it keeps.
+    state.selectResults = [[{ ...ROW, bankAccountId: "card" }], [RECEITAS], [{ kind: "card", archivedAt: "2026-09-01" }]];
+    const patch = { kind: "revenue" as const, category: "grp-receitas" };
+    expect(await new UpdateExpenseUseCase().run({ farmId: 7, id: "e-1", patch })).toBe("invalid_bank_account");
     expect(state.updates).toEqual([]);
   });
 });

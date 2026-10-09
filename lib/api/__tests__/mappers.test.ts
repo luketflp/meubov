@@ -1,22 +1,22 @@
 /**
  * toExpense: the série a row belongs to decides its markers ("2/3", "todo dia 20").
  * toAccount: a financiamento carries its saldo inicial.
- * toExpenseGroup: a farm grupo with its dates in ISO, archivedAt only once archived.
+ * toPlanGroup: a grupo with its tipo and its dates in ISO, archivedAt only once archived.
  * toBankAccount: "conciliado até" and the pending count come from its linhas.
  * toBudget: a month of a grupo's or a conta's line, without the farm and audit columns.
  * toFarmData: the início da safra travels with the farm.
  */
 import { describe, expect, it } from "vitest";
 
-import { toAccount, toBankAccount, toBudget, toExpense, toExpenseGroup, toFarmData } from "@/lib/api/mappers";
+import { toAccount, toBankAccount, toBudget, toExpense, toFarmData, toPlanGroup } from "@/lib/api/mappers";
 import type {
   BankAccountRow,
   BudgetRow,
-  ExpenseGroupRow,
   ExpenseRow,
   ExpenseSeriesRow,
   FarmAccountRow,
   FarmRow,
+  PlanGroupRow,
 } from "@/lib/db/schema";
 
 const ROW: ExpenseRow = {
@@ -25,7 +25,7 @@ const ROW: ExpenseRow = {
   kind: "expense",
   flow: null,
   date: "2026-09-27",
-  category: "nutrition",
+  category: "g-nut",
   amountBrl: 4000,
   notes: null,
   dueDate: "2026-11-10",
@@ -87,6 +87,13 @@ describe("toExpense", () => {
     expect(toExpense({ ...ROW, kind: "financing", flow: "in" })).toMatchObject({ kind: "financing", flow: "in" });
     expect(toExpense(ROW).flow).toBeUndefined();
   });
+
+  it("carries the grupo, and none on a rendimento", () => {
+    expect(toExpense(ROW).category).toBe("g-nut");
+    const rendimento = toExpense({ ...ROW, kind: "yield", category: null });
+    expect(rendimento).toMatchObject({ kind: "yield", amountBrl: 4000 });
+    expect(rendimento.category).toBeUndefined();
+  });
 });
 
 const ACCOUNT: FarmAccountRow = {
@@ -108,21 +115,23 @@ describe("toAccount", () => {
   });
 });
 
-describe("toExpenseGroup", () => {
-  it("dates the grupo in ISO and leaves archivedAt out while it is active", () => {
-    const row: ExpenseGroupRow = {
+describe("toPlanGroup", () => {
+  it("carries the tipo, dates the grupo in ISO and leaves archivedAt out while it is active", () => {
+    const row: PlanGroupRow = {
       id: "g-1",
       farmId: 7,
-      name: "Máquinas e veículos",
+      kind: "financing",
+      name: "Pronaf",
       archivedAt: null,
       createdAt: new Date("2026-10-01T12:00:00Z"),
     };
-    expect(toExpenseGroup(row)).toEqual({
+    expect(toPlanGroup(row)).toEqual({
       id: "g-1",
-      name: "Máquinas e veículos",
+      kind: "financing",
+      name: "Pronaf",
       createdAt: "2026-10-01T12:00:00.000Z",
     });
-    expect(toExpenseGroup({ ...row, archivedAt: new Date("2026-10-03T09:00:00Z") }).archivedAt).toBe(
+    expect(toPlanGroup({ ...row, archivedAt: new Date("2026-10-03T09:00:00Z") }).archivedAt).toBe(
       "2026-10-03T09:00:00.000Z"
     );
   });

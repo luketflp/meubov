@@ -16,7 +16,6 @@ import type {
   Calving,
   CustomCategory,
   Expense,
-  ExpenseGroup,
   FarmData,
   Invernada,
   Lot,
@@ -25,6 +24,7 @@ import type {
   ManejoSessionAnimal,
   ManejoTreatmentPlan,
   Movement,
+  PlanGroup,
   PregnancyDiagnosis,
   ReproductionRecord,
   SemenBull,
@@ -43,7 +43,6 @@ import type {
   BudgetRow,
   CalvingRow,
   CustomCategoryRow,
-  ExpenseGroupRow,
   ExpenseRow,
   ExpenseSeriesRow,
   FarmAccountRow,
@@ -54,6 +53,7 @@ import type {
   ManejoSessionAnimalRow,
   ManejoSessionRow,
   MovementRow,
+  PlanGroupRow,
   PregnancyDiagnosisRow,
   SemenBullRow,
   SemenPurchaseRow,
@@ -106,7 +106,6 @@ export function toSemenPurchase(row: SemenPurchaseRow): SemenPurchase {
     doses: row.doses,
     totalBrl: row.totalBrl,
     seller: orNothing(row.seller),
-    expenseId: orNothing(row.expenseId),
   };
 }
 
@@ -235,7 +234,7 @@ export function toExpense(
     kind: row.kind,
     flow: orNothing(row.flow),
     date: row.date,
-    category: row.category,
+    category: orNothing(row.category),
     amountBrl: row.amountBrl,
     notes: orNothing(row.notes),
     dueDate: orNothing(row.dueDate),
@@ -277,9 +276,10 @@ export function toAccount(row: FarmAccountRow): Account {
   };
 }
 
-export function toExpenseGroup(row: ExpenseGroupRow): ExpenseGroup {
+export function toPlanGroup(row: PlanGroupRow): PlanGroup {
   return {
     id: row.id,
+    kind: row.kind,
     name: row.name,
     archivedAt: row.archivedAt?.toISOString(),
     createdAt: row.createdAt.toISOString(),

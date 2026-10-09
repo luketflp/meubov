@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Animal, ExpenseGroup, ManejoSession } from "@/lib/types";
+import type { Animal, ManejoSession, PlanGroup } from "@/lib/types";
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 const repoLoad = vi.hoisted(() => vi.fn());
@@ -181,11 +181,11 @@ describe("manejo actions without signal", () => {
   });
 });
 
-/** Boots offline from u0's snapshot of farm 1; the hooks the store handed the wiring. */
-async function bootOffline(): Promise<OfflineHooks> {
+/** Boots offline from u0's snapshot of farm 1, with `data` on top of it; the hooks the store handed the wiring. */
+async function bootOffline(data: Record<string, unknown> = {}): Promise<OfflineHooks> {
   await openStore<string>("meta").put("lastUser", "u0");
   await openStore<Snapshot>("snapshot").put("u0:1", {
-    data: { animals: [animal], manejoSessions: [session] } as never,
+    data: { animals: [animal], manejoSessions: [session], ...data } as never,
     farms: [],
     activeFarmId: 1,
     savedAt: "2026-09-24T10:00:00.000Z",
@@ -281,15 +281,20 @@ describe("an offline boot", () => {
     expect(confirmed).toBeLessThan(kicked);
   });
 
-  it("reads an old snapshot without grupos de despesa as none, and the next save carries them", async () => {
-    const maquinas: ExpenseGroup = { id: "g-1", name: "Máquinas e veículos", createdAt: "2026-10-01T12:00:00.000Z" };
-    useHerdStore.setState({ expenseGroups: [maquinas] });
-    await bootOffline();
-    expect(useHerdStore.getState().expenseGroups).toEqual([]);
+  it("reads an old snapshot with grupos de despesa and no planGroups as no grupos, and the next save carries them", async () => {
+    const maquinas: PlanGroup = {
+      id: "g-1",
+      kind: "expense",
+      name: "Máquinas e veículos",
+      createdAt: "2026-10-01T12:00:00.000Z",
+    };
+    useHerdStore.setState({ planGroups: [maquinas] });
+    await bootOffline({ expenseGroups: [{ id: "g-1", name: "Máquinas e veículos", createdAt: "2026-10-01T12:00:00.000Z" }] });
+    expect(useHerdStore.getState().planGroups).toEqual([]);
 
-    useHerdStore.setState({ expenseGroups: [maquinas] });
+    useHerdStore.setState({ planGroups: [maquinas] });
     await persistSnapshot(useHerdStore.getState);
-    expect((await openStore<Snapshot>("snapshot").get("u0:1"))?.data.expenseGroups).toEqual([maquinas]);
+    expect((await openStore<Snapshot>("snapshot").get("u0:1"))?.data.planGroups).toEqual([maquinas]);
   });
 
   it("sign-out resets the store and the next user's ops are theirs", async () => {

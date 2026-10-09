@@ -95,6 +95,7 @@ export function useEntryActions(
   const canEdit = useCan("finance", "edit");
   const accounts = useHerdStore((s) => s.accounts);
   const bankAccounts = useHerdStore((s) => s.bankAccounts);
+  const planGroups = useHerdStore((s) => s.planGroups);
   const removeExpense = useHerdStore((s) => s.removeExpense);
   const removeTransfer = useHerdStore((s) => s.removeTransfer);
   const markPaid = useMarkPaid(onDone);
@@ -158,7 +159,7 @@ export function useEntryActions(
     <>
       {/* Mounted only while open, so each form starts from the row. */}
       {open === "new" ? (
-        <EntryDialog open onOpenChange={close} initial={entryInitialFor(node, accounts, bankAccounts)} />
+        <EntryDialog open onOpenChange={close} initial={entryInitialFor(node, accounts, bankAccounts, planGroups)} />
       ) : null}
       {open === "edit" && expense ? <EntryDialog open onOpenChange={close} expense={expense} /> : null}
       {open === "duplicate" && expense ? <EntryDialog open onOpenChange={close} template={expense} /> : null}

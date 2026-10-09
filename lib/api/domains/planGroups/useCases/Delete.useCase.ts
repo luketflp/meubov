@@ -1,12 +1,12 @@
 import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { accounts, budgets, expenseGroups, expenseSeries, expenses } from "@/lib/db/schema";
+import { accounts, budgets, expenseSeries, expenses, planGroups } from "@/lib/db/schema";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
 
-interface DeleteExpenseGroupUseCaseProps {
+interface DeletePlanGroupUseCaseProps {
   farmId: number;
   id: string;
 }
@@ -16,36 +16,39 @@ interface DeleteExpenseGroupUseCaseProps {
  * has lançamentos, has the grupo as its category or points at one of its
  * contas, whatever category it carries (archive it instead).
  */
-type DeleteExpenseGroupUseCaseResponse = "deleted" | "not_found" | "in_use";
+type DeletePlanGroupUseCaseResponse = "deleted" | "not_found" | "in_use";
 
-type CurrUseCase = _UseCase<DeleteExpenseGroupUseCaseProps, DeleteExpenseGroupUseCaseResponse>;
+type CurrUseCase = _UseCase<DeletePlanGroupUseCaseProps, DeletePlanGroupUseCaseResponse>;
 
 /**
- * Deletes a grupo nothing uses — one created by mistake — with its contas, its
- * orçamento lines and the séries left empty by "Excluir todas".
+ * Deletes a grupo nothing uses, of any tipo (one created by mistake, a default
+ * the farm has no use for), with its contas (a financiamento's saldo inicial
+ * lives on its conta and goes with it), its orçamento lines and the séries
+ * left empty by "Excluir todas".
  */
-export class DeleteExpenseGroupUseCase implements CurrUseCase {
+export class DeletePlanGroupUseCase implements CurrUseCase {
   private repository: RepositoryType;
 
   constructor(repo: RepositoryType = db) {
-    __throwOnBrowser("DeleteExpenseGroupUseCase.constructor");
+    __throwOnBrowser("DeletePlanGroupUseCase.constructor");
     this.repository = repo;
   }
 
   public run: CurrUseCase["run"] = ({ farmId, id }) =>
     // The row lock makes a second delete or a rename of the grupo wait.
-    // ponytail: a lançamento saved into the grupo meanwhile is not held off (a grupo key has no FK)
-    // and then reads "Grupo removido"; have its writers read the grupo `for share` if that shows up.
+    // ponytail: a lançamento or a conta saved into the grupo meanwhile is not held off (a grupo id has no
+    // FK): the lançamento then reads "Grupo removido" and the conta sits unseen in a grupo that is gone;
+    // have their writers read the grupo `for share` if that shows up.
     this.repository.transaction(async (tx) => {
-      const scope = and(eq(expenseGroups.farmId, farmId), eq(expenseGroups.id, id));
-      const [current] = await tx.select().from(expenseGroups).where(scope).limit(1).for("update");
+      const scope = and(eq(planGroups.farmId, farmId), eq(planGroups.id, id));
+      const [current] = await tx.select().from(planGroups).where(scope).limit(1).for("update");
       if (!current) return "not_found";
       const contas = sql`(select ${accounts.id} from ${accounts} where ${accounts.farmId} = ${farmId} and ${accounts.group} = ${id})`;
       const ofGroup = sql`${expenseSeries.farmId} = ${farmId} and (${expenseSeries.category} = ${id} or ${expenseSeries.accountId} in ${contas})`;
       // A row back means a lançamento or a recorrência still uses the grupo.
       const [used] = await tx
-        .select({ id: expenseGroups.id })
-        .from(expenseGroups)
+        .select({ id: planGroups.id })
+        .from(planGroups)
         .where(
           and(
             scope,
@@ -61,7 +64,7 @@ export class DeleteExpenseGroupUseCase implements CurrUseCase {
       // What is left of its séries has no lançamento any more.
       await tx.delete(expenseSeries).where(ofGroup);
       await tx.delete(accounts).where(and(eq(accounts.farmId, farmId), eq(accounts.group, id)));
-      await tx.delete(expenseGroups).where(scope);
+      await tx.delete(planGroups).where(scope);
       return "deleted";
     });
 }

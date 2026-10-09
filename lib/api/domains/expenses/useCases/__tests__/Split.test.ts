@@ -61,7 +61,7 @@ const ROW = {
   kind: "investment",
   flow: "out",
   date: "2026-09-27",
-  category: "other",
+  category: "grp-investimentos",
   amountBrl: 1000,
   notes: null,
   dueDate: "2026-09-27",
@@ -108,6 +108,7 @@ describe("splitExpense", () => {
       amountBrl: 1000,
       kind: "investment",
       flow: "out",
+      category: "grp-investimentos",
       accountId: "acc-maquinas",
       counterparty: "Agro Máquinas",
     });
@@ -149,7 +150,7 @@ describe("splitExpense", () => {
     ["a parcela of a série", { seriesId: "s-1", seriesIndex: 2 }],
     [
       "a rendimento",
-      { kind: "yield", flow: null, accountId: null, dueDate: null, paidAt: "2026-09-27", bankAccountId: "cdb" },
+      { kind: "yield", flow: null, category: null, accountId: null, dueDate: null, paidAt: "2026-09-27", bankAccountId: "cdb" },
     ],
   ])("refuses %s", async (_, patch) => {
     given({ ...ROW, ...patch });

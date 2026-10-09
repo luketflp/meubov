@@ -19,8 +19,8 @@ import type {
   CustomCategory,
   Expense,
   ExpenseCategory,
-  ExpenseGroup,
   FarmData,
+  GroupKind,
   InactiveReason,
   HerdData,
   Invernada,
@@ -30,6 +30,7 @@ import type {
   ManejoSession,
   ManejoSessionAnimal,
   ManejoTreatmentPlan,
+  PlanGroup,
   PregnancyDiagnosis,
   ScheduleTreatmentsInput,
   SemenBull,
@@ -166,7 +167,7 @@ export interface NewBaixa {
  */
 export type NewBreeding = Omit<Breeding, "id">;
 
-/** Purchase of semen doses to record; it also becomes a Reprodução expense. */
+/** Purchase of semen doses to record: stock of the bull, not a lançamento. */
 export interface NewSemenPurchase {
   date: string;
   doses: number;
@@ -308,7 +309,7 @@ export interface NewFarmInput {
 
 export interface HerdStore extends HerdData {
   /** Always present in the store; HerdData leaves them optional for older snapshots and fixtures. */
-  expenseGroups: ExpenseGroup[];
+  planGroups: PlanGroup[];
   bankAccounts: BankAccount[];
   transfers: Transfer[];
   reconciledIds: string[];
@@ -528,12 +529,12 @@ export interface HerdStore extends HerdData {
   ) => Promise<boolean>;
   /** Deletes a conta and its orçamento lines; "in_use" when a lançamento or recorrência keeps it (409). */
   removeAccount: (id: string) => Promise<"deleted" | "in_use">;
-  /** Creates a grupo de despesa of the farm; null when the name is taken or is a fixed grupo's (409). */
-  addExpenseGroup: (name: string) => Promise<ExpenseGroup | null>;
-  /** Renames, archives or restores a grupo of the farm; false when the name is taken (409). */
-  updateExpenseGroup: (id: string, patch: { name?: string; archived?: boolean }) => Promise<boolean>;
+  /** Creates a grupo of the plano under a tipo; null when the farm already has the name, in any tipo (409). */
+  addPlanGroup: (kind: GroupKind, name: string) => Promise<PlanGroup | null>;
+  /** Renames, archives or restores a grupo (its tipo never changes); false when the name is taken (409). */
+  updatePlanGroup: (id: string, patch: { name?: string; archived?: boolean }) => Promise<boolean>;
   /** Deletes a grupo nothing uses, with its contas and orçamento lines; "in_use" on 409. */
-  removeExpenseGroup: (id: string) => Promise<"deleted" | "in_use">;
+  removePlanGroup: (id: string) => Promise<"deleted" | "in_use">;
   /** Creates the standard contas the farm lacks; resolves how many were created. */
   seedDefaultAccounts: () => Promise<number>;
   /** "Nova conta"; one marked principal (or the farm's first) takes the place of the current one. */
@@ -612,25 +613,22 @@ export interface HerdStore extends HerdData {
   recordDiagnosis: (earTag: string, input: PregnancyDiagnosis) => Promise<void>;
   /** Removes the pregnancy diagnosis of one breeding — the undo of an Ultrassom tap. */
   clearDiagnosis: (earTag: string, breedingId: string) => Promise<void>;
-  /**
-   * Registers a semen bull; its first purchase, when sent, also lands in
-   * Financeiro as an expense. "duplicate" when the farm already has that name.
-   */
+  /** Registers a semen bull, with its first purchase when sent. "duplicate" when the farm already has that name. */
   addSemenBull: (input: NewSemenBull) => Promise<SemenBull | "duplicate">;
   /** Edits a semen bull's registration; false when the new name is already in use. */
   updateSemenBull: (id: string, patch: SemenBullPatch) => Promise<boolean>;
-  /** Records a purchase of doses of a bull, and merges the expense it wrote. */
+  /** Records a purchase of doses of a bull. */
   addSemenPurchase: (bullId: string, input: NewSemenPurchase) => Promise<void>;
   /**
-   * Deletes a purchase and its expense. False when the other purchases would
-   * not cover the doses already used (409 stock_negative); the herd is then
-   * reloaded, since the store's count was behind the server's.
+   * Deletes a purchase. False when the other purchases would not cover the
+   * doses already used (409 stock_negative); the herd is then reloaded, since
+   * the store's count was behind the server's.
    */
   removeSemenPurchase: (bullId: string, purchaseId: string) => Promise<boolean>;
   /**
-   * Deletes a bull with its purchases and their expenses. Null once it is
-   * gone; otherwise what the server found holding it (409), after which the
-   * herd is reloaded, since the store's picture was behind the server's.
+   * Deletes a bull with its purchases. Null once it is gone; otherwise what
+   * the server found holding it (409), after which the herd is reloaded,
+   * since the store's picture was behind the server's.
    */
   removeSemenBull: (id: string) => Promise<BullRemovalBlock | null>;
   /** Records a calving; false when the calf's ear tag is already in use. */
@@ -776,7 +774,7 @@ function herdDataOf(s: HerdStore): HerdData {
     manejoSessions: s.manejoSessions,
     expenses: s.expenses,
     accounts: s.accounts,
-    expenseGroups: s.expenseGroups,
+    planGroups: s.planGroups,
     bankAccounts: s.bankAccounts,
     transfers: s.transfers,
     reconciledIds: s.reconciledIds,
@@ -1376,7 +1374,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   manejoSessions: [],
   expenses: [],
   accounts: [],
-  expenseGroups: [],
+  planGroups: [],
   bankAccounts: [],
   transfers: [],
   reconciledIds: [],
@@ -1426,7 +1424,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       const { snap } = boot;
       set({
         ...snap.data,
-        expenseGroups: snap.data.expenseGroups ?? [],
+        planGroups: snap.data.planGroups ?? [],
         farms: snap.farms,
         activeFarmId: snap.activeFarmId,
         loaded: true,
@@ -2363,30 +2361,30 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
     return "deleted";
   },
 
-  addExpenseGroup: async (name) => {
-    const { data, error } = await api["expense-groups"].post({ name });
+  addPlanGroup: async (kind, name) => {
+    const { data, error } = await api["plan-groups"].post({ kind, name });
     if (error) {
       if (error.status === CONFLICT) return null;
       apiFail("criar o grupo", error);
     }
-    const group = data as ExpenseGroup;
-    set((s) => ({ expenseGroups: [...s.expenseGroups, group] }));
+    const group = data as PlanGroup;
+    set((s) => ({ planGroups: [...s.planGroups, group] }));
     return group;
   },
 
-  updateExpenseGroup: async (id, patch) => {
-    const { data, error } = await api["expense-groups"]({ id }).patch(patch);
+  updatePlanGroup: async (id, patch) => {
+    const { data, error } = await api["plan-groups"]({ id }).patch(patch);
     if (error) {
       if (error.status === CONFLICT) return false;
       apiFail("salvar o grupo", error);
     }
-    const group = data as ExpenseGroup;
-    set((s) => ({ expenseGroups: s.expenseGroups.map((g) => (g.id === id ? group : g)) }));
+    const group = data as PlanGroup;
+    set((s) => ({ planGroups: s.planGroups.map((g) => (g.id === id ? group : g)) }));
     return true;
   },
 
-  removeExpenseGroup: async (id) => {
-    const { error } = await api["expense-groups"]({ id }).delete();
+  removePlanGroup: async (id) => {
+    const { error } = await api["plan-groups"]({ id }).delete();
     if (error) {
       if (error.status === CONFLICT) return "in_use";
       apiFail("excluir o grupo", error);
@@ -2395,7 +2393,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       // Its contas go with it, and so do their orçamento lines, whatever grupo a line was filed under.
       const contas = new Set(s.accounts.filter((a) => a.group === id).map((a) => a.id));
       return {
-        expenseGroups: s.expenseGroups.filter((g) => g.id !== id),
+        planGroups: s.planGroups.filter((g) => g.id !== id),
         accounts: s.accounts.filter((a) => !contas.has(a.id)),
         budgets: Object.fromEntries(
           Object.entries(s.budgets).map(([safra, rows]) => [
@@ -2666,13 +2664,9 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       if (error.status === CONFLICT) return "duplicate";
       apiFail("cadastrar o touro", error);
     }
-    const result = data as { bull: SemenBull; expense?: Expense };
-    const expense = result.expense;
-    set((s) => ({
-      semenBulls: [...s.semenBulls, result.bull].sort(compareByName),
-      ...(expense ? { expenses: [...s.expenses, expense] } : {}),
-    }));
-    return result.bull;
+    const { bull } = data as { bull: SemenBull };
+    set((s) => ({ semenBulls: [...s.semenBulls, bull].sort(compareByName) }));
+    return bull;
   },
 
   updateSemenBull: async (id, patch) => {
@@ -2692,17 +2686,16 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
   addSemenPurchase: async (bullId, input) => {
     const { data, error } = await api["semen-bulls"]({ id: bullId }).purchases.post(input);
     if (error) apiFail("registrar a compra de sêmen", error);
-    const { purchase, expense } = data as { purchase: SemenPurchase; expense: Expense };
+    const { purchase } = data as { purchase: SemenPurchase };
     set((s) => ({
       semenBulls: withPurchases(s.semenBulls, bullId, (purchases) =>
         [...purchases, purchase].sort(compareByDate)
       ),
-      expenses: [...s.expenses, expense],
     }));
   },
 
   removeSemenPurchase: async (bullId, purchaseId) => {
-    const { data, error } = await api["semen-bulls"]({ id: bullId })
+    const { error } = await api["semen-bulls"]({ id: bullId })
       .purchases({ purchaseId })
       .delete();
     if (error) {
@@ -2714,21 +2707,16 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       }
       apiFail("excluir a compra de sêmen", error);
     }
-    // The purchase's expense went with it, unless it had been removed before.
-    const { expenseId } = data as { id: string; expenseId: string | null };
     set((s) => ({
       semenBulls: withPurchases(s.semenBulls, bullId, (purchases) =>
         purchases.filter((p) => p.id !== purchaseId)
       ),
-      ...(expenseId !== null
-        ? { expenses: s.expenses.filter((e) => e.id !== expenseId) }
-        : {}),
     }));
     return true;
   },
 
   removeSemenBull: async (id) => {
-    const { data, error } = await api["semen-bulls"]({ id }).delete();
+    const { error } = await api["semen-bulls"]({ id }).delete();
     if (error) {
       const detail = error.value as { error?: string };
       if (
@@ -2740,11 +2728,7 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
       }
       apiFail("excluir o touro", error);
     }
-    const { expenseIds } = data as { id: string; expenseIds: string[] };
-    set((s) => ({
-      semenBulls: s.semenBulls.filter((b) => b.id !== id),
-      expenses: s.expenses.filter((e) => !expenseIds.includes(e.id)),
-    }));
+    set((s) => ({ semenBulls: s.semenBulls.filter((b) => b.id !== id) }));
     return null;
   },
 

@@ -211,6 +211,13 @@
       "when": 1791328267982,
       "tag": "0029_drop-health-protocols",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1791568659029,
+      "tag": "0030_grupos-livres",
+      "breakpoints": true
     }
   ]
 }

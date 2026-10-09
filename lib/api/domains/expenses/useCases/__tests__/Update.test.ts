@@ -62,7 +62,7 @@ const ROW = {
   kind: "expense",
   flow: null,
   date: "2026-09-10",
-  category: "nutrition",
+  category: "grp-nutricao",
   amountBrl: 500,
   notes: null,
   dueDate: "2026-09-20",
@@ -73,6 +73,10 @@ const ROW = {
   lotId: null,
   bankAccountId: null,
 };
+
+/** A plan_groups row of the farm, as the grupo check reads it. */
+const grupo = (id: string, kind: string) =>
+  ({ id, farmId: 7, kind, name: id, archivedAt: null, createdAt: new Date(0) });
 
 beforeEach(() => {
   state.selectResults = [];
@@ -170,26 +174,33 @@ describe("updateExpense", () => {
 describe("updateExpense — what the kind needs", () => {
   const run = (patch: ExpensePatchInput) => new UpdateExpenseUseCase().run({ farmId: 7, id: "e-1", patch });
 
-  it("refuses a new kind while the conta still belongs to the old group", async () => {
-    state.selectResults = [[ROW], [{ group: "nutrition" }]];
-    expect(await run({ kind: "investment" })).toBe("invalid_account");
+  it("refuses a new kind while the grupo or the conta is still the old one", async () => {
+    // The row, then its grupo: a despesa grupo cannot hold an investimento.
+    state.selectResults = [[ROW], [grupo("grp-nutricao", "expense")]];
+    expect(await run({ kind: "investment" })).toBe("invalid_category");
 
-    const benfeitoria = { ...ROW, kind: "investment", flow: "out", category: "other", accountId: "acc-benf" };
-    state.selectResults = [[benfeitoria], [{ group: "investment" }]];
-    expect(await run({ kind: "expense" })).toBe("invalid_account");
+    const benfeitoria = { ...ROW, kind: "investment", flow: "out", category: "grp-investimentos" };
+    // The row, the grupo sent, then the conta it keeps: still of Investimentos.
+    state.selectResults = [[benfeitoria], [grupo("grp-nutricao", "expense")], [{ group: "grp-investimentos" }]];
+    expect(await run({ kind: "expense", category: "grp-nutricao" })).toBe("invalid_account");
     expect(state.updates).toEqual([]);
   });
 
-  it("turns a despesa into an investimento: the conta's group, no grupo, no lote, a saída", async () => {
-    state.selectResults = [[{ ...ROW, lotId: "lot-1" }], [{ group: "investment" }]];
-    state.updateResults = [[{ ...ROW, kind: "investment", flow: "out", category: "other", accountId: "acc-benf" }]];
+  it("turns a despesa into an investimento: its grupo and conta, no lote, a saída", async () => {
+    const investimento = { kind: "investment", flow: "out", category: "grp-investimentos", accountId: "acc-benf" };
+    state.selectResults = [
+      [{ ...ROW, lotId: "lot-1" }],
+      [grupo("grp-investimentos", "investment")],
+      [{ group: "grp-investimentos" }],
+    ];
+    state.updateResults = [[{ ...ROW, ...investimento }]];
 
-    const result = await run({ kind: "investment", accountId: "acc-benf", category: "nutrition", lotId: "lot-1" });
+    const result = await run({ kind: "investment", accountId: "acc-benf", category: "grp-investimentos", lotId: "lot-1" });
 
     expect(state.updates[0]).toMatchObject({
       kind: "investment",
       flow: "out",
-      category: "other",
+      category: "grp-investimentos",
       lotId: null,
       accountId: "acc-benf",
     });
@@ -201,22 +212,27 @@ describe("updateExpense — what the kind needs", () => {
       ...ROW,
       kind: "partners",
       flow: "out",
-      category: "other",
+      category: "grp-socios",
       accountId: "acc-socios",
       paidAt: "2026-09-12",
       bankAccountId: "cartao",
     };
-    state.selectResults = [[retirada], [{ group: "partners" }], [{ kind: "card", archivedAt: null }]];
+    state.selectResults = [
+      [retirada],
+      [grupo("grp-socios", "partners")],
+      [{ group: "grp-socios" }],
+      [{ kind: "card", archivedAt: null }],
+    ];
 
     expect(await run({ flow: "in" })).toBe("invalid_bank_account");
     expect(state.updates).toEqual([]);
   });
 
-  it("keeps a rendimento paid on its data", async () => {
+  it("keeps a rendimento paid on its data, without grupo", async () => {
     const rendimento = {
       ...ROW,
       kind: "yield",
-      category: "other",
+      category: null,
       dueDate: null,
       paidAt: "2026-09-10",
       accountId: null,
@@ -225,9 +241,16 @@ describe("updateExpense — what the kind needs", () => {
     state.selectResults = [[rendimento]];
     state.updateResults = [[{ ...rendimento, date: "2026-09-30", paidAt: "2026-09-30" }]];
 
-    await run({ date: "2026-09-30", paidAt: null });
+    const result = await run({ date: "2026-09-30", paidAt: null });
 
-    expect(state.updates[0]).toMatchObject({ date: "2026-09-30", paidAt: "2026-09-30", dueDate: null });
+    expect(state.updates[0]).toMatchObject({
+      date: "2026-09-30",
+      paidAt: "2026-09-30",
+      dueDate: null,
+      category: null,
+    });
+    expect(result).toMatchObject({ kind: "yield" });
+    expect((result as Expense).category).toBeUndefined();
   });
 });
 
@@ -238,16 +261,20 @@ describe("updateExpense — grupo", () => {
     // The row, then the grupo sent: no grupo of this farm by that id.
     state.selectResults = [[ROW], []];
     expect(await run({ category: "grp-of-another-farm" })).toBe("invalid_category");
-    // The row, then its conta (a built-in grupo asks nothing): a conta of Nutrição.
-    state.selectResults = [[ROW], [{ group: "nutrition" }]];
-    expect(await run({ category: "admin" })).toBe("invalid_account");
+    // The row, the grupo sent, then its conta: still a conta of Nutrição.
+    state.selectResults = [[ROW], [grupo("grp-administrativo", "expense")], [{ group: "grp-nutricao" }]];
+    expect(await run({ category: "grp-administrativo" })).toBe("invalid_account");
     expect(state.updates).toEqual([]);
   });
 
-  it("saves the edit of an old lançamento whose farm grupo is archived", async () => {
+  it("saves the edit of an old lançamento whose grupo is archived", async () => {
     const old = { ...ROW, category: "grp-arrend", accountId: "acc-pasto-vizinho" };
     // The row, its grupo (found whatever archived_at says), its conta.
-    state.selectResults = [[old], [{ id: "grp-arrend" }], [{ group: "grp-arrend" }]];
+    state.selectResults = [
+      [old],
+      [{ ...grupo("grp-arrend", "expense"), archivedAt: new Date("2026-08-01T00:00:00Z") }],
+      [{ group: "grp-arrend" }],
+    ];
     state.updateResults = [[{ ...old, notes: "Parcela de setembro" }]];
 
     // The form sends every field back, grupo and conta included.

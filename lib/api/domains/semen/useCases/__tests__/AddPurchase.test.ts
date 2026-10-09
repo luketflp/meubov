@@ -1,6 +1,6 @@
 /**
- * addSemenPurchase: registers a purchase of doses of a bull of the farm, and
- * the Reprodução expense it becomes, in one transaction.
+ * addSemenPurchase: registers a purchase of doses of a bull of the farm. A
+ * purchase is stock: nothing is written in the Financeiro.
  *
  * Same chainable db stub as the other use-case tests: selects answer from a
  * queued list of rows, inserts record the table and the row and echo it.
@@ -22,7 +22,6 @@ function selectBuilder() {
   const builder = {
     from: () => builder,
     where: () => builder,
-    for: () => builder,
     limit: () => builder,
     then: (resolve: (value: Record<string, unknown>[]) => unknown) => resolve(rows),
   };
@@ -38,15 +37,7 @@ function insertBuilder(table: Table) {
   };
 }
 
-vi.mock("@/lib/db", () => {
-  const handle = { select: selectBuilder, insert: insertBuilder };
-  return {
-    db: {
-      ...handle,
-      transaction: (run: (tx: unknown) => unknown) => Promise.resolve(run(handle)),
-    },
-  };
-});
+vi.mock("@/lib/db", () => ({ db: { select: selectBuilder, insert: insertBuilder } }));
 
 import { AddPurchaseUseCase } from "../AddPurchase.useCase";
 
@@ -69,15 +60,8 @@ describe("addSemenPurchase", () => {
     expect(state.inserts).toEqual([]);
   });
 
-  it("writes the expense, then the purchase pointing at it", async () => {
-    state.selectResults = [
-      // 1. the bull of the farm
-      [{ id: "bull-1", name: "Tufão da Serra", central: "CRV Lagoa" }],
-      // 2. the farm's active "Sêmen" conta in Reprodução
-      [{ id: "acc-semen" }],
-      // 3. AddExpense checks that conta's group
-      [{ group: "breeding" }],
-    ];
+  it("writes the purchase only, and answers it", async () => {
+    state.selectResults = [[{ id: "bull-1" }]];
 
     const result = await new AddPurchaseUseCase().run({
       farmId: 7,
@@ -85,60 +69,19 @@ describe("addSemenPurchase", () => {
       input: { date: "2026-08-20", doses: 1, totalBrl: 42.5, seller: "   " },
     });
 
-    expect(state.inserts.map((insert) => insert.table)).toEqual(["expenses", "semen_purchases"]);
-    const [expense, purchase] = state.inserts.map((insert) => insert.row);
-    expect(expense).toMatchObject({
-      farmId: 7,
-      kind: "expense",
-      date: "2026-08-20",
-      paidAt: "2026-08-20",
-      dueDate: null,
-      category: "breeding",
-      amountBrl: 42.5,
-      counterparty: "CRV Lagoa",
-      accountId: "acc-semen",
-      notes: "Sêmen — Tufão da Serra, 1 dose",
-    });
-    expect(purchase).toMatchObject({
+    expect(state.inserts.map((insert) => insert.table)).toEqual(["semen_purchases"]);
+    const [purchase] = state.inserts.map((insert) => insert.row);
+    expect(purchase).toEqual({
+      id: expect.any(String),
       bullId: "bull-1",
       date: "2026-08-20",
       doses: 1,
       totalBrl: 42.5,
       seller: null,
-      expenseId: expense.id,
     });
     expect(result).toEqual({
-      purchase: {
-        id: purchase.id,
-        date: "2026-08-20",
-        doses: 1,
-        totalBrl: 42.5,
-        expenseId: expense.id,
-      },
-      expense: {
-        id: expense.id,
-        kind: "expense",
-        date: "2026-08-20",
-        paidAt: "2026-08-20",
-        category: "breeding",
-        amountBrl: 42.5,
-        counterparty: "CRV Lagoa",
-        accountId: "acc-semen",
-        notes: "Sêmen — Tufão da Serra, 1 dose",
-        attachmentCount: 0,
-      },
+      purchase: { id: purchase.id, date: "2026-08-20", doses: 1, totalBrl: 42.5 },
     });
-  });
-
-  it("leaves the conta and the counterparty empty when the farm has neither", async () => {
-    state.selectResults = [[{ id: "bull-1", name: "Tufão da Serra", central: null }], []];
-
-    await new AddPurchaseUseCase().run({
-      farmId: 7,
-      bullId: "bull-1",
-      input: { date: "2026-08-20", doses: 10, totalBrl: 400 },
-    });
-
-    expect(state.inserts[0].row).toMatchObject({ counterparty: null, accountId: null });
+    expect(result).not.toHaveProperty("expense");
   });
 });

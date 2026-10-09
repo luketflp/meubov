@@ -4,7 +4,8 @@ import type { HerdData } from "@/lib/types";
 import { currentDiagnosis } from "@/lib/domain/reproduction";
 import { deriveTreatmentStatus } from "@/lib/domain/status";
 import { herdMovements } from "@/lib/domain/movements";
-import { generateInitialData, SEED_TODAY_ISO as TODAY_ISO } from "@/lib/data/seed";
+import { generateInitialData, SEED_GROUPS, SEED_TODAY_ISO as TODAY_ISO } from "@/lib/data/seed";
+import { DEFAULT_GROUPS } from "@/lib/domain/groups";
 
 /** The farm's ledger: legacy rows plus the sessions that moved the herd. */
 function ledgerOf(data: HerdData) {
@@ -92,7 +93,7 @@ describe("generateInitialData", () => {
     expect(months.size).toBe(12);
     const categories = new Set(data.expenses.map((e) => e.category));
     for (const category of [
-      "nutrition", "pasture", "labor", "health", "breeding", "admin", "other",
+      "grp-nutricao", "grp-pastagem", "grp-mao-de-obra", "grp-sanidade", "grp-reproducao", "grp-administrativo", "grp-outros",
     ]) {
       expect(categories).toContain(category);
     }
@@ -101,12 +102,22 @@ describe("generateInitialData", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it("seeds the eleven default grupos and points every conta and lançamento at one of its kind", () => {
+    expect(data.planGroups?.map(({ kind, name }) => ({ kind, name }))).toEqual(DEFAULT_GROUPS);
+    const kindOf = new Map(SEED_GROUPS.map((g) => [g.id, g.kind]));
+    for (const a of data.accounts) expect(kindOf.has(a.group)).toBe(true);
+    for (const e of data.expenses) {
+      if (e.kind === "yield") expect(e.category).toBeUndefined();
+      else expect(kindOf.get(e.category ?? "")).toBe(e.kind);
+    }
+  });
+
   it("points every lançamento at a conta of its own grupo and at a seeded lote", () => {
     const groupOf = new Map(data.accounts.map((a) => [a.id, a.group]));
     const lotIds = new Set(data.lots.map((l) => l.id));
     for (const e of data.expenses) {
       if (e.accountId) {
-        expect(groupOf.get(e.accountId)).toBe(e.kind === "revenue" ? "revenue" : e.category);
+        expect(groupOf.get(e.accountId)).toBe(e.category);
       }
       if (e.lotId) expect(lotIds).toContain(e.lotId);
     }

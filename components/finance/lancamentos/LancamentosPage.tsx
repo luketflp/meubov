@@ -61,25 +61,13 @@ export function LancamentosPage() {
   const movements = useHerdStore((s) => s.movements);
   const manejoSessions = useHerdStore((s) => s.manejoSessions);
   const animals = useHerdStore((s) => s.animals);
-  const treatments = useHerdStore((s) => s.treatments);
   const lots = useHerdStore((s) => s.lots);
   const bankAccounts = useHerdStore((s) => s.bankAccounts);
   const transfers = useHerdStore((s) => s.transfers);
-  const expenseGroups = useHerdStore((s) => s.expenseGroups);
+  const planGroups = useHerdStore((s) => s.planGroups);
   const inputs = useMemo<PlanInputs>(
-    () => ({
-      expenses,
-      accounts,
-      movements,
-      manejoSessions,
-      animals,
-      treatments,
-      lots,
-      bankAccounts,
-      transfers,
-      expenseGroups,
-    }),
-    [expenses, accounts, movements, manejoSessions, animals, treatments, lots, bankAccounts, transfers, expenseGroups]
+    () => ({ expenses, accounts, movements, manejoSessions, animals, lots, bankAccounts, transfers, planGroups }),
+    [expenses, accounts, movements, manejoSessions, animals, lots, bankAccounts, transfers, planGroups]
   );
 
   const params = useMemo(() => new URLSearchParams(query), [query]);
@@ -230,7 +218,11 @@ export function LancamentosPage() {
             Lançar
           </Button>
           {entering ? (
-            <EntryDialog open onOpenChange={setEntering} initial={entryInitialFor(node, accounts, bankAccounts)} />
+            <EntryDialog
+              open
+              onOpenChange={setEntering}
+              initial={entryInitialFor(node, accounts, bankAccounts, planGroups)}
+            />
           ) : null}
         </>
       ) : null}

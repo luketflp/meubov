@@ -68,14 +68,13 @@ function FinanceContent() {
   const animals = useHerdStore((s) => s.animals);
   const manejoSessions = useHerdStore((s) => s.manejoSessions);
   const movements = useHerdStore((s) => s.movements);
-  const treatments = useHerdStore((s) => s.treatments);
   const expenses = useHerdStore((s) => s.expenses);
   const invernadas = useHerdStore((s) => s.invernadas);
   const lots = useHerdStore((s) => s.lots);
   const accounts = useHerdStore((s) => s.accounts);
   const bankAccounts = useHerdStore((s) => s.bankAccounts);
   const transfers = useHerdStore((s) => s.transfers);
-  const expenseGroups = useHerdStore((s) => s.expenseGroups);
+  const planGroups = useHerdStore((s) => s.planGroups);
   // An offline snapshot from before the orçamento has no início da safra.
   const safraStartMonth = useHerdStore((s) => s.farm.safraStartMonth ?? 10);
   const loadBudgets = useHerdStore((s) => s.loadBudgets);
@@ -88,8 +87,8 @@ function FinanceContent() {
     router.replace(`/finance?${periodSearch(next)}`, { scroll: false });
 
   const inputs = useMemo<EconomicsInputs>(
-    () => ({ animals, manejoSessions, movements, treatments, expenses, invernadas, lots }),
-    [animals, manejoSessions, movements, treatments, expenses, invernadas, lots]
+    () => ({ animals, manejoSessions, movements, expenses, invernadas, lots }),
+    [animals, manejoSessions, movements, expenses, invernadas, lots]
   );
   const ind = useMemo(
     () => indicators(inputs, period, quote.price, today),
@@ -101,12 +100,12 @@ function FinanceContent() {
   );
   const deltas = useMemo(() => indicatorDeltas(ind, prior), [ind, prior]);
   const cash = useMemo(
-    () => cashSummary({ expenses, movements, treatments }, period, today),
-    [expenses, movements, treatments, period, today]
+    () => cashSummary({ expenses, movements }, period, today),
+    [expenses, movements, period, today]
   );
   const rows = useMemo(
-    () => ledgerRows({ ...inputs, accounts, expenseGroups }, period, today),
-    [inputs, accounts, expenseGroups, period, today]
+    () => ledgerRows({ ...inputs, accounts, planGroups }, period, today),
+    [inputs, accounts, planGroups, period, today]
   );
   const lotEcon = useMemo(
     () => lotEconomics(inputs, period, quote.price, today),
@@ -117,21 +116,20 @@ function FinanceContent() {
     () =>
       monthlyRevenueCost(
         movements.filter((m) => inPeriod(m.date, period)),
-        treatments.filter((t) => inPeriod(t.date, period)),
         expenses.filter((e) => inPeriod(e.date, period)),
         monthsSpanned(period),
         period.end
       ),
-    [movements, treatments, expenses, period]
+    [movements, expenses, period]
   );
   const breakdown = useMemo(
-    () => costBreakdownBetween(expenses, treatments, period.start, period.end),
-    [expenses, treatments, period]
+    () => costBreakdownBetween(expenses, period.start, period.end),
+    [expenses, period]
   );
   const bills = useMemo(() => pendingBills(expenses, today), [expenses, today]);
   const capital = useMemo(
-    () => capitalSummary({ ...inputs, accounts, bankAccounts, transfers, expenseGroups }, period, today),
-    [inputs, accounts, bankAccounts, transfers, expenseGroups, period, today]
+    () => capitalSummary({ ...inputs, accounts, bankAccounts, transfers, planGroups }, period, today),
+    [inputs, accounts, bankAccounts, transfers, planGroups, period, today]
   );
   // The band reads the current safra's orçamento, loaded on demand (never every safra with the herd).
   const safra = safraOf(today, safraStartMonth);
@@ -145,9 +143,9 @@ function FinanceContent() {
   const budget = useMemo(
     () =>
       budgets
-        ? budgetView({ budgets, expenses, treatments, accounts, expenseGroups }, safra, safraStartMonth, today)
+        ? budgetView({ budgets, expenses, accounts, planGroups }, safra, safraStartMonth, today)
         : null,
-    [budgets, expenses, treatments, accounts, expenseGroups, safra, safraStartMonth, today]
+    [budgets, expenses, accounts, planGroups, safra, safraStartMonth, today]
   );
 
   return (
@@ -184,7 +182,6 @@ function FinanceContent() {
           <CostBreakdownCard
             breakdown={breakdown}
             expenses={expenses}
-            treatments={treatments}
             accounts={accounts}
             period={period}
           />

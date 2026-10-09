@@ -52,7 +52,8 @@ export class SplitExpenseUseCase implements CurrUseCase {
       const scope = and(eq(expenses.farmId, farmId), eq(expenses.id, id));
       const [row] = await tx.select().from(expenses).where(scope).limit(1).for("update");
       if (!row) return null;
-      if (row.paidAt !== null || row.seriesId !== null || row.kind === "yield") return "not_splittable";
+      // A rendimento is the one row without a grupo.
+      if (row.paidAt !== null || row.seriesId !== null || row.category === null) return "not_splittable";
       if (!Number.isInteger(parcelas) || parcelas < MIN_INSTALLMENTS || parcelas > MAX_INSTALLMENTS) {
         return "invalid_repeat";
       }

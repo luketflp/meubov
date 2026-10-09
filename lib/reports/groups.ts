@@ -1,13 +1,14 @@
 /**
- * Receitas e despesas por grupo: the window's receitas by conta, despesas by
- * grupo (each opening into its contas), the saldo between them, and what moved
- * outside the resultado. Competência takes the lines dated in the window, paid
- * or not; caixa the ones paid or received in it, by payment day. Pure.
+ * Receitas e despesas por grupo: the window's receitas and despesas by grupo
+ * (each opening into its contas, Venda de gado a line of its own), the saldo
+ * between them, and what moved outside the resultado. Competência takes the
+ * lines dated in the window, paid or not; caixa the ones paid or received in
+ * it, by payment day. Pure.
  */
-import type { CapitalGroup } from "@/lib/types";
+import type { CapitalGroup, GroupKind, PlanGroup } from "@/lib/types";
 import { ledgerRows, type LedgerInputs, type LedgerKind, type LedgerRow } from "@/lib/domain/ledger";
 import { inPeriod, type Period } from "@/lib/domain/period";
-import { TOP_GROUP_LABEL, despesaGroups } from "@/lib/domain/groups";
+import { GROUP_KIND_LABEL, groupLabel, groupsOf } from "@/lib/domain/groups";
 import { cents } from "@/lib/domain/bankAccounts";
 
 export type Regime = "accrual" | "cash";
@@ -16,23 +17,21 @@ export const REGIME_LABEL: Record<Regime, string> = { accrual: "competência", c
 
 /** What a line without a conta of the plano reads. */
 export const NO_ACCOUNT = "Sem conta";
-/** The treatments with cost, which sit in Sanidade without a conta. */
-export const TREATMENTS = "Tratamentos do calendário";
 
 export interface ReportLine {
   label: string;
   amountBrl: number;
-  /** Written by the manejos or the calendário, not typed. */
+  /** Written by the manejos, not typed. */
   locked: boolean;
 }
 
 export interface GroupLine {
   key: string;
   label: string;
-  /** The farm's own grupo. */
-  custom: boolean;
   amountBrl: number;
   accounts: ReportLine[];
+  /** Venda de gado: a single line, no contas. */
+  locked?: boolean;
 }
 
 export interface CapitalLine {
@@ -44,16 +43,18 @@ export interface CapitalLine {
 }
 
 export interface GroupsReport {
-  /** By conta. */
-  revenues: ReportLine[];
+  /** Venda de gado first when it is not 0, then by grupo like `expenses`. */
+  revenues: GroupLine[];
   revenueTotal: number;
-  /** By grupo, in despesaGroups order; only grupos with lines. */
+  /** By grupo, by name, a removed one last; only grupos with lines. */
   expenses: GroupLine[];
   expenseTotal: number;
   /** Receitas − despesas. */
   balance: number;
   /** Investimentos (compras de gado too), financiamentos, sócios and rendimentos; never in the balance. */
   capital: CapitalLine[];
+  /** The tipo shows a single grupo (active, or archived/removed with lines): its contas list without the header, like the tree. */
+  flat: Record<"revenue" | "expense", boolean>;
 }
 
 const ALL_TIME: Period = { start: "0000-01-01", end: "9999-12-31" };
@@ -66,14 +67,18 @@ const CAPITAL_KEY: Partial<Record<LedgerKind, CapitalLine["key"]>> = {
   yield: "yield",
 };
 const CAPITAL_ORDER: CapitalLine["key"][] = ["investment", "financing", "partners", "yield"];
-const CAPITAL_LABEL: Record<CapitalLine["key"], string> = { ...TOP_GROUP_LABEL, yield: "Rendimentos" };
+const CAPITAL_LABEL: Record<CapitalLine["key"], string> = {
+  investment: GROUP_KIND_LABEL.investment,
+  financing: GROUP_KIND_LABEL.financing,
+  partners: GROUP_KIND_LABEL.partners,
+  yield: "Rendimentos",
+};
 
-const accountLabel = (r: LedgerRow): string => r.account ?? (r.kind === "treatment" ? TREATMENTS : NO_ACCOUNT);
+const accountLabel = (r: LedgerRow): string => r.account ?? NO_ACCOUNT;
 
-/** Alphabetical, the treatments and then the lines without conta last. */
-const rank = (label: string): number => (label === NO_ACCOUNT ? 2 : label === TREATMENTS ? 1 : 0);
+/** Alphabetical, the lines without conta last. */
 const byLabel = (a: { label: string }, b: { label: string }): number =>
-  rank(a.label) - rank(b.label) || a.label.localeCompare(b.label, "pt-BR");
+  Number(a.label === NO_ACCOUNT) - Number(b.label === NO_ACCOUNT) || a.label.localeCompare(b.label, "pt-BR");
 
 /** Sums the rows by conta, sorted by byLabel. */
 function byAccount(rows: LedgerRow[]): ReportLine[] {
@@ -89,28 +94,34 @@ function byAccount(rows: LedgerRow[]): ReportLine[] {
 
 const total = (lines: { amountBrl: number }[]): number => cents(lines.reduce((sum, l) => sum + l.amountBrl, 0));
 
+/** The lançamentos of a tipo by grupo, in groupsOf order; an id that names no grupo any more comes last. */
+function byGroup(rows: LedgerRow[], kind: GroupKind, groups: readonly PlanGroup[]): GroupLine[] {
+  const ofKind = rows.filter((r) => r.kind === kind);
+  const known = groupsOf(groups, kind, { archived: true });
+  const rank = (id: string): number => {
+    const i = known.findIndex((g) => g.id === id);
+    return i === -1 ? known.length : i;
+  };
+  return [...new Set(ofKind.map((r) => r.group))]
+    .sort((a, b) => rank(a) - rank(b))
+    .map((key) => {
+      const accounts = byAccount(ofKind.filter((r) => r.group === key));
+      return { key, label: groupLabel(key, groups), amountBrl: total(accounts), accounts };
+    });
+}
+
 export function groupsReport(inputs: LedgerInputs, period: Period, regime: Regime, todayIso: string): GroupsReport {
   const rows =
     regime === "accrual"
       ? ledgerRows(inputs, period, todayIso)
       : ledgerRows(inputs, ALL_TIME, todayIso).filter((r) => r.paidAt !== null && inPeriod(r.paidAt, period));
 
-  const revenues = byAccount(rows.filter((r) => r.kind === "revenue" || r.kind === "sale"));
-
-  const costs = rows.filter((r) => r.kind === "expense" || r.kind === "treatment");
-  const known = despesaGroups(inputs.expenseGroups, { archived: true });
-  // A key that names no grupo any more (a removed one) comes after the known ones.
-  const keys = [...new Set(costs.map((r) => r.group))].sort((a, b) => {
-    const ia = known.findIndex((g) => g.key === a);
-    const ib = known.findIndex((g) => g.key === b);
-    return (ia === -1 ? known.length : ia) - (ib === -1 ? known.length : ib);
-  });
-  const expenses = keys.map((key): GroupLine => {
-    const inGroup = costs.filter((r) => r.group === key);
-    const accounts = byAccount(inGroup);
-    const group = known.find((g) => g.key === key);
-    return { key, label: group?.label ?? inGroup[0].groupLabel, custom: group?.custom ?? true, amountBrl: total(accounts), accounts };
-  });
+  const sales = total(rows.filter((r) => r.kind === "sale"));
+  const revenues: GroupLine[] = [
+    ...(sales !== 0 ? [{ key: "venda-de-gado", label: "Venda de gado", amountBrl: sales, accounts: [], locked: true }] : []),
+    ...byGroup(rows, "revenue", inputs.planGroups),
+  ];
+  const expenses = byGroup(rows, "expense", inputs.planGroups);
 
   const capital = CAPITAL_ORDER.flatMap((key): CapitalLine[] => {
     const inGroup = rows.filter((r) => CAPITAL_KEY[r.kind] === key);
@@ -137,5 +148,9 @@ export function groupsReport(inputs: LedgerInputs, period: Period, regime: Regim
 
   const revenueTotal = total(revenues);
   const expenseTotal = total(expenses);
-  return { revenues, revenueTotal, expenses, expenseTotal, balance: cents(revenueTotal - expenseTotal), capital };
+  // A tipo reads flat when it shows one grupo: the active ones plus those with lines (archived or removed), as the tree.
+  const shown = (kind: GroupKind, lines: GroupLine[]): number =>
+    new Set([...groupsOf(inputs.planGroups, kind).map((g) => g.id), ...lines.filter((g) => !g.locked).map((g) => g.key)]).size;
+  const flat = { revenue: shown("revenue", revenues) <= 1, expense: shown("expense", expenses) <= 1 };
+  return { revenues, revenueTotal, expenses, expenseTotal, balance: cents(revenueTotal - expenseTotal), capital, flat };
 }

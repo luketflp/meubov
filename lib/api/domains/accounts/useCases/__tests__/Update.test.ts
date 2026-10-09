@@ -49,7 +49,7 @@ import { UpdateAccountUseCase } from "../Update.useCase";
 const ACCOUNT = {
   id: "acc-1",
   farmId: 7,
-  group: "nutrition",
+  group: "grp-nutricao",
   name: "Sal mineral",
   archivedAt: null,
   openingBalanceBrl: null,
@@ -129,12 +129,16 @@ describe("updateAccount", () => {
 });
 
 describe("updateAccount — saldo devedor inicial", () => {
-  const PRONAF = { ...ACCOUNT, id: "acc-2", group: "financing", name: "Pronaf" };
+  const PRONAF = { ...ACCOUNT, id: "acc-2", group: "grp-financiamentos", name: "Pronaf" };
+  /** The conta's grupo, read only when the saldo inicial is in the patch. */
+  const grupo = (id: string, kind: string) =>
+    ({ id, farmId: 7, kind, name: id, archivedAt: null, createdAt: new Date(0) });
+  const FINANCIAMENTOS = grupo("grp-financiamentos", "financing");
   const run = (patch: Parameters<UpdateAccountUseCase["run"]>[0]["patch"]) =>
     new UpdateAccountUseCase().run({ farmId: 7, id: "acc-2", patch });
 
   it("sets and clears it on a conta de financiamento", async () => {
-    state.selectResults = [[PRONAF]];
+    state.selectResults = [[PRONAF], [FINANCIAMENTOS]];
     state.updateResults = [[{ ...PRONAF, openingBalanceBrl: 180000, openingDate: "2026-06-30" }]];
 
     const result = await run({ openingBalanceBrl: 180000, openingDate: "2026-06-30" });
@@ -142,17 +146,26 @@ describe("updateAccount — saldo devedor inicial", () => {
     expect(state.updates).toEqual([{ openingBalanceBrl: 180000, openingDate: "2026-06-30" }]);
     expect(result).toMatchObject({ openingBalanceBrl: 180000, openingDate: "2026-06-30" });
 
-    state.selectResults = [[{ ...PRONAF, openingBalanceBrl: 180000, openingDate: "2026-06-30" }]];
+    state.selectResults = [[{ ...PRONAF, openingBalanceBrl: 180000, openingDate: "2026-06-30" }], [FINANCIAMENTOS]];
     state.updateResults = [[PRONAF]];
     await run({ openingBalanceBrl: null, openingDate: null });
     expect(state.updates[1]).toEqual({ openingBalanceBrl: null, openingDate: null });
   });
 
   it("refuses half of it, and any of it outside financiamento", async () => {
-    state.selectResults = [[{ ...PRONAF, openingBalanceBrl: 180000, openingDate: "2026-06-30" }]];
+    state.selectResults = [[{ ...PRONAF, openingBalanceBrl: 180000, openingDate: "2026-06-30" }], [FINANCIAMENTOS]];
     expect(await run({ openingDate: null })).toBe("invalid_opening");
-    state.selectResults = [[ACCOUNT]];
+    state.selectResults = [[ACCOUNT], [grupo("grp-nutricao", "expense")]];
     expect(await run({ openingBalanceBrl: 500, openingDate: "2026-06-30" })).toBe("invalid_opening");
     expect(state.updates).toEqual([]);
+  });
+
+  it("renames a conta de financiamento without reading its grupo", async () => {
+    // The conta, then the name clash (none): no grupo read.
+    state.selectResults = [[{ ...PRONAF, openingBalanceBrl: 180000, openingDate: "2026-06-30" }], []];
+    state.updateResults = [[{ ...PRONAF, name: "Pronaf Mais Alimentos" }]];
+
+    expect(await run({ name: "Pronaf Mais Alimentos" })).toMatchObject({ name: "Pronaf Mais Alimentos" });
+    expect(state.updates).toEqual([{ name: "Pronaf Mais Alimentos" }]);
   });
 });

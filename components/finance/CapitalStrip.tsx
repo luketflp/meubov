@@ -43,7 +43,7 @@ export function CapitalStrip({ summary, period, resultBrl }: CapitalStripProps) 
       label: "Investido no período",
       value: s.invested,
       sub: `imobilizado ${formatNumber(s.investedAssets)} · gado ${formatNumber(s.investedCattle)}`,
-      node: { type: "group", group: "investment" },
+      node: { type: "kind", kind: "investment" },
       icon: Tractor,
       tile: "bg-scheduled-soft text-scheduled",
     },
@@ -64,7 +64,7 @@ export function CapitalStrip({ summary, period, resultBrl }: CapitalStripProps) 
       ]
         .filter(Boolean)
         .join(" · "),
-      node: { type: "group", group: "financing" },
+      node: { type: "kind", kind: "financing" },
       icon: HandCoins,
       tile: "bg-fmd-soft text-fmd",
     },
@@ -75,7 +75,7 @@ export function CapitalStrip({ summary, period, resultBrl }: CapitalStripProps) 
         resultBrl > 0
           ? `${formatNumber((s.withdrawn / resultBrl) * 100)} % do resultado do período`
           : "no período",
-      node: { type: "group", group: "partners" },
+      node: { type: "kind", kind: "partners" },
       icon: Users,
       tile: "bg-surface text-ink-soft",
     },

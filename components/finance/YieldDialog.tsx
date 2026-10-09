@@ -106,7 +106,6 @@ function YieldForm({
           kind: "yield",
           date,
           amountBrl,
-          category: "other",
           paidAt: date,
           bankAccountId,
           notes: notes.trim() || undefined,

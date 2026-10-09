@@ -55,7 +55,7 @@ const bull: SemenBull = {
   name: "Tufão da Serra",
   code: "NEL-4471",
   purchases: [
-    { id: "p-1", date: "2026-03-01", doses: 40, totalBrl: 1520, seller: "Central", expenseId: "e-2" },
+    { id: "p-1", date: "2026-03-01", doses: 40, totalBrl: 1520, seller: "Central" },
   ],
 };
 
@@ -176,7 +176,7 @@ describe("redactSemenBull", () => {
   it("strips the valor total of every purchase and keeps the doses", () => {
     expect(redactSemenBull(bull)).toEqual({
       ...bull,
-      purchases: [{ id: "p-1", date: "2026-03-01", doses: 40, seller: "Central", expenseId: "e-2" }],
+      purchases: [{ id: "p-1", date: "2026-03-01", doses: 40, seller: "Central" }],
     });
   });
 });

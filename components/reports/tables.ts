@@ -10,7 +10,7 @@ import { buildTable, type Cell, type ExportTable } from "@/lib/export/table";
 import { bankAccountLabel, cents } from "@/lib/domain/bankAccounts";
 import type { BankReport } from "@/lib/reports/bank";
 import type { StatementSection } from "@/lib/reports/bankStatement";
-import type { GroupsReport } from "@/lib/reports/groups";
+import type { GroupLine, GroupsReport } from "@/lib/reports/groups";
 import type { DeclarationFlow, HerdDeclaration } from "@/lib/reports/declaration";
 import type { Romaneio, RomaneioRow } from "@/lib/reports/romaneio";
 import type { TechnicalReport } from "@/lib/reports/technical";
@@ -267,33 +267,57 @@ export function technicalSummaryTable(report: TechnicalReport): ExportTable {
 /** part / whole in %, null when the whole is zero. */
 const sharePct = (part: number, whole: number): number | null => (whole === 0 ? null : (part / whole) * 100);
 
-/** The receitas by conta, with their share of the receita. */
-export function groupsRevenueTable(report: GroupsReport): TotaledTable {
-  const table = buildTable<GroupsReport["revenues"][number]>(
+interface AmountLine {
+  label: string;
+  amountBrl: number;
+}
+
+/**
+ * A tipo's grupos as table lines: each grupo, then its contas when `withAccounts`, which open it (sub-rows).
+ * A locked line (Venda de gado) has no contas. `flat` (the farm has one grupo of the tipo) drops the grupo's
+ * header and its contas stand on their own, so a farm that keeps the defaults does not read "Receitas › Receitas".
+ */
+function groupLines(
+  groups: readonly GroupLine[],
+  withAccounts: boolean,
+  flat: boolean
+): { lines: AmountLine[]; subRows?: Set<number> } {
+  if (!withAccounts) return { lines: [...groups] };
+  const lines: AmountLine[] = [];
+  const subRows = new Set<number>();
+  for (const group of groups) {
+    if (group.locked || !flat) lines.push(group);
+    for (const account of group.accounts) {
+      if (!flat) subRows.add(lines.length);
+      lines.push(account);
+    }
+  }
+  return { lines, subRows };
+}
+
+/** The receitas by grupo, Venda de gado on its own line, with their share of the receita; `withAccounts` opens each grupo into its contas. */
+export function groupsRevenueTable(report: GroupsReport, withAccounts: boolean): TotaledTable {
+  const { lines, subRows } = groupLines(report.revenues, withAccounts, report.flat.revenue);
+  const table = buildTable<AmountLine>(
     "Receitas",
     [
-      { header: "Conta", value: (r) => r.label },
+      { header: withAccounts ? "Grupo / conta" : "Grupo", value: (r) => r.label },
       { header: "Valor (R$)", kind: "money", value: (r) => r.amountBrl },
       { header: "%", kind: "number", decimals: 2, value: (r) => sharePct(r.amountBrl, report.revenueTotal) },
     ],
-    report.revenues
+    lines
   );
-  return { table, totals: ["Total de receitas", report.revenueTotal, sharePct(report.revenueTotal, report.revenueTotal)] };
+  return {
+    table,
+    totals: ["Total de receitas", report.revenueTotal, sharePct(report.revenueTotal, report.revenueTotal)],
+    subRows,
+  };
 }
 
 /** The despesas by grupo with their share of the despesas and of the receita; `withAccounts` opens each grupo into its contas. */
 export function groupsExpenseTable(report: GroupsReport, withAccounts: boolean): TotaledTable {
-  const lines: { label: string; amountBrl: number }[] = [];
-  const subRows = new Set<number>();
-  for (const group of report.expenses) {
-    lines.push(group);
-    if (!withAccounts) continue;
-    for (const account of group.accounts) {
-      subRows.add(lines.length);
-      lines.push(account);
-    }
-  }
-  const table = buildTable<{ label: string; amountBrl: number }>(
+  const { lines, subRows } = groupLines(report.expenses, withAccounts, report.flat.expense);
+  const table = buildTable<AmountLine>(
     "Despesas",
     [
       { header: withAccounts ? "Grupo / conta" : "Grupo", value: (r) => r.label },
@@ -311,7 +335,7 @@ export function groupsExpenseTable(report: GroupsReport, withAccounts: boolean):
       sharePct(report.expenseTotal, report.expenseTotal),
       sharePct(report.expenseTotal, report.revenueTotal),
     ],
-    subRows: withAccounts ? subRows : undefined,
+    subRows,
   };
 }
 

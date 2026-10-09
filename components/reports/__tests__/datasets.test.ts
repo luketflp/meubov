@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { PlanGroup } from "@/lib/types";
 import { datasetRows, reportDatasets } from "@/components/reports/datasets";
 import { makeAnimal, makeTreatment } from "@/lib/domain/__tests__/fixtures";
 import { makeData } from "@/lib/reports/__tests__/data";
 
 const TODAY = "2026-09-22";
+
+const NUTRICAO: PlanGroup = { id: "grp-nutricao", kind: "expense", name: "Nutrição", createdAt: "2026-01-01T00:00:00.000Z" };
 
 const data = makeData({
   animals: [
@@ -12,7 +15,8 @@ const data = makeData({
     makeAnimal({ earTag: "C", active: false, inactiveDate: "2026-05-01", inactiveReason: "death" }),
   ],
   treatments: [makeTreatment({ animalEarTag: "A", costBrl: 12 })],
-  expenses: [{ id: "e1", kind: "expense", date: "2026-02-01", category: "nutrition", amountBrl: 500 }],
+  expenses: [{ id: "e1", kind: "expense", date: "2026-02-01", category: NUTRICAO.id, amountBrl: 500 }],
+  planGroups: [NUTRICAO],
 });
 
 describe("reportDatasets", () => {
@@ -46,6 +50,11 @@ describe("reportDatasets", () => {
     for (const dataset of datasets) {
       for (const table of dataset.tables) expect(table.columns.some((c) => c.kind === "money")).toBe(false);
     }
+  });
+
+  it("names each despesa's grupo from the farm's grupos", () => {
+    const despesas = reportDatasets(data, TODAY, true).find((d) => d.key === "expenses")!;
+    expect(despesas.tables[0].rows[0]).toContain("Nutrição");
   });
 
   it("offers Touros e sêmen as xlsx only, with two tables", () => {

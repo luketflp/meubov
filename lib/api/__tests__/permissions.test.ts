@@ -1,15 +1,17 @@
 /**
  * Real routes of herdApi behind the farm macro, with auth and the db mocked:
  * proves the macro's route pattern matches the table's keys at runtime, the
- * money rules on POST /manejo and on semen purchases, and the redaction of
- * GET /api/herd and of the semen bull a write returns.
+ * money rules on POST /manejo, the semen writes that ask Reprodução only, and
+ * the redaction of GET /api/herd and of what a semen write returns.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FULL_PERMISSIONS, PRESETS } from "@/lib/domain/permissions";
 
-const { state, getSession, HERD } = vi.hoisted(() => ({
+const { state, getSession, deleteBull, HERD } = vi.hoisted(() => ({
   state: { membership: [] as Record<string, unknown>[] },
   getSession: vi.fn(),
+  /** DeleteBullUseCase.run: answers the id it was asked to delete. */
+  deleteBull: vi.fn((props: { farmId: number; id: string }) => Promise.resolve({ id: props.id })),
   HERD: {
     animals: [],
     treatments: [
@@ -17,15 +19,15 @@ const { state, getSession, HERD } = vi.hoisted(() => ({
     ],
     lots: [],
     accounts: [
-      { id: "acc-1", group: "financing", name: "Pronaf", openingBalanceBrl: 120000, openingDate: "2026-06-30" },
+      { id: "acc-1", group: "grp-financiamentos", name: "Pronaf", openingBalanceBrl: 120000, openingDate: "2026-06-30" },
     ],
     invernadas: [],
     lotPlacements: [],
     movements: [],
     breeds: [],
     manejoSessions: [],
-    expenses: [{ id: "e-1", date: "2026-09-01", category: "labor", amountBrl: 1200 }],
-    customCategories: [],
+    expenses: [{ id: "e-1", kind: "expense", date: "2026-09-01", category: "grp-mao-de-obra", amountBrl: 1200 }],
+    planGroups: [],
     semenBulls: [
       {
         id: "bull-1",
@@ -84,6 +86,34 @@ vi.mock("@/lib/api/domains/semen/useCases/UpdateBull.useCase", () => ({
       });
   },
 }));
+vi.mock("@/lib/api/domains/semen/useCases/AddBull.useCase", () => ({
+  AddBullUseCase: class {
+    run = () =>
+      Promise.resolve({
+        bull: {
+          id: "bull-2",
+          name: "Bravo",
+          purchases: [{ id: "p-2", date: "2026-09-12", doses: 10, totalBrl: 380 }],
+        },
+      });
+  },
+}));
+vi.mock("@/lib/api/domains/semen/useCases/AddPurchase.useCase", () => ({
+  AddPurchaseUseCase: class {
+    run = () =>
+      Promise.resolve({ purchase: { id: "p-2", date: "2026-09-12", doses: 10, totalBrl: 380 } });
+  },
+}));
+vi.mock("@/lib/api/domains/semen/useCases/DeleteBull.useCase", () => ({
+  DeleteBullUseCase: class {
+    run = deleteBull;
+  },
+}));
+vi.mock("@/lib/api/domains/semen/useCases/DeletePurchase.useCase", () => ({
+  DeletePurchaseUseCase: class {
+    run = () => Promise.resolve({ id: "p-1" });
+  },
+}));
 vi.mock("@/lib/api/domains/manejo/useCases/CompleteAnimal.useCase", () => ({
   CompleteAnimalUseCase: class {
     run = () =>
@@ -111,6 +141,9 @@ const request = (method: string, path: string, body?: unknown) =>
 function asMember(permissions: typeof FULL_PERMISSIONS) {
   state.membership = [{ role: "member", preset: null, permissions }];
 }
+
+/** 10 doses for R$ 380. */
+const PURCHASE_BODY = { date: "2026-09-12", doses: 10, totalBrl: 380 };
 
 beforeEach(() => {
   getSession.mockResolvedValue({ user: { id: "user-1", email: "user@meubov.test" } });
@@ -148,7 +181,7 @@ describe("permissions on the mounted API", () => {
     const data = await response.json();
     expect(data.expenses).toEqual([]);
     expect(data.treatments[0]).not.toHaveProperty("costBrl");
-    expect(data.accounts).toEqual([{ id: "acc-1", group: "financing", name: "Pronaf" }]);
+    expect(data.accounts).toEqual([{ id: "acc-1", group: "grp-financiamentos", name: "Pronaf" }]);
   });
 
   it("keeps money for a member who sees Financeiro", async () => {
@@ -167,25 +200,60 @@ describe("permissions on the mounted API", () => {
     expect(data.semenBulls[0].purchases[0].doses).toBe(40);
   });
 
-  it("refuses a vaqueiro a semen purchase, naming Financeiro", async () => {
+  it("lets a vaqueiro (Reprodução edit, finance none) buy doses, without the total in the answer", async () => {
     asMember(PRESETS.vaqueiro);
-    const response = await request("POST", "/semen-bulls/bull-1/purchases", {
-      date: "2026-09-12",
-      doses: 10,
-      totalBrl: 380,
+    const response = await request("POST", "/semen-bulls/bull-1/purchases", PURCHASE_BODY);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      purchase: { id: "p-2", date: "2026-09-12", doses: 10 },
     });
-    expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ error: "forbidden", area: "finance" });
   });
 
-  it("refuses a vaqueiro a new bull that brings its first purchase", async () => {
+  it("answers the purchase with its total to a member who sees Financeiro", async () => {
+    asMember(FULL_PERMISSIONS);
+    const response = await request("POST", "/semen-bulls/bull-1/purchases", PURCHASE_BODY);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      purchase: { id: "p-2", date: "2026-09-12", doses: 10, totalBrl: 380 },
+    });
+  });
+
+  it("refuses a consultor a semen purchase, naming Reprodução", async () => {
+    asMember(PRESETS.consultor);
+    const response = await request("POST", "/semen-bulls/bull-1/purchases", PURCHASE_BODY);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "forbidden", area: "reproduction" });
+  });
+
+  it("lets a vaqueiro register a bull with its first purchase, without the totals", async () => {
     asMember(PRESETS.vaqueiro);
     const response = await request("POST", "/semen-bulls", {
       name: "Bravo",
-      firstPurchase: { date: "2026-09-12", doses: 10, totalBrl: 380 },
+      firstPurchase: PURCHASE_BODY,
     });
-    expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ error: "forbidden", area: "finance" });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      bull: {
+        id: "bull-2",
+        name: "Bravo",
+        purchases: [{ id: "p-2", date: "2026-09-12", doses: 10 }],
+      },
+    });
+  });
+
+  it("lets a vaqueiro delete a bull with purchases, asking nothing of Financeiro", async () => {
+    asMember(PRESETS.vaqueiro);
+    const response = await request("DELETE", "/semen-bulls/bull-1");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ id: "bull-1" });
+    expect(deleteBull).toHaveBeenCalledWith({ farmId: 7, id: "bull-1" });
+  });
+
+  it("lets a vaqueiro delete a purchase", async () => {
+    asMember(PRESETS.vaqueiro);
+    const response = await request("DELETE", "/semen-bulls/bull-1/purchases/p-1");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ id: "p-1" });
   });
 
   it("strips the purchase totals from an edited bull for a vaqueiro (finance none)", async () => {

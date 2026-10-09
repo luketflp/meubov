@@ -16,7 +16,6 @@ import {
   breeds,
   calvings,
   customCategories,
-  expenseGroups,
   expenseSeries,
   expenses,
   farm,
@@ -26,6 +25,7 @@ import {
   manejoSessionAnimals,
   manejoSessions,
   movements,
+  planGroups,
   pregnancyDiagnoses,
   semenBulls,
   semenPurchases,
@@ -49,7 +49,6 @@ import {
   toCustomCategory,
   toDiagnosis,
   toExpense,
-  toExpenseGroup,
   toFarmData,
   toInvernada,
   toLot,
@@ -57,6 +56,7 @@ import {
   toManejoSession,
   toManejoSessionAnimal,
   toMovement,
+  toPlanGroup,
   toSemenBull,
   toSemenPurchase,
   toTransfer,
@@ -119,7 +119,7 @@ export class LoadHerdUseCase implements CurrUseCase {
       transferRows,
       lineSummaryRows,
       reconciledRows,
-      expenseGroupRows,
+      planGroupRows,
     ] = await Promise.all([
       this.repository.select().from(farm).where(eq(farm.id, farmId)),
       this.repository.select().from(animals).where(eq(animals.farmId, farmId)).orderBy(asc(animals.earTag)),
@@ -257,9 +257,9 @@ export class LoadHerdUseCase implements CurrUseCase {
         ),
       this.repository
         .select()
-        .from(expenseGroups)
-        .where(eq(expenseGroups.farmId, farmId))
-        .orderBy(asc(expenseGroups.createdAt), asc(expenseGroups.name)),
+        .from(planGroups)
+        .where(eq(planGroups.farmId, farmId))
+        .orderBy(asc(planGroups.name)),
     ]);
 
     const weighingsByAnimal = new Map<string, Weighing[]>();
@@ -339,7 +339,7 @@ export class LoadHerdUseCase implements CurrUseCase {
         )
       ),
       accounts: accountRows.map(toAccount),
-      expenseGroups: expenseGroupRows.map(toExpenseGroup),
+      planGroups: planGroupRows.map(toPlanGroup),
       bankAccounts: bankAccountRows.map((row) => toBankAccount(row, linesByAccount.get(row.id))),
       transfers: transferRows.map(toTransfer),
       reconciledIds: reconciledRows.map(pairKey).filter((key): key is string => key !== undefined),

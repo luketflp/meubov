@@ -1,8 +1,8 @@
-import { and, eq, isNull, or } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { accounts, animals, budgets, expenseGroups, expenses, treatments } from "@/lib/db/schema";
-import { toAccount, toBudget, toExpense, toExpenseGroup, toTreatment } from "@/lib/api/mappers";
+import { accounts, budgets, expenses, planGroups } from "@/lib/db/schema";
+import { toAccount, toBudget, toExpense, toPlanGroup } from "@/lib/api/mappers";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
 import { lineRows, safraStartMonth, safraWhere } from "@/lib/api/domains/budgets/budgetLine";
 import { copyPlan } from "@/lib/domain/budget";
@@ -53,28 +53,22 @@ export class CopyBudgetsUseCase implements CurrUseCase {
 
   public run: CurrUseCase["run"] = async ({ farmId, userId, from, to, startMonth, source, adjustPct, todayIso }) => {
     if ((await safraStartMonth(this.repository, farmId)) !== startMonth) return "start_month_changed";
-    const [budgetRows, expenseRows, treatmentRows, accountRows, groupRows] = await Promise.all([
+    const [budgetRows, expenseRows, accountRows, groupRows] = await Promise.all([
       this.repository
         .select()
         .from(budgets)
         .where(or(safraWhere(farmId, startMonth, from), safraWhere(farmId, startMonth, to))),
       this.repository.select().from(expenses).where(eq(expenses.farmId, farmId)),
-      this.repository
-        .select({ row: treatments, earTag: animals.earTag })
-        .from(treatments)
-        .innerJoin(animals, eq(treatments.animalId, animals.id))
-        .where(and(eq(animals.farmId, farmId), isNull(treatments.deletedAt))),
       this.repository.select().from(accounts).where(eq(accounts.farmId, farmId)),
-      // Every grupo of the farm: a farm grupo's lines copy, an archived one's stay behind.
-      this.repository.select().from(expenseGroups).where(eq(expenseGroups.farmId, farmId)),
+      // Every grupo of the farm: an active grupo's lines copy, an archived one's stay behind.
+      this.repository.select().from(planGroups).where(eq(planGroups.farmId, farmId)),
     ]);
     const { lines, skipped } = copyPlan(
       {
         budgets: budgetRows.map(toBudget),
         expenses: expenseRows.map((row) => toExpense(row)),
-        treatments: treatmentRows.map(({ row, earTag }) => toTreatment(row, earTag)),
         accounts: accountRows.map(toAccount),
-        expenseGroups: groupRows.map(toExpenseGroup),
+        planGroups: groupRows.map(toPlanGroup),
       },
       from,
       to,

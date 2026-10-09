@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { state } = vi.hoisted(() => ({
   state: {
-    /** Rows each `select()` resolves to, in call order: the conta do plano, then "Pago por". */
+    /** Rows each `select()` resolves to, in call order: the grupo, the conta do plano, then "Pago por". */
     selectResults: [] as Record<string, unknown>[][],
     inserts: [] as Record<string, unknown>[][],
   },
@@ -43,13 +43,18 @@ const ENTRY = {
   farmId: 7,
   todayIso: "2026-09-28",
   date: "2026-09-27",
-  category: "nutrition" as const,
+  category: "grp-nutricao",
   counterparty: "Nutron",
   document: "NF 4.812",
 };
 
+/** A plan_groups row of the farm, as the grupo check reads it. */
+const grupo = (id: string, kind: string) =>
+  ({ id, farmId: 7, kind, name: id, archivedAt: null, createdAt: new Date(0) });
+
 beforeEach(() => {
-  state.selectResults = [];
+  // Every despesa here is in Nutrição unless a test says otherwise: the grupo check reads it first.
+  state.selectResults = [[grupo("grp-nutricao", "expense")]];
   state.inserts = [];
 });
 
@@ -131,9 +136,10 @@ describe("addSeries — parcelado", () => {
 
 describe("addSeries — recorrente", () => {
   it("writes each ocorrência on its own date up to today + 12 months", async () => {
+    state.selectResults = [[grupo("grp-mao-de-obra", "expense")]];
     await new AddSeriesUseCase().run({
       ...ENTRY,
-      category: "labor",
+      category: "grp-mao-de-obra",
       amountBrl: 6480,
       repeat: { mode: "recurring", frequency: "monthly", dayOfMonth: 5, startsOn: "2026-10-05" },
     });
@@ -186,12 +192,13 @@ describe("addSeries — recorrente", () => {
 });
 
 describe("addSeries — fora do resultado", () => {
-  it("writes a financiamento's movimento on the série and every parcela, without grupo or lote", async () => {
-    state.selectResults = [[{ group: "financing" }]];
+  it("writes a financiamento's grupo and movimento on the série and every parcela, without lote", async () => {
+    state.selectResults = [[grupo("grp-financiamentos", "financing")], [{ group: "grp-financiamentos" }]];
 
     await new AddSeriesUseCase().run({
       ...ENTRY,
       kind: "financing",
+      category: "grp-financiamentos",
       accountId: "acc-pronaf",
       lotId: "lot-1",
       amountBrl: 1200,
@@ -202,17 +209,21 @@ describe("addSeries — fora do resultado", () => {
     expect(series).toMatchObject({
       kind: "financing",
       flow: "out",
-      category: "other",
+      category: "grp-financiamentos",
       accountId: "acc-pronaf",
       lotId: null,
     });
-    expect(rows.every((row) => row.flow === "out" && row.category === "other" && row.lotId === null)).toBe(true);
+    expect(
+      rows.every((row) => row.flow === "out" && row.category === "grp-financiamentos" && row.lotId === null)
+    ).toBe(true);
   });
 
-  it("refuses a série of sócios without a conta of its group", async () => {
+  it("refuses a série of sócios without a conta", async () => {
+    state.selectResults = [[grupo("grp-socios", "partners")]];
     const result = await new AddSeriesUseCase().run({
       ...ENTRY,
       kind: "partners",
+      category: "grp-socios",
       amountBrl: 5000,
       repeat: { mode: "recurring", frequency: "monthly", startsOn: "2026-10-05" },
     });

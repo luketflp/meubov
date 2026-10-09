@@ -31,7 +31,7 @@ interface BillsCardProps {
 export function BillsCard({ payables, receivables, canEdit }: BillsCardProps) {
   const accounts = useHerdStore((s) => s.accounts);
   const lots = useHerdStore((s) => s.lots);
-  const expenseGroups = useHerdStore((s) => s.expenseGroups);
+  const planGroups = useHerdStore((s) => s.planGroups);
   const markPaid = useMarkPaid();
   const [tab, setTab] = useState<Tab>("payables");
   // Ids being marked; their checkbox stays disabled so a double tap can't fire twice.
@@ -109,7 +109,7 @@ export function BillsCard({ payables, receivables, canEdit }: BillsCardProps) {
               const due = effectiveDueDate(entry);
               const late = due < today;
               const group = entryGroup(entry);
-              const grupo = group ? groupLabel(group, expenseGroups) : ENTRY_KIND_LABEL.yield;
+              const grupo = group ? groupLabel(group, planGroups) : ENTRY_KIND_LABEL.yield;
               const conta = accountName(entry.accountId, accounts);
               const title = conta ? `${grupo} › ${conta}` : grupo;
               const lotName = entry.lotId

@@ -29,7 +29,7 @@ const row = (index: number, paidAt: string | null, dueDate: string) => ({
   farmId: 7,
   kind: "expense",
   date: dueDate,
-  category: "admin",
+  category: "grp-administrativo",
   amountBrl: 1280,
   notes: null,
   dueDate,
@@ -142,25 +142,50 @@ describe("updateSeries", () => {
       ...r,
       kind: "partners",
       flow: "out",
-      category: "other",
+      category: "grp-socios",
       accountId: "acc-socios",
       bankAccountId: null,
     });
     const rows = ROWS.map(aporte);
-    // The row, the série, the row again (its own update), its conta do plano, its linhas (none), the siblings.
-    state.selectResults = [[rows[1]], [SERIES], [rows[1]], [{ group: "partners" }], [], rows];
+    // The row, the série, the row again (its own update), its grupo, its conta do plano, its linhas (none), the siblings.
+    const socios = { id: "grp-socios", farmId: 7, kind: "partners", name: "Sócios", archivedAt: null, createdAt: new Date(0) };
+    state.selectResults = [[rows[1]], [SERIES], [rows[1]], [socios], [{ group: "grp-socios" }], [], rows];
     state.returning = [[{ ...rows[1], flow: "in" }]];
 
     await new UpdateSeriesUseCase().run({ farmId: 7, id: "e-2", patch: { flow: "in" }, scope: "all" });
 
-    expect(state.updates[0]).toMatchObject({ kind: "partners", flow: "in", category: "other" });
+    expect(state.updates[0]).toMatchObject({ kind: "partners", flow: "in", category: "grp-socios" });
     // The série template, then row 4 (rows 1 and 3 are paid).
     expect(state.updates.slice(1)).toEqual([{ flow: "in" }, { flow: "in" }]);
   });
 
+  it("shares the edited row's conta along with a new grupo, so no sibling keeps a conta of the old grupo", async () => {
+    const edited = { ...ROWS[1], accountId: null, bankAccountId: null };
+    // The row, the série, the row again (its own update), its new grupo, the siblings.
+    const nutricao = { id: "grp-nutricao", farmId: 7, kind: "expense", name: "Nutrição", archivedAt: null, createdAt: new Date(0) };
+    state.selectResults = [[edited], [SERIES], [edited], [nutricao], ROWS];
+    state.returning = [[{ ...edited, category: "grp-nutricao" }]];
+
+    await new UpdateSeriesUseCase().run({ farmId: 7, id: "e-2", patch: { category: "grp-nutricao" }, scope: "all" });
+
+    // The série template, then the unpaid siblings: the grupo and the (empty) conta travel together.
+    expect(state.updates.slice(1)).toEqual([
+      { category: "grp-nutricao", accountId: null },
+      { category: "grp-nutricao", accountId: null },
+    ]);
+  });
+
   it("never changes the kind of a série: the edit is judged as the kind the rows have", async () => {
-    // The row, the série, the row again (its own update), the conta do plano sent: an investimento's.
-    state.selectResults = [[ROWS[1]], [SERIES], [ROWS[1]], [{ group: "investment" }]];
+    // The row, the série, the row again (its own update), its grupo, the conta do plano sent: an investimento's.
+    const administrativo = {
+      id: "grp-administrativo",
+      farmId: 7,
+      kind: "expense",
+      name: "Administrativo",
+      archivedAt: null,
+      createdAt: new Date(0),
+    };
+    state.selectResults = [[ROWS[1]], [SERIES], [ROWS[1]], [administrativo], [{ group: "grp-investimentos" }]];
 
     const result = await new UpdateSeriesUseCase().run({
       farmId: 7,

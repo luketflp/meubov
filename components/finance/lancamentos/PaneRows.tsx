@@ -14,6 +14,7 @@ import { ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import type { PaneRow, PlanNode } from "@/lib/domain/planTree";
 import { formatDate } from "@/lib/domain/dates";
 import { formatNumber } from "@/lib/domain/format";
+import { groupKind } from "@/lib/domain/groups";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { ELLIPSIS, pageWindow, paginate } from "@/components/herd/pagination";
 import { AttachmentCount, InstallmentChip, RecurrenceTag } from "@/components/finance/SeriesMarkers";
@@ -122,6 +123,7 @@ interface PaneRowsProps {
 
 export function PaneRows({ node, rows, selectedId, onSelect, page: pageNumber, onPageChange }: PaneRowsProps) {
   const accounts = useHerdStore((s) => s.accounts);
+  const planGroups = useHerdStore((s) => s.planGroups);
   const [shown, setShown] = useState(PAGE_SIZE);
   const [openId, setOpenId] = useState<string | null>(null);
   const [sort, setSort] = useState<LineSort | null>(null);
@@ -142,11 +144,11 @@ export function PaneRows({ node, rows, selectedId, onSelect, page: pageNumber, o
   };
 
   // The last column: the saldo after each line on a conta bancária, the saldo devedor on a financiamento.
-  const accountId = node.type === "account" ? node.id : null;
+  const accountGroup = node.type === "account" ? accounts.find((a) => a.id === node.id)?.group : undefined;
   const last =
     node.type === "bank"
       ? "Saldo (R$)"
-      : accounts.find((a) => a.id === accountId)?.group === "financing"
+      : accountGroup !== undefined && groupKind(accountGroup, planGroups) === "financing"
         ? "Saldo devedor"
         : "Status";
   const saldo = last !== "Status";

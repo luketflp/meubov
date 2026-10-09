@@ -1,6 +1,7 @@
 /**
- * updateExpenseGroup: renames a grupo (refused like a new name, except that its
- * own name in another case is fine) or archives and restores it.
+ * updatePlanGroup: renames a grupo of any tipo (refused like a new name,
+ * except that its own name in another case is fine) or archives and restores
+ * it. The tipo is not part of the patch.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,18 +21,19 @@ vi.mock("@/lib/db", async () => ({
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
 
-import { UpdateExpenseGroupUseCase, type ExpenseGroupPatchInput } from "../Update.useCase";
+import { UpdatePlanGroupUseCase, type PlanGroupPatchInput } from "../Update.useCase";
 
 const ROW = {
-  id: "g-maq",
+  id: "g-rec",
   farmId: 7,
-  name: "Máquinas e veículos",
+  kind: "revenue",
+  name: "Receitas",
   archivedAt: null,
   createdAt: new Date("2026-10-01T12:00:00Z"),
 };
 
-const update = (patch: ExpenseGroupPatchInput, repo?: RepositoryType) =>
-  new UpdateExpenseGroupUseCase(repo).run({ farmId: 7, id: "g-maq", patch });
+const update = (patch: PlanGroupPatchInput, repo?: RepositoryType) =>
+  new UpdatePlanGroupUseCase(repo).run({ farmId: 7, id: "g-rec", patch });
 
 beforeEach(() => {
   state.selectResults = [];
@@ -39,33 +41,28 @@ beforeEach(() => {
   state.returning = [];
 });
 
-describe("updateExpenseGroup", () => {
-  it("renames, trimmed", async () => {
-    state.returning = [[{ ...ROW, name: "Máquinas" }]];
+describe("updatePlanGroup", () => {
+  it("renames a default grupo, trimmed, and keeps its tipo", async () => {
+    state.returning = [[{ ...ROW, name: "Vendas" }]];
 
-    expect(await update({ name: " Máquinas " })).toMatchObject({ id: "g-maq", name: "Máquinas" });
-    expect(state.updates).toEqual([{ name: "Máquinas" }]);
+    expect(await update({ name: " Vendas " })).toMatchObject({ id: "g-rec", kind: "revenue", name: "Vendas" });
+    expect(state.updates).toEqual([{ name: "Vendas" }]);
   });
 
   it("renames a grupo to its own name in another case", async () => {
-    state.returning = [[{ ...ROW, name: "MÁQUINAS E VEÍCULOS" }]];
+    state.returning = [[{ ...ROW, name: "RECEITAS" }]];
 
-    expect(await update({ name: "MÁQUINAS E VEÍCULOS" })).toMatchObject({ name: "MÁQUINAS E VEÍCULOS" });
-    expect(state.updates).toEqual([{ name: "MÁQUINAS E VEÍCULOS" }]);
+    expect(await update({ name: "RECEITAS" })).toMatchObject({ name: "RECEITAS" });
+    expect(state.updates).toEqual([{ name: "RECEITAS" }]);
   });
 
-  it("refuses a built-in or top grupo label in any case or with spaces, writing nothing", async () => {
-    for (const name of ["  nutrição ", "RECEITAS"]) expect(await update({ name })).toBe("duplicate");
-    expect(state.updates).toEqual([]);
-  });
-
-  it("answers duplicate when another grupo of the farm has the name", async () => {
+  it("answers duplicate when another grupo of the farm, of any tipo, has the name", async () => {
     const unique = Object.assign(new Error("duplicate key"), { cause: { code: "23505" } });
     const taken = {
       update: () => ({ set: () => ({ where: () => ({ returning: () => Promise.reject(unique) }) }) }),
     } as unknown as RepositoryType;
 
-    expect(await update({ name: "Arrendamento" }, taken)).toBe("duplicate");
+    expect(await update({ name: "Nutrição" }, taken)).toBe("duplicate");
   });
 
   it("archives and restores", async () => {

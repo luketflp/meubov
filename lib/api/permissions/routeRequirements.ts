@@ -6,7 +6,7 @@
  * with no entry is refused by the farm macro. A route declares the area of the
  * action it starts; whatever that action writes on the way belongs to it (a
  * parto inserts the calf, a chute pass inserts the treatment). Money rules that
- * depend on the body live in the manejo and semen controllers.
+ * depend on the body live in the manejo controller.
  */
 import { can, type Area, type Permissions } from "@/lib/domain/permissions";
 
@@ -52,14 +52,13 @@ export const ROUTE_REQUIREMENTS: Readonly<Record<string, RouteRequirement>> = {
   "POST /api/herd/animals/:id/diagnoses": edit("reproduction"),
   "DELETE /api/herd/animals/:id/diagnoses/:breedingId": edit("reproduction"),
   "POST /api/herd/births/import": edit("reproduction"),
-  // A new bull may bring its first purchase; the controller asks Financeiro for that.
+  // A new bull may bring its first purchase, and deleting one takes its purchases along.
   "POST /api/herd/semen-bulls": edit("reproduction"),
   "PATCH /api/herd/semen-bulls/:id": edit("reproduction"),
-  // Deleting a bull takes its purchases along; the controller asks Financeiro for their expenses.
   "DELETE /api/herd/semen-bulls/:id": edit("reproduction"),
-  // A purchase is a Reprodução expense: writing or deleting one moves money.
-  "POST /api/herd/semen-bulls/:id/purchases": edit("reproduction", "finance"),
-  "DELETE /api/herd/semen-bulls/:id/purchases/:purchaseId": edit("reproduction", "finance"),
+  // A purchase is stock, not money in the Financeiro.
+  "POST /api/herd/semen-bulls/:id/purchases": edit("reproduction"),
+  "DELETE /api/herd/semen-bulls/:id/purchases/:purchaseId": edit("reproduction"),
 
   "POST /api/herd/treatments/schedule": edit("sanitary"),
   "POST /api/herd/treatments/complete": edit("sanitary"),
@@ -83,9 +82,9 @@ export const ROUTE_REQUIREMENTS: Readonly<Record<string, RouteRequirement>> = {
   "PATCH /api/herd/accounts/:id": edit("finance"),
   "DELETE /api/herd/accounts/:id": edit("finance"),
   "POST /api/herd/accounts/defaults": edit("finance"),
-  "POST /api/herd/expense-groups": edit("finance"),
-  "PATCH /api/herd/expense-groups/:id": edit("finance"),
-  "DELETE /api/herd/expense-groups/:id": edit("finance"),
+  "POST /api/herd/plan-groups": edit("finance"),
+  "PATCH /api/herd/plan-groups/:id": edit("finance"),
+  "DELETE /api/herd/plan-groups/:id": edit("finance"),
   // Anexos: reading one is seeing money, writing one is editing a lançamento.
   "GET /api/herd/attachments/status": { view: "finance" },
   "POST /api/herd/attachments/upload-token": edit("finance"),

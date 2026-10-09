@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { breeds, customCategories, farm, farmUsers } from "@/lib/db/schema";
+import { breeds, customCategories, farm, farmUsers, planGroups } from "@/lib/db/schema";
 import { validateNewFarm, type NewFarmProblem } from "@/lib/domain/farms";
+import { seedPlanGroups } from "@/lib/api/domains/planGroups/seed";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
@@ -12,7 +13,7 @@ interface CreateFarmUseCaseProps {
   userId: string;
   name: string;
   municipality: string;
-  /** The open farm whose raças and categorias the new farm starts with. */
+  /** The open farm whose raças, categorias and grupos the new farm starts with. */
   copyFromFarmId?: number;
 }
 
@@ -24,8 +25,10 @@ type CreateFarmUseCaseResponse =
 type CurrUseCase = _UseCase<CreateFarmUseCaseProps, CreateFarmUseCaseResponse>;
 
 /**
- * A new farm owned by the caller, named at creation. With a source farm it
- * starts with that farm's raças and categorias under fresh ids — never its animals, lotes, invernadas, touros or equipe. The
+ * A new farm owned by the caller, named at creation, with the eleven default
+ * grupos of the plano. With a source farm it starts instead with that farm's
+ * raças, categorias and active grupos under fresh ids — never its animals,
+ * lotes, invernadas, touros, contas or equipe. The
  * caller must still belong to the live source; any role will do, since every
  * member already sees those lists.
  *
@@ -73,6 +76,7 @@ export class CreateFarmUseCase implements CurrUseCase {
       await tx.insert(farmUsers).values({ farmId: created.id, userId, role: "owner" });
 
       if (copyFromFarmId !== undefined) await copySetup(tx, copyFromFarmId, created.id);
+      else await seedPlanGroups(tx, created.id);
       return { farmId: created.id };
     });
   };
@@ -97,4 +101,11 @@ async function copySetup(tx: RepositoryType, from: number, to: number): Promise<
       .insert(customCategories)
       .values(categoryRows.map((row) => ({ id: randomUUID(), farmId: to, ...row })));
   }
+
+  const groupRows = await tx
+    .select({ kind: planGroups.kind, name: planGroups.name })
+    .from(planGroups)
+    .where(and(eq(planGroups.farmId, from), isNull(planGroups.archivedAt)))
+    .orderBy(asc(planGroups.name));
+  await seedPlanGroups(tx, to, groupRows);
 }

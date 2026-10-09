@@ -18,13 +18,14 @@ import { AddExpenseUseCase } from "@/lib/api/domains/expenses/useCases/Add.useCa
 import { entryFlow } from "@/lib/domain/entries";
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
-import type { Expense, StatementLine, Transfer } from "@/lib/types";
+import type { Expense, ExpenseCategory, StatementLine, Transfer } from "@/lib/types";
 import type { MatchTarget } from "@/lib/domain/statements/match";
 
 /** The EntryDialog's fields for "Criar lançamento"; kind, pagamento and conta come from the line. */
 export interface LineEntry {
   date: string;
-  category: Expense["category"];
+  /** The grupo: of kind despesa for a saída, receita for an entrada (normaliseEntry checks it). */
+  category?: ExpenseCategory;
   amountBrl: number;
   notes?: string;
   dueDate?: string;
@@ -165,7 +166,6 @@ export async function resolve(
       ...action.entry,
       farmId,
       kind: outflow ? "expense" : "revenue",
-      category: outflow ? action.entry.category : "other",
       // The line is the payment: its value and date, whatever the form sent.
       amountBrl: Math.abs(line.amountBrl),
       paidAt: line.date,

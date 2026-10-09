@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { BankAccount, Expense } from "@/lib/types";
+import type { BankAccount, Expense, GroupKind, PlanGroup, StatementLine } from "@/lib/types";
+import { groupsOf } from "@/lib/domain/groups";
 import { NONE, entrySummary, entryValues, initialFields, withKind, type EntryFields } from "@/components/finance/entryFields";
 
 const TODAY = "2026-10-01";
@@ -25,41 +26,68 @@ const CARD: BankAccount = {
 };
 const BANKS = [CARD, CAIXA, SICREDI];
 
-/** A new despesa of R$ 1.500,00, paid today from the Sicredi. */
+const group = (id: string, kind: GroupKind, name: string, archivedAt?: string): PlanGroup => ({
+  id,
+  kind,
+  name,
+  createdAt: "2026-01-01T12:00:00Z",
+  ...(archivedAt ? { archivedAt } : {}),
+});
+/** By name the despesas are Leilões (archived), Máquinas e veículos, Nutrição; Financiamentos has only an archived grupo. */
+const GROUPS: PlanGroup[] = [
+  group("g-nut", "expense", "Nutrição"),
+  group("g-maq", "expense", "Máquinas e veículos"),
+  group("g-old", "expense", "Leilões", "2026-09-20T12:00:00Z"),
+  group("g-rec", "revenue", "Receitas"),
+  group("g-inv", "investment", "Investimentos"),
+  group("g-ben", "investment", "Benfeitorias"),
+  group("g-pronaf", "financing", "Pronaf", "2026-09-20T12:00:00Z"),
+  group("g-soc", "partners", "Sócios"),
+];
+
+/** A new despesa of R$ 1.500,00 in Máquinas e veículos, paid today from the Sicredi. */
 const form = (patch: Partial<EntryFields> = {}): EntryFields => ({
-  ...initialFields({ defaultKind: "expense" }, BANKS, TODAY),
+  ...initialFields({ defaultKind: "expense" }, BANKS, TODAY, GROUPS),
   amount: "1.500,00",
   ...patch,
 });
 
 describe("initialFields", () => {
-  const LIVE = { id: "g-maq", name: "Máquinas e veículos", createdAt: "2026-10-01T12:00:00Z" };
-  const ARCHIVED = { id: "g-old", name: "Leilões", createdAt: "2026-09-01T12:00:00Z", archivedAt: "2026-09-20T12:00:00Z" };
-  const GROUPS = [LIVE, ARCHIVED];
-
-  it("starts a new lançamento in a farm grupo only while the grupo is live", () => {
-    const start = (category: string) =>
-      initialFields({ defaultKind: "expense", initial: { kind: "expense", category, accountId: "diesel" } }, BANKS, TODAY, GROUPS);
-    expect(start("g-maq")).toMatchObject({ category: "g-maq", accountId: "diesel" });
-    // An archived grupo, or one deleted meanwhile, is no new choice: back to Nutrição, without its conta.
-    expect(start("g-old")).toMatchObject({ category: "nutrition", accountId: NONE });
-    expect(start("g-gone")).toMatchObject({ category: "nutrition", accountId: NONE });
+  it("starts a new lançamento in the first active grupo of its tipo, or in none", () => {
+    const start = (defaultKind: Expense["kind"]) => initialFields({ defaultKind }, BANKS, TODAY, GROUPS).category;
+    expect(start("expense")).toBe("g-maq");
+    expect(start("revenue")).toBe("g-rec");
+    expect(start("investment")).toBe("g-ben");
+    // No active grupo de financiamento: saving asks for one.
+    expect(start("financing")).toBe("");
   });
 
-  it("duplicates a lançamento of an archived grupo into Nutrição, and edits it where it is", () => {
+  it("starts in the picked grupo only while it is active and of the tipo", () => {
+    const start = (kind: Expense["kind"], category: string) =>
+      initialFields({ defaultKind: "expense", initial: { kind, category, accountId: "diesel" } }, BANKS, TODAY, GROUPS);
+    expect(start("expense", "g-nut")).toMatchObject({ category: "g-nut", accountId: "diesel" });
+    // An archived grupo, one deleted meanwhile or one of another tipo is no new choice: the first one, without its conta.
+    expect(start("expense", "g-old")).toMatchObject({ category: "g-maq", accountId: NONE });
+    expect(start("expense", "g-gone")).toMatchObject({ category: "g-maq", accountId: NONE });
+    expect(start("revenue", "g-nut")).toMatchObject({ category: "g-rec", accountId: NONE });
+  });
+
+  it("duplicates a lançamento of an archived grupo into the first active one, and edits it where it is", () => {
     const row = { id: "e1", kind: "expense", date: "2026-05-01", category: "g-old", amountBrl: 100, accountId: "leiloeiro", createdAt: "2026-05-01T12:00:00Z" } as Expense;
     expect(initialFields({ defaultKind: "expense", template: row }, BANKS, TODAY, GROUPS)).toMatchObject({
-      category: "nutrition",
+      category: "g-maq",
       accountId: NONE,
     });
     expect(initialFields({ defaultKind: "expense", expense: row }, BANKS, TODAY, GROUPS)).toMatchObject({
       category: "g-old",
       accountId: "leiloeiro",
     });
+    // The Grupo picker of that edit still lists it.
+    expect(groupsOf(GROUPS, "expense", { keep: row.category }).map((g) => g.id)).toEqual(["g-old", "g-maq", "g-nut"]);
   });
 
   it("starts a new despesa paid today from the conta principal", () => {
-    expect(initialFields({ defaultKind: "expense" }, BANKS, TODAY)).toMatchObject({
+    expect(initialFields({ defaultKind: "expense" }, BANKS, TODAY, GROUPS)).toMatchObject({
       kind: "expense",
       flow: "out",
       date: TODAY,
@@ -73,16 +101,37 @@ describe("initialFields", () => {
   });
 
   it("starts on the picked nó", () => {
-    const initial = { kind: "financing", flow: "in", accountId: "custeio", bankAccountId: "caixa" } as const;
-    expect(initialFields({ defaultKind: "expense", initial }, BANKS, TODAY)).toMatchObject({
-      kind: "financing",
+    const initial = { kind: "partners", flow: "in", category: "g-soc", accountId: "aporte", bankAccountId: "caixa" } as const;
+    expect(initialFields({ defaultKind: "expense", initial }, BANKS, TODAY, GROUPS)).toMatchObject({
+      kind: "partners",
       flow: "in",
-      accountId: "custeio",
+      category: "g-soc",
+      accountId: "aporte",
       bankAccountId: "caixa",
     });
-    expect(initialFields({ defaultKind: "expense", initial: { category: "health" } }, BANKS, TODAY).category).toBe(
-      "health"
+    expect(initialFields({ defaultKind: "expense", initial: { category: "g-nut" } }, BANKS, TODAY, GROUPS).category).toBe(
+      "g-nut"
     );
+  });
+
+  it("starts a linha do extrato as a despesa or a receita in the first grupo of that tipo", () => {
+    const line: StatementLine = {
+      id: "l1",
+      importId: "i1",
+      bankAccountId: "caixa",
+      date: "2026-09-12",
+      description: "PIX AGROPECUARIA",
+      amountBrl: -320,
+      status: "pending",
+    };
+    expect(initialFields({ defaultKind: "expense", fromLine: line }, BANKS, TODAY, GROUPS)).toMatchObject({
+      kind: "expense",
+      category: "g-maq",
+      amount: "320",
+    });
+    expect(
+      initialFields({ defaultKind: "expense", fromLine: { ...line, amountBrl: 500 } }, BANKS, TODAY, GROUPS)
+    ).toMatchObject({ kind: "revenue", category: "g-rec" });
   });
 
   it("Duplicar keeps what the lançamento is and starts it today, pending, outside any série", () => {
@@ -91,7 +140,7 @@ describe("initialFields", () => {
       kind: "investment",
       flow: "out",
       date: "2026-02-10",
-      category: "other",
+      category: "g-inv",
       amountBrl: 9000.5,
       dueDate: "2026-10-10",
       paidAt: "2026-10-10",
@@ -106,12 +155,12 @@ describe("initialFields", () => {
       seriesCount: 6,
       attachmentCount: 2,
     };
-    expect(initialFields({ defaultKind: "expense", template }, BANKS, TODAY)).toEqual({
+    expect(initialFields({ defaultKind: "expense", template }, BANKS, TODAY, GROUPS)).toEqual({
       kind: "investment",
       flow: "out",
       date: TODAY,
       amount: "9000,5",
-      category: "other",
+      category: "g-inv",
       accountId: "maquinas",
       dueDate: TODAY,
       dueTouched: false,
@@ -132,55 +181,63 @@ describe("initialFields", () => {
       kind: "financing",
       flow: "in",
       date: "2025-11-15",
-      category: "other",
+      category: "g-pronaf",
       amountBrl: 150000,
       accountId: "custeio",
     };
-    expect(initialFields({ defaultKind: "expense", expense: row }, BANKS, TODAY).flow).toBe("in");
-    expect(initialFields({ defaultKind: "expense", expense: { ...row, flow: undefined } }, BANKS, TODAY).flow).toBe(
-      "out"
-    );
+    expect(initialFields({ defaultKind: "expense", expense: row }, BANKS, TODAY, GROUPS).flow).toBe("in");
+    expect(
+      initialFields({ defaultKind: "expense", expense: { ...row, flow: undefined } }, BANKS, TODAY, GROUPS).flow
+    ).toBe("out");
   });
 });
 
 describe("withKind", () => {
   it("moves Pago por off a cartão when the new direction cannot use it", () => {
     const onCard = form({ bankAccountId: "card" });
-    expect(withKind(onCard, "revenue", "out", BANKS).bankAccountId).toBe("sicredi");
-    expect(withKind(onCard, "investment", "out", BANKS).bankAccountId).toBe("card");
-    expect(withKind(onCard, "investment", "in", BANKS).bankAccountId).toBe("sicredi");
-    expect(withKind(onCard, "partners", "out", BANKS).bankAccountId).toBe("sicredi");
+    expect(withKind(onCard, "revenue", "out", BANKS, GROUPS).bankAccountId).toBe("sicredi");
+    expect(withKind(onCard, "investment", "out", BANKS, GROUPS).bankAccountId).toBe("card");
+    expect(withKind(onCard, "investment", "in", BANKS, GROUPS).bankAccountId).toBe("sicredi");
+    expect(withKind(onCard, "partners", "out", BANKS, GROUPS).bankAccountId).toBe("sicredi");
   });
 
-  it("starts a new kind without conta and keeps it when only the movimento changes", () => {
-    const compra = form({ kind: "investment", accountId: "maquinas" });
-    expect(withKind(compra, "investment", "in", BANKS).accountId).toBe("maquinas");
-    expect(withKind(compra, "partners", "out", BANKS).accountId).toBe(NONE);
+  it("moves a new tipo to its first grupo without conta, and keeps both when only the movimento changes", () => {
+    const compra = form({ kind: "investment", category: "g-inv", accountId: "maquinas" });
+    expect(withKind(compra, "investment", "in", BANKS, GROUPS)).toMatchObject({ category: "g-inv", accountId: "maquinas" });
+    expect(withKind(compra, "partners", "out", BANKS, GROUPS)).toMatchObject({ category: "g-soc", accountId: NONE });
+    expect(withKind(compra, "revenue", "out", BANKS, GROUPS)).toMatchObject({ category: "g-rec", accountId: NONE });
+    expect(withKind(compra, "financing", "out", BANKS, GROUPS)).toMatchObject({ category: "", accountId: NONE });
   });
 });
 
 describe("entryValues", () => {
   it("refuses a capital kind without conta", () => {
-    expect(entryValues(form({ kind: "partners" }), false)).toBe("Escolha a conta do plano.");
+    expect(entryValues(form({ kind: "partners", category: "g-soc" }), false)).toBe("Escolha a conta do plano.");
   });
 
-  it("writes an investimento with its movimento and conta, category other and no lote", () => {
+  it("refuses a lançamento without grupo, whatever its tipo", () => {
+    expect(entryValues(form({ category: "" }), false)).toBe("Escolha o grupo.");
+    expect(entryValues(form({ kind: "revenue", category: "" }), false)).toBe("Escolha o grupo.");
+    expect(entryValues(form({ kind: "financing", category: "", accountId: "custeio" }), false)).toBe("Escolha o grupo.");
+  });
+
+  it("writes an investimento with its movimento, grupo and conta and no lote", () => {
     const values = entryValues(
-      form({ kind: "investment", flow: "in", category: "health", accountId: "maquinas", lotId: "engorda" }),
+      form({ kind: "investment", flow: "in", category: "g-inv", accountId: "maquinas", lotId: "engorda" }),
       false
     );
-    expect(values).toMatchObject({ flow: "in", category: "other", accountId: "maquinas", lotId: null, amountBrl: 1500 });
+    expect(values).toMatchObject({ flow: "in", category: "g-inv", accountId: "maquinas", lotId: null, amountBrl: 1500 });
   });
 
   it("writes a despesa with its grupo and lote and no movimento", () => {
-    const values = entryValues(form({ category: "health", lotId: "engorda", flow: "in" }), false);
-    expect(values).toMatchObject({ category: "health", lotId: "engorda" });
+    const values = entryValues(form({ category: "g-nut", lotId: "engorda", flow: "in" }), false);
+    expect(values).toMatchObject({ category: "g-nut", lotId: "engorda" });
     expect(values).not.toHaveProperty("flow");
   });
 
-  it("writes a receita in category other, with no movimento", () => {
-    const values = entryValues(form({ kind: "revenue", category: "health" }), false);
-    expect(values).toMatchObject({ category: "other" });
+  it("writes a receita in its grupo, with no movimento", () => {
+    const values = entryValues(form({ kind: "revenue", category: "g-rec" }), false);
+    expect(values).toMatchObject({ category: "g-rec" });
     expect(values).not.toHaveProperty("flow");
   });
 
@@ -189,7 +246,7 @@ describe("entryValues", () => {
   });
 
   it("asks the day of the recebimento on an aporte and of the pagamento on a retirada", () => {
-    const aporte = form({ kind: "partners", flow: "in", accountId: "socio", paidAt: "" });
+    const aporte = form({ kind: "partners", flow: "in", category: "g-soc", accountId: "socio", paidAt: "" });
     expect(entryValues(aporte, false)).toBe("Informe a data do recebimento.");
     expect(entryValues({ ...aporte, flow: "out" }, false)).toBe("Informe a data do pagamento.");
   });
@@ -202,7 +259,7 @@ describe("entryValues", () => {
 
 describe("entrySummary", () => {
   const NAMES = { group: "Máquinas e veículos", account: "Diesel", bank: "Sicredi" };
-  const brl = (text: string) => text.replace(" ", "\u00a0");
+  const brl = (text: string) => text.replace(" ", " ");
 
   it("says what, how much, where and that it was paid today, by which conta", () => {
     expect(entrySummary(form(), null, NAMES, TODAY)).toEqual({
@@ -212,12 +269,21 @@ describe("entrySummary", () => {
     });
   });
 
+  it("names the grupo of a receita", () => {
+    const receita = form({ kind: "revenue", category: "g-rec" });
+    expect(entrySummary(receita, null, { group: "Receitas", bank: "Sicredi" }, TODAY)).toEqual({
+      lead: "Receita de",
+      value: brl("R$ 1.500,00"),
+      rest: "em Receitas · recebido hoje · Sicredi",
+    });
+  });
+
   it("gives the vencimento of a pending lançamento and the movimento of a capital one", () => {
-    const compra = form({ kind: "investment", paid: false, dueDate: "2026-10-15", accountId: "maq" });
-    expect(entrySummary(compra, null, { account: "Máquinas e implementos" }, TODAY)).toEqual({
+    const compra = form({ kind: "investment", category: "g-inv", paid: false, dueDate: "2026-10-15", accountId: "maq" });
+    expect(entrySummary(compra, null, { group: "Investimentos", account: "Máquinas e implementos" }, TODAY)).toEqual({
       lead: "Compra de",
       value: brl("R$ 1.500,00"),
-      rest: "em Máquinas e implementos · fora do custo · vence 15/10",
+      rest: "em Investimentos › Máquinas e implementos · fora do custo · vence 15/10",
     });
   });
 
@@ -232,6 +298,7 @@ describe("entrySummary", () => {
 
   it("says nothing while the form would not save", () => {
     expect(entrySummary(form({ amount: "" }), null, NAMES, TODAY)).toBeNull();
-    expect(entrySummary(form({ kind: "partners", accountId: NONE }), null, {}, TODAY)).toBeNull();
+    expect(entrySummary(form({ kind: "partners", category: "g-soc", accountId: NONE }), null, {}, TODAY)).toBeNull();
+    expect(entrySummary(form({ category: "" }), null, NAMES, TODAY)).toBeNull();
   });
 });

@@ -1,8 +1,8 @@
 /**
  * The ledger: every line of money of the farm in a window — the lançamentos
- * typed by hand plus the rows derived from the manejos (vendas, compras) and
- * from the treatments with cost, which are locked — with the caixa and the
- * pending bills. Pure.
+ * typed by hand plus the rows derived from the manejos (vendas, compras),
+ * which are locked — with the caixa and the pending bills. A tratamento's cost
+ * stays in Sanidade and is no line here. Pure.
  */
 import type {
   Account,
@@ -10,27 +10,25 @@ import type {
   Animal,
   EntryKind,
   Expense,
-  ExpenseGroup,
   Lot,
   ManejoSession,
   ManejoSessionAnimal,
   Movement,
-  Treatment,
+  PlanGroup,
 } from "@/lib/types";
 import { inPeriod, type Period } from "@/lib/domain/period";
 import { accountName } from "@/lib/domain/accounts";
-import { TOP_GROUP_LABEL, groupLabel } from "@/lib/domain/groups";
-import { BUILTIN_CATEGORY_LABEL } from "@/lib/domain/labels";
+import { GROUP_KIND_LABEL, groupLabel } from "@/lib/domain/groups";
 import { saleSummary } from "@/lib/domain/movements";
 import { KG_PER_ARROBA } from "@/lib/domain/weights";
 import { formatArroba } from "@/lib/domain/format";
 import { ENTRY_KIND_LABEL, entryGroup, isInflow } from "@/lib/domain/entries";
 
-export type LedgerKind = EntryKind | "sale" | "purchase" | "treatment";
+export type LedgerKind = EntryKind | "sale" | "purchase";
 export type LedgerStatus = "paid" | "received" | "payable" | "receivable" | "overdue";
 
 export interface LedgerRow {
-  /** Expense id | movement id | `treatment:${date}:${name}`. */
+  /** Expense id | movement id. */
   id: string;
   kind: LedgerKind;
   /** Money in: receitas, vendas, rendimentos and capital rows that enter. */
@@ -39,22 +37,22 @@ export interface LedgerRow {
   dueDate: string;
   paidAt: string | null;
   status: LedgerStatus;
-  /** The grupo of the plano; "capital" for what has none: compras de gado and rendimentos. */
+  /** The grupo of the plano (a PlanGroup id); "capital" for what has none: compras de gado and rendimentos. A venda de gado reads "revenue". */
   group: AccountGroup | "capital";
   groupLabel: string;
   account: string | null;
   /** The conta bancária it went through ("Pago por", or a venda's conta); null for none. */
   bankAccountId: string | null;
-  /** The lançamento's histórico; null on manejo and treatment rows. */
+  /** The lançamento's histórico; null on manejo rows. */
   history: string | null;
   counterparty: string | null;
   document: string | null;
   lotId: string | null;
   lotName: string | null;
   amountBrl: number;
-  /** The lançamento's observação; the treatment's name on a treatment row. */
+  /** The lançamento's observação. */
   notes: string | null;
-  /** Derived from a manejo or a treatment: not editable here. */
+  /** Derived from a manejo: not editable here. */
   locked: boolean;
   headCount: number | null;
   expense: Expense | null;
@@ -66,10 +64,9 @@ export interface LedgerInputs {
   movements: Movement[];
   manejoSessions: ManejoSession[];
   animals: Animal[];
-  treatments: Treatment[];
   lots: Lot[];
-  /** The farm's grupos de despesa, archived ones included: they name the rows. */
-  expenseGroups: readonly ExpenseGroup[];
+  /** Every grupo of the plano, archived ones included: they name the rows. */
+  planGroups: readonly PlanGroup[];
 }
 
 /** Order of the kinds on the same day. */
@@ -82,7 +79,6 @@ const KIND_ORDER: Record<LedgerKind, number> = {
   partners: 5,
   yield: 6,
   purchase: 7,
-  treatment: 8,
 };
 
 /** Vencimento: the due date, or the date when none was typed. */
@@ -149,7 +145,7 @@ export function ledgerRows(input: LedgerInputs, period: Period, todayIso: string
       status: entryStatus(e, todayIso),
       // A rendimento sits in no grupo of the plano.
       group: group ?? "capital",
-      groupLabel: group === null ? ENTRY_KIND_LABEL.yield : groupLabel(group, input.expenseGroups),
+      groupLabel: group === null ? ENTRY_KIND_LABEL.yield : groupLabel(group, input.planGroups),
       account: accountName(e.accountId, input.accounts),
       bankAccountId: e.bankAccountId ?? null,
       history: e.history ?? null,
@@ -190,7 +186,7 @@ export function ledgerRows(input: LedgerInputs, period: Period, todayIso: string
       status: sale ? "received" : "paid",
       // A compra de gado is an investimento the manejos write: no conta of the plano.
       group: sale ? "revenue" : "capital",
-      groupLabel: sale ? TOP_GROUP_LABEL.revenue : TOP_GROUP_LABEL.investment,
+      groupLabel: sale ? GROUP_KIND_LABEL.revenue : GROUP_KIND_LABEL.investment,
       account: sale ? "Venda de gado" : "Compra de gado",
       bankAccountId: m.bankAccountId ?? null,
       history: null,
@@ -206,41 +202,6 @@ export function ledgerRows(input: LedgerInputs, period: Period, todayIso: string
       notes: m.notes ?? null,
       locked: true,
       headCount: session ? done.length : (m.quantity ?? null),
-      expense: null,
-    });
-  }
-
-  const treatmentDays = new Map<string, { date: string; name: string; heads: number; amount: number }>();
-  for (const t of input.treatments) {
-    if (t.status !== "done" || t.costBrl === undefined || !inPeriod(t.date, period)) continue;
-    const id = `treatment:${t.date}:${t.name}`;
-    const day = treatmentDays.get(id) ?? { date: t.date, name: t.name, heads: 0, amount: 0 };
-    day.heads += 1;
-    day.amount += t.costBrl;
-    treatmentDays.set(id, day);
-  }
-  for (const [id, day] of treatmentDays) {
-    rows.push({
-      id,
-      kind: "treatment",
-      inflow: false,
-      date: day.date,
-      dueDate: day.date,
-      paidAt: day.date,
-      status: "paid",
-      group: "health",
-      groupLabel: BUILTIN_CATEGORY_LABEL.health,
-      account: null,
-      bankAccountId: null,
-      history: null,
-      counterparty: null,
-      document: null,
-      lotId: null,
-      lotName: null,
-      amountBrl: day.amount,
-      notes: day.name,
-      locked: true,
-      headCount: day.heads,
       expense: null,
     });
   }
@@ -265,14 +226,14 @@ export interface CashSummary {
 
 /**
  * Caixa do período: received and paid by payment day inside the window (priced
- * vendas, compras de gado and treatment costs by their date); a receber / a
- * pagar are the pending lançamentos of any date. Every kind counts by its
+ * vendas and compras de gado by their date); a receber / a pagar are the
+ * pending lançamentos of any date. Every kind counts by its
  * direction: a liberação or an aporte is received, a parcela or a retirada
  * paid, a rendimento received. Compras count as pago here, though they stay
  * capital (outside the COE) in the rows.
  */
 export function cashSummary(
-  input: Pick<LedgerInputs, "expenses" | "movements" | "treatments">,
+  input: Pick<LedgerInputs, "expenses" | "movements">,
   period: Period,
   todayIso: string
 ): CashSummary {
@@ -307,11 +268,6 @@ export function cashSummary(
     if (m.amountBrl === undefined || !inPeriod(m.date, period)) continue;
     if (m.type === "sale") s.received += m.amountBrl;
     else if (m.type === "purchase") s.paid += m.amountBrl;
-  }
-  for (const t of input.treatments) {
-    if (t.status === "done" && t.costBrl !== undefined && inPeriod(t.date, period)) {
-      s.paid += t.costBrl;
-    }
   }
   s.balance = s.received - s.paid;
   return s;

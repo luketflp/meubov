@@ -7,21 +7,13 @@
  * safra. A Budget row is one calendar month; the farm's start month decides
  * which safra, and which index in it, that month falls on.
  */
-import type {
-  Account,
-  Budget,
-  BudgetDistribution,
-  Expense,
-  ExpenseCategory,
-  ExpenseGroup,
-  Treatment,
-} from "@/lib/types";
+import type { Account, Budget, BudgetDistribution, Expense, ExpenseCategory, PlanGroup } from "@/lib/types";
 import type { Period } from "@/lib/domain/period";
 import { accountsByGroup } from "@/lib/domain/accounts";
 import { cents } from "@/lib/domain/bankAccounts";
 import { monthYearLabel, parseISODate, toISO } from "@/lib/domain/dates";
 import { isCost } from "@/lib/domain/entries";
-import { despesaGroups } from "@/lib/domain/groups";
+import { groupsOf } from "@/lib/domain/groups";
 
 export interface SafraMonth {
   year: number;
@@ -145,7 +137,7 @@ export interface BudgetView {
   months: SafraMonth[];
   /** Index of today's month in `months`; -1 before the safra, 12 after it. */
   todayIndex: number;
-  /** despesaGroups order, archived farm grupos too; grupos with neither orçado nor despesas in the safra left out. */
+  /** The grupos de despesa by name, archived ones too; grupos with neither orçado nor despesas in the safra left out. */
   groups: BudgetGroup[];
   /** The grupos with a budget only: what grupos without one spend is in their own rows. */
   totals: Figures;
@@ -156,10 +148,9 @@ export interface BudgetView {
 export interface BudgetInputs {
   budgets: Budget[];
   expenses: Expense[];
-  treatments: Treatment[];
   accounts: Account[];
-  /** The farm's grupos de despesa, archived ones included. */
-  expenseGroups: readonly ExpenseGroup[];
+  /** Every grupo of the plano, archived ones included; only the despesa ones are budgeted. */
+  planGroups: readonly PlanGroup[];
 }
 
 const zeros = (): number[] => Array<number>(12).fill(0);
@@ -170,7 +161,7 @@ const addUp = (rows: number[][]): number[] => zeros().map((_, i) => sum(rows.map
 /**
  * Despesas (`isCost`, paid or not, by `date`) per line and safra month (`index`
  * by "YYYY-MM") up to `untilIso`: under their grupo and, with a conta, under
- * the conta too. Done treatments' costs go under Sanidade, as in the COE.
+ * the conta too.
  */
 function spentByLine(inputs: BudgetInputs, index: Map<string, number>, untilIso: string): Map<LineKey, number[]> {
   const byLine = new Map<LineKey, number[]>();
@@ -182,12 +173,10 @@ function spentByLine(inputs: BudgetInputs, index: Map<string, number>, untilIso:
     byLine.set(key, row);
   };
   for (const e of inputs.expenses) {
-    if (!isCost(e)) continue;
+    // A despesa always has its grupo; the check only narrows the type.
+    if (!isCost(e) || e.category === undefined) continue;
     add(lineKey(e.category), e.date, e.amountBrl);
     if (e.accountId) add(lineKey(e.category, e.accountId), e.date, e.amountBrl);
-  }
-  for (const t of inputs.treatments) {
-    if (t.status === "done" && t.costBrl !== undefined) add(lineKey("health"), t.date, t.costBrl);
   }
   return byLine;
 }
@@ -273,7 +262,7 @@ export function budgetView(inputs: BudgetInputs, safra: number, startMonth: numb
   const spent = (key: LineKey): boolean => incurred.get(key)?.some((v) => v > 0) ?? false;
   const contasByGroup = accountsByGroup(inputs.accounts, true);
   const groups: BudgetGroup[] = [];
-  for (const { key: category, label } of despesaGroups(inputs.expenseGroups, { archived: true })) {
+  for (const { id: category, name: label } of groupsOf(inputs.planGroups, "expense", { archived: true })) {
     const accounts = (contasByGroup[category] ?? [])
       .map((a) => line(category, a.id, a.name))
       .filter((c) => c.ownRows || spent(c.key));
@@ -329,7 +318,7 @@ export interface CopyLine {
  * contas), or its realizado per grupo; each month × (1 + adjustPct %) to the
  * centavo. A line that already has rows in `to` is skipped, and so is a
  * grupo whose contas have rows there: it is budgeted through them. An archived
- * farm grupo is not carried into `to` at all, nor are its contas' lines. Both
+ * grupo is not carried into `to` at all, nor are its contas' lines. Both
  * safras are read from the same `inputs.budgets`.
  */
 export function copyPlan(
@@ -349,7 +338,7 @@ export function copyPlan(
       .flatMap((b) => [lineKey(b.category, b.accountId), lineKey(b.category)])
   );
   const { groups } = budgetView(inputs, from, startMonth, todayIso);
-  const archived = new Set(inputs.expenseGroups.filter((g) => g.archivedAt !== undefined).map((g) => g.id));
+  const archived = new Set(inputs.planGroups.filter((g) => g.archivedAt !== undefined).map((g) => g.id));
   const live = groups.filter((g) => !archived.has(g.category));
   const sources =
     source === "budgeted"

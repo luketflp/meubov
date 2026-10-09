@@ -2,6 +2,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { farm, farmUsers } from "@/lib/db/schema";
+import { seedPlanGroups } from "@/lib/api/domains/planGroups/seed";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
@@ -26,8 +27,8 @@ type CurrUseCase = _UseCase<
  * hydrating at once) create exactly one farm.
  *
  * Returns the id of the user's first live farm, creating an empty farm (with the
- * user as owner) when none exists. Field defaults mirror the empty FarmData
- * the store starts with.
+ * user as owner and the eleven default grupos) when none exists. Field
+ * defaults mirror the empty FarmData the store starts with.
  */
 export class EnsureFarmForUserUseCase implements CurrUseCase {
   private repository: RepositoryType;
@@ -56,6 +57,7 @@ export class EnsureFarmForUserUseCase implements CurrUseCase {
       await tx
         .insert(farmUsers)
         .values({ farmId: created.id, userId, role: "owner" });
+      await seedPlanGroups(tx, created.id);
       return created.id;
     });
   };

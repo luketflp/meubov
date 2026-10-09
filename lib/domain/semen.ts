@@ -272,14 +272,6 @@ export function sessionSemenCost(
   };
 }
 
-/**
- * Note of the expense a purchase writes in Financeiro:
- * "Sêmen — Tufão da Serra, 30 doses" ("1 dose" in the singular).
- */
-export function purchaseExpenseNotes(bullName: string, doses: number): string {
-  return `Sêmen — ${bullName}, ${doses} ${doses === 1 ? "dose" : "doses"}`;
-}
-
 /** A cow an inseminação can take: an active female, vaca or novilha. */
 export function eligibleForInsemination(animal: Animal): boolean {
   return (

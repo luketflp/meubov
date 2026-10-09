@@ -21,7 +21,7 @@ export interface LotEconomics {
   name: string;
   /** Active animals in the lote today. */
   heads: number;
-  /** Despesas with the lote + treatments of its animals. */
+  /** Despesas with the lote. */
   directBrl: number;
   /** The lote's share, by heads, of the COE no lote carries. */
   sharedBrl: number;
@@ -45,20 +45,13 @@ export function lotEconomics(
   quote: number | null,
   todayIso: string
 ): { lots: LotEconomics[]; farm: LotEconomics } {
-  const { animals, manejoSessions, expenses, treatments } = input;
+  const { animals, manejoSessions, expenses } = input;
   const days = periodDays(period);
 
   const direct = new Map<string, number>();
-  const addDirect = (lotId: string | undefined, amount: number): void => {
-    if (lotId !== undefined) direct.set(lotId, (direct.get(lotId) ?? 0) + amount);
-  };
   for (const e of expenses) {
-    if (isCost(e) && inPeriod(e.date, period)) addDirect(e.lotId, e.amountBrl);
-  }
-  const lotOf = new Map(animals.map((a) => [a.earTag, a.lotId]));
-  for (const t of treatments) {
-    if (t.status === "done" && t.costBrl !== undefined && inPeriod(t.date, period)) {
-      addDirect(lotOf.get(t.animalEarTag), t.costBrl);
+    if (isCost(e) && e.lotId !== undefined && inPeriod(e.date, period)) {
+      direct.set(e.lotId, (direct.get(e.lotId) ?? 0) + e.amountBrl);
     }
   }
 
@@ -77,7 +70,7 @@ export function lotEconomics(
     .filter((r) => r.heads > 0 || r.directBrl > 0)
     .sort((a, b) => a.lot.name.localeCompare(b.lot.name, "pt-BR"));
 
-  const totalCost = coe(expenses, treatments, period);
+  const totalCost = coe(expenses, period);
   const totalHeads = rows.reduce((sum, r) => sum + r.heads, 0);
   const totalDirect = rows.reduce((sum, r) => sum + r.directBrl, 0);
   const pool = totalCost - totalDirect;

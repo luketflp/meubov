@@ -65,7 +65,7 @@ export function ConciliarPage({ accountId, importId }: { accountId: string; impo
   const movements = useHerdStore((s) => s.movements);
   const transfers = useHerdStore((s) => s.transfers);
   const accounts = useHerdStore((s) => s.accounts);
-  const expenseGroups = useHerdStore((s) => s.expenseGroups);
+  const planGroups = useHerdStore((s) => s.planGroups);
   const { addToast } = useToast();
 
   const [view, setView] = useState<ImportView | null | "missing">(null);
@@ -127,7 +127,7 @@ export function ConciliarPage({ accountId, importId }: { accountId: string; impo
     if (c.expense) {
       const e = c.expense;
       const groupKey = entryGroup(e);
-      const group = groupKey ? groupLabel(groupKey, expenseGroups) : ENTRY_KIND_LABEL.yield;
+      const group = groupKey ? groupLabel(groupKey, planGroups) : ENTRY_KIND_LABEL.yield;
       const plan = accountName(e.accountId, accounts);
       return {
         title: plan ? `${group} › ${plan}` : group,

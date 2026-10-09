@@ -28,7 +28,7 @@ import {
   type BudgetView,
 } from "@/lib/domain/budget";
 import { formatCurrency } from "@/lib/domain/format";
-import { despesaGroups, groupLabel } from "@/lib/domain/groups";
+import { groupLabel, groupsOf } from "@/lib/domain/groups";
 import { monthYear } from "@/lib/domain/series";
 import { useToast } from "@/components/providers/Toasts";
 import { parseAmount } from "@/components/finance/parseAmount";
@@ -88,7 +88,7 @@ interface BudgetEditDialogProps {
   view: BudgetView;
   /** The previous safra's budgets, for the hint; undefined while they load. */
   previous: Budget[] | undefined;
-  /** This safra's budgets and the farm's lançamentos, treatments and contas. */
+  /** This safra's budgets and the farm's lançamentos, contas and grupos. */
   inputs: BudgetInputs;
   /** The page's today: a prop, so the React Compiler keeps the form's memos. */
   today: string;
@@ -120,7 +120,7 @@ export function BudgetEditDialog({
       <DialogContent className={SHEET}>
         <DialogHeader>
           <DialogTitle className="text-lg leading-6 font-semibold sm:text-xl">
-            Orçamento · {groupLabel(category, inputs.expenseGroups)}
+            Orçamento · {groupLabel(category, inputs.planGroups)}
           </DialogTitle>
           <DialogDescription>
             {safraLabel(safra, startMonth)} · {monthYear(`${months[0].key}-01`)} a {monthYear(`${months[11].key}-01`)}
@@ -138,9 +138,9 @@ export function BudgetEditDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {despesaGroups(inputs.expenseGroups).map((group) => (
-                  <SelectItem key={group.key} value={group.key}>
-                    {group.label}
+                {groupsOf(inputs.planGroups, "expense").map((group) => (
+                  <SelectItem key={group.id} value={group.id}>
+                    {group.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -185,7 +185,7 @@ function EditForm({ safra, startMonth, category, view, previous, inputs, today, 
   const saveBudgetLine = useHerdStore((s) => s.saveBudgetLine);
   const removeBudgetLine = useHerdStore((s) => s.removeBudgetLine);
   const { addToast } = useToast();
-  const label = groupLabel(category, inputs.expenseGroups);
+  const label = groupLabel(category, inputs.planGroups);
   const labels = safraMonths(safra, startMonth).map((month) => month.label);
   const group = view.groups.find((line) => line.category === category);
   const lineOf = (accountId: string) => group?.accounts.find((line) => line.accountId === accountId);

@@ -5,6 +5,7 @@ import { accounts } from "@/lib/db/schema";
 import { isUniqueViolation } from "@/lib/api/dbErrors";
 import { toAccount } from "@/lib/api/mappers";
 import { __throwOnBrowser } from "@/lib/api/utils/throwOnBrowser";
+import { farmGroup } from "@/lib/api/domains/planGroups/farmGroup";
 
 import type { RepositoryType } from "@/lib/api/@types/repoTypes";
 import type { Account } from "@/lib/types";
@@ -53,9 +54,13 @@ export class UpdateAccountUseCase implements CurrUseCase {
     const scope = and(eq(accounts.farmId, farmId), eq(accounts.id, id));
     const [current] = await this.repository.select().from(accounts).where(scope).limit(1);
     if (!current) return null;
-    const balance = patch.openingBalanceBrl === undefined ? current.openingBalanceBrl : patch.openingBalanceBrl;
-    const date = patch.openingDate === undefined ? current.openingDate : patch.openingDate;
-    if (!validOpening(current.group, balance, date)) return "invalid_opening";
+    if (patch.openingBalanceBrl !== undefined || patch.openingDate !== undefined) {
+      const balance = patch.openingBalanceBrl === undefined ? current.openingBalanceBrl : patch.openingBalanceBrl;
+      const date = patch.openingDate === undefined ? current.openingDate : patch.openingDate;
+      // The conta's grupo says whether it may carry one: financiamentos only.
+      const group = await farmGroup(this.repository, farmId, current.group);
+      if (!group || !validOpening(group.kind, balance, date)) return "invalid_opening";
+    }
 
     const set: Partial<typeof accounts.$inferInsert> = {};
     if (patch.name !== undefined) {

@@ -4,7 +4,7 @@ import { t } from "elysia";
 
 import { DateString } from "@/lib/api/schemas/shared.schema";
 
-/** A built-in grupo key or a farm grupo id; the use cases check it belongs to the farm. */
+/** A grupo id; the use cases check it is a grupo of the farm of the lançamento's kind. */
 export const ExpenseCategoryModel = t.String({ minLength: 1, maxLength: 64 });
 
 /** Despesa, receita, the three kinds fora do resultado, and rendimento. */
@@ -43,8 +43,8 @@ const Document = t.String({ maxLength: 120 });
 /**
  * Body of POST /expenses.
  *
- * A receita and the kinds fora do resultado send `category: "other"`.
- * investment, financing and partners send a conta of their group and `flow`
+ * `category` (the grupo) is required for every kind but a rendimento, which
+ * sends none. investment, financing and partners send a conta of their grupo and `flow`
  * (absent is a saída). A yield sends its aplicação as `bankAccountId` and no
  * `repeat`.
  *
@@ -53,7 +53,7 @@ const Document = t.String({ maxLength: 120 });
  */
 export const NewExpenseBody = t.Object({
   date: DateString,
-  category: ExpenseCategoryModel,
+  category: t.Optional(ExpenseCategoryModel),
   amountBrl: t.Number({ exclusiveMinimum: 0 }),
   notes: t.Optional(t.String()),
   kind: t.Optional(EntryKindModel),

@@ -28,7 +28,7 @@ interface AddSeriesUseCaseProps {
   flow?: EntryFlow;
   /** Competência of every parcela; a recorrência ignores it (each ocorrência is its own). */
   date: string;
-  category: ExpenseCategory;
+  category?: ExpenseCategory;
   /** Total of a parcelamento; value of each ocorrência of a recorrência. */
   amountBrl: number;
   /** Paid/received on this day: the first row only. */
@@ -126,7 +126,8 @@ export class AddSeriesUseCase implements CurrUseCase {
     const template = {
       kind,
       flow: shape.flow,
-      category: shape.category,
+      // Set: a rendimento never repeats (refused above), and every other kind carries its grupo.
+      category: shape.category!,
       notes: entry.notes ?? null,
       history: entry.history ?? null,
       counterparty: entry.counterparty ?? null,

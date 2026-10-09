@@ -58,14 +58,15 @@ describe("ROUTE_REQUIREMENTS", () => {
     expect(ROUTE_REQUIREMENTS["GET /api/herd/farm/team"]).toEqual({ view: "team" });
   });
 
-  it("asks Financeiro for what writes a semen purchase, and Reprodução for the bull", () => {
-    expect(ROUTE_REQUIREMENTS["POST /api/herd/semen-bulls"]).toEqual({ edit: ["reproduction"] });
-    expect(ROUTE_REQUIREMENTS["POST /api/herd/semen-bulls/:id/purchases"]).toEqual({
-      edit: ["reproduction", "finance"],
-    });
-    expect(
-      ROUTE_REQUIREMENTS["DELETE /api/herd/semen-bulls/:id/purchases/:purchaseId"]
-    ).toEqual({ edit: ["reproduction", "finance"] });
+  it("asks Reprodução alone for a bull and its purchases: a purchase is stock, not money in the Financeiro", () => {
+    for (const key of [
+      "POST /api/herd/semen-bulls",
+      "DELETE /api/herd/semen-bulls/:id",
+      "POST /api/herd/semen-bulls/:id/purchases",
+      "DELETE /api/herd/semen-bulls/:id/purchases/:purchaseId",
+    ]) {
+      expect(ROUTE_REQUIREMENTS[key]).toEqual({ edit: ["reproduction"] });
+    }
   });
 
   it("keeps lançamentos and the plano de contas behind Financeiro edit", () => {
@@ -76,9 +77,9 @@ describe("ROUTE_REQUIREMENTS", () => {
       "PATCH /api/herd/accounts/:id",
       "DELETE /api/herd/accounts/:id",
       "POST /api/herd/accounts/defaults",
-      "POST /api/herd/expense-groups",
-      "PATCH /api/herd/expense-groups/:id",
-      "DELETE /api/herd/expense-groups/:id",
+      "POST /api/herd/plan-groups",
+      "PATCH /api/herd/plan-groups/:id",
+      "DELETE /api/herd/plan-groups/:id",
     ]) {
       expect(ROUTE_REQUIREMENTS[key]).toEqual({ edit: ["finance"] });
     }

@@ -37,7 +37,7 @@ Ferramenta de **gestão de rebanho bovino de corte** para o produtor ou gerente 
 - **Manejo** — sessões de curral: vacina, vermifugação, medicação, exame, pesagem e também **troca de lote, venda e entrada (compra)**. Os animais passam um a um no brete, a sessão fica salva e pode ser retomada, e cada passagem pode ser desfeita.
 - **Lotes** — grupos lógicos de animais, com a invernada atual, movimentação do lote inteiro e histórico das invernadas ocupadas.
 - **Mapa** — invernadas físicas fixas, com código, contorno, lotes ocupantes e taxa de lotação combinada (UA/ha).
-- **Financeiro** — indicadores da pecuária de corte (preço da @, valor do rebanho, margens, relação de troca) com gráficos. Receitas vêm das vendas com valor, custos das despesas lançadas + tratamentos com custo; a cotação da arroba é real (Scot Consultoria + histórico IPEADATA).
+- **Financeiro** — indicadores da pecuária de corte (preço da @, valor do rebanho, margens, relação de troca) com gráficos. Receitas vêm das vendas com valor, custos das despesas lançadas; a cotação da arroba é real (Scot Consultoria + histórico IPEADATA).
 - **Configurações** — dados da fazenda, categorias, raças e invernadas.
 
 ## Stack

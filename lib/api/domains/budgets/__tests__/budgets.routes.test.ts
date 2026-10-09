@@ -57,7 +57,7 @@ vi.mock("@/lib/api/domains/budgets/useCases/CopyBudgets.useCase", () => ({
 
 import { herdApi } from "@/lib/api/app";
 
-const LINE = { safra: 2025, startMonth: 10, category: "nutrition", months: Array(11).fill(100), distribution: "manual" };
+const LINE = { safra: 2025, startMonth: 10, category: "grp-nutricao", months: Array(11).fill(100), distribution: "manual" };
 const COPY = { from: 2024, to: 2025, startMonth: 10, source: "budgeted", adjustPct: 0 };
 
 const request = (method: string, path: string, body?: unknown) =>
@@ -85,7 +85,7 @@ describe("budgets routes", () => {
 
     for (const response of [
       await request("PUT", "/budgets", LINE),
-      await request("DELETE", "/budgets?safra=2025&startMonth=10&category=nutrition"),
+      await request("DELETE", "/budgets?safra=2025&startMonth=10&category=grp-nutricao"),
       await request("POST", "/budgets/copy", COPY),
     ]) {
       expect(response.status).toBe(403);
@@ -121,11 +121,11 @@ describe("budgets routes", () => {
     state.membership = [{ role: "member", preset: null, permissions: FULL_PERMISSIONS }];
     remove.mockResolvedValue(12);
 
-    const response = await request("DELETE", "/budgets?safra=2025&startMonth=10&category=admin", {});
+    const response = await request("DELETE", "/budgets?safra=2025&startMonth=10&category=grp-administrativo", {});
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ removed: 12 });
-    expect(remove).toHaveBeenCalledWith({ farmId: 7, safra: 2025, startMonth: 10, category: "admin" });
+    expect(remove).toHaveBeenCalledWith({ farmId: 7, safra: 2025, startMonth: 10, category: "grp-administrativo" });
   });
 
   it("answers start_month_changed as a 409 on every write", async () => {
@@ -134,7 +134,7 @@ describe("budgets routes", () => {
 
     for (const response of [
       await request("PUT", "/budgets", LINE),
-      await request("DELETE", "/budgets?safra=2025&startMonth=10&category=admin", {}),
+      await request("DELETE", "/budgets?safra=2025&startMonth=10&category=grp-administrativo", {}),
       await request("POST", "/budgets/copy", COPY),
     ]) {
       expect(response.status).toBe(409);

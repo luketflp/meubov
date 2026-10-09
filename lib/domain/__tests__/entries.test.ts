@@ -67,20 +67,14 @@ describe("isCost, isRevenue and isCapitalKind", () => {
 });
 
 describe("entryGroup", () => {
-  it("puts a despesa in its grupo of custo", () => {
-    expect(entryGroup({ kind: "expense", category: "nutrition" })).toBe("nutrition");
-    expect(entryGroup({ kind: "expense", category: "other" })).toBe("other");
-  });
-
-  it("puts a receita in Receitas and a capital row in its own group, whatever the category", () => {
-    expect(entryGroup({ kind: "revenue", category: "other" })).toBe("revenue");
-    expect(entryGroup({ kind: "investment", category: "other" })).toBe("investment");
-    expect(entryGroup({ kind: "financing", category: "other" })).toBe("financing");
-    expect(entryGroup({ kind: "partners", category: "health" })).toBe("partners");
+  it("puts every kind but a rendimento in the grupo it carries", () => {
+    expect(entryGroup({ kind: "expense", category: "g-nut" })).toBe("g-nut");
+    expect(entryGroup({ kind: "revenue", category: "g-rec" })).toBe("g-rec");
+    expect(entryGroup({ kind: "financing", category: "g-pro" })).toBe("g-pro");
   });
 
   it("gives a rendimento no grupo", () => {
-    expect(entryGroup({ kind: "yield", category: "other" })).toBeNull();
+    expect(entryGroup({ kind: "yield" })).toBeNull();
   });
 });
 

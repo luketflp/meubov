@@ -1,7 +1,8 @@
 /**
- * Receitas e despesas por grupo on A4: the figures, the receitas by conta, the
- * despesas by grupo (or grupo and conta), the saldo, and optionally what moved
- * outside the resultado, with a note on what the regime takes.
+ * Receitas e despesas por grupo on A4: the figures, the receitas and the
+ * despesas by grupo (or grupo and conta; a tipo with a single grupo lists its
+ * contas without the grupo), the saldo, and optionally what moved outside the
+ * resultado, with a note on what the regime takes.
  */
 import { formatDate } from "@/lib/domain/dates";
 import { formatCurrency, formatNumber } from "@/lib/domain/format";
@@ -52,7 +53,7 @@ export function GroupsSheet({
   farm: PrintFarm;
   context: ExportContext;
 }) {
-  const revenues = groupsRevenueTable(report);
+  const revenues = groupsRevenueTable(report, options.accounts);
   const expenses = groupsExpenseTable(report, options.accounts);
   const capital = groupsCapitalTable(report);
   const ratio = report.revenueTotal > 0 ? (report.expenseTotal / report.revenueTotal) * 100 : null;
@@ -72,9 +73,9 @@ export function GroupsSheet({
           { label: "Despesas / receita", value: ratio === null ? "—" : `${formatNumber(ratio, 2)} %` },
         ]}
       />
-      <PrintSection title="Receitas" note="por conta">
+      <PrintSection title="Receitas" note={options.accounts ? "por grupo e conta" : "por grupo"}>
         {report.revenues.length > 0 ? (
-          <PrintTable table={revenues.table} totals={revenues.totals} />
+          <PrintTable table={revenues.table} totals={revenues.totals} subRows={revenues.subRows} />
         ) : (
           <PrintNote>Nenhuma receita no período.</PrintNote>
         )}
@@ -106,8 +107,7 @@ export function GroupsSheet({
         </PrintSection>
       ) : null}
       <PrintNote>
-        {REGIME_NOTE[regime]} Vendas e compras de gado entram pela data do manejo; tratamentos com custo, pela data da
-        aplicação, em Sanidade.
+        {REGIME_NOTE[regime]} Vendas e compras de gado entram pela data do manejo.
       </PrintNote>
       <PrintFooter context={context} />
     </A4Sheet>

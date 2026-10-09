@@ -4,7 +4,7 @@
  * "Registrar compra": doses of one semen bull bought from a central or a
  * revenda. The bull is fixed on top with the doses it has now, and a live line
  * says what each dose costs and where the stock goes once the purchase is in.
- * The purchase also lands in Financeiro as a Reprodução expense of its total.
+ * A purchase is stock: nothing of it lands in the Financeiro.
  *
  * The four purchase inputs and the reading of what was typed are exported:
  * "Novo touro" takes the first purchase with the same fields and messages.
@@ -13,7 +13,7 @@
  * full-width one at the foot of the phone card, the primary action of the
  * bull's page.
  */
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
 import type { SemenBull } from "@/lib/types";
 import { useHerdStore, type NewSemenPurchase } from "@/lib/store/useHerdStore";
@@ -97,12 +97,10 @@ interface PurchaseInputsProps {
   idPrefix: string;
   fields: PurchaseFields;
   onChange: (patch: Partial<PurchaseFields>) => void;
-  /** Note under the Valor total input. */
-  totalHint?: ReactNode;
 }
 
 /** Data, Doses, Valor total (R$) and Fornecedor, two by two. */
-export function PurchaseInputs({ idPrefix, fields, onChange, totalHint }: PurchaseInputsProps) {
+export function PurchaseInputs({ idPrefix, fields, onChange }: PurchaseInputsProps) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="grid gap-1.5">
@@ -142,7 +140,6 @@ export function PurchaseInputs({ idPrefix, fields, onChange, totalHint }: Purcha
           onChange={(e) => onChange({ total: e.target.value })}
           className="min-h-11 font-mono"
         />
-        {totalHint ? <p className="text-xs text-ink-soft">{totalHint}</p> : null}
       </div>
 
       <div className="grid content-start gap-1.5">
@@ -221,20 +218,17 @@ function PurchaseForm({ bull, onRegistered }: PurchaseFormProps) {
         onChange={(patch) => setFields((f) => ({ ...f, ...patch }))}
       />
 
-      <div className="grid gap-1">
-        {doses !== null ? (
-          <p className="text-sm text-ink-soft">
-            {total !== null ? (
-              <>
-                <span className="font-mono text-ink">{formatCurrency(total / doses)}</span> por
-                dose ·{" "}
-              </>
-            ) : null}
-            estoque passa a <MonoDoses doses={left + doses} className="text-ink" />
-          </p>
-        ) : null}
-        <p className="text-xs text-ink-soft">Vira despesa de Reprodução no Financeiro</p>
-      </div>
+      {doses !== null ? (
+        <p className="text-sm text-ink-soft">
+          {total !== null ? (
+            <>
+              <span className="font-mono text-ink">{formatCurrency(total / doses)}</span> por
+              dose ·{" "}
+            </>
+          ) : null}
+          estoque passa a <MonoDoses doses={left + doses} className="text-ink" />
+        </p>
+      ) : null}
 
       {error ? <p className="text-xs text-overdue">{error}</p> : null}
 

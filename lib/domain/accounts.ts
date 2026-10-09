@@ -1,72 +1,53 @@
 /**
- * Plano de contas: the grupos (Receitas, the seven built-in grupos of custo,
- * the farm's own grupos de despesa and the three outside the resultado) and
- * the farm's contas inside them. Pure. Order and labels of the grupos live in
- * groups.ts.
+ * Plano de contas: the farm's contas inside its grupos (lib/domain/groups.ts
+ * lists the grupos). Pure.
  */
 import type { Account, AccountGroup, Expense } from "@/lib/types";
-import { CAPITAL_GROUPS } from "@/lib/domain/entries";
-import { BUILTIN_CATEGORIES } from "@/lib/domain/groups";
 
-/** What "Sugerir contas padrão" creates. */
-export const DEFAULT_ACCOUNTS: readonly { group: AccountGroup; name: string }[] = [
-  { group: "revenue", name: "Aluguel de pasto" },
-  { group: "revenue", name: "Venda de esterco" },
-  { group: "revenue", name: "Outras receitas" },
-  { group: "nutrition", name: "Sal mineral" },
-  { group: "nutrition", name: "Ração e suplemento" },
-  { group: "nutrition", name: "Silagem" },
-  { group: "pasture", name: "Adubo" },
-  { group: "pasture", name: "Sementes" },
-  { group: "pasture", name: "Herbicida" },
-  { group: "pasture", name: "Roçada" },
-  { group: "labor", name: "Salários" },
-  { group: "labor", name: "Encargos" },
-  { group: "labor", name: "Diárias" },
-  { group: "health", name: "Vacinas" },
-  { group: "health", name: "Vermífugos" },
-  { group: "health", name: "Medicamentos" },
-  { group: "health", name: "Veterinário" },
-  { group: "breeding", name: "Sêmen" },
-  { group: "breeding", name: "IATF e hormônios" },
-  { group: "breeding", name: "Touros" },
-  { group: "admin", name: "Energia" },
-  { group: "admin", name: "Combustível" },
-  { group: "admin", name: "Manutenção" },
-  { group: "admin", name: "Impostos e taxas" },
-  { group: "admin", name: "Contabilidade" },
-  { group: "investment", name: "Benfeitorias" },
-  { group: "investment", name: "Máquinas e implementos" },
-  { group: "investment", name: "Equipamentos" },
-  { group: "partners", name: "Distribuição de lucro" },
+/** What "Sugerir contas padrão" creates: `group` is the default grupo's NAME (lib/domain/groups.ts DEFAULT_GROUPS). */
+export const DEFAULT_ACCOUNTS: readonly { group: string; name: string }[] = [
+  { group: "Receitas", name: "Aluguel de pasto" },
+  { group: "Receitas", name: "Venda de esterco" },
+  { group: "Receitas", name: "Outras receitas" },
+  { group: "Nutrição", name: "Sal mineral" },
+  { group: "Nutrição", name: "Ração e suplemento" },
+  { group: "Nutrição", name: "Silagem" },
+  { group: "Pastagem", name: "Adubo" },
+  { group: "Pastagem", name: "Sementes" },
+  { group: "Pastagem", name: "Herbicida" },
+  { group: "Pastagem", name: "Roçada" },
+  { group: "Mão de obra", name: "Salários" },
+  { group: "Mão de obra", name: "Encargos" },
+  { group: "Mão de obra", name: "Diárias" },
+  { group: "Sanidade", name: "Vacinas" },
+  { group: "Sanidade", name: "Vermífugos" },
+  { group: "Sanidade", name: "Medicamentos" },
+  { group: "Sanidade", name: "Veterinário" },
+  { group: "Reprodução", name: "Sêmen" },
+  { group: "Reprodução", name: "IATF e hormônios" },
+  { group: "Reprodução", name: "Touros" },
+  { group: "Administrativo", name: "Energia" },
+  { group: "Administrativo", name: "Combustível" },
+  { group: "Administrativo", name: "Manutenção" },
+  { group: "Administrativo", name: "Impostos e taxas" },
+  { group: "Administrativo", name: "Contabilidade" },
+  { group: "Investimentos", name: "Benfeitorias" },
+  { group: "Investimentos", name: "Máquinas e implementos" },
+  { group: "Investimentos", name: "Equipamentos" },
+  { group: "Sócios", name: "Distribuição de lucro" },
 ];
 
-/**
- * Contas per grupo, sorted by name; archived ones only when asked. Receitas,
- * the seven built-in grupos and the three outside the resultado are always
- * there (maybe empty); a farm grupo only once it has a conta, so read
- * `byGroup[key] ?? []`.
- */
+/** Contas per grupo id, sorted by name; archived ones only when asked. No pre-filled keys: read `byGroup[id] ?? []`. */
 export function accountsByGroup(
   accounts: Account[],
   includeArchived = false
 ): Record<AccountGroup, Account[]> {
-  const byGroup: Record<AccountGroup, Account[]> = Object.fromEntries(
-    ["revenue", ...BUILTIN_CATEGORIES, ...CAPITAL_GROUPS].map((g): [string, Account[]] => [g, []])
-  );
+  const byGroup: Record<AccountGroup, Account[]> = {};
   for (const a of accounts) {
     if (includeArchived || a.archivedAt === undefined) (byGroup[a.group] ??= []).push(a);
   }
   for (const list of Object.values(byGroup)) list.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   return byGroup;
-}
-
-const nameKey = (group: AccountGroup, name: string) => `${group}:${name.trim().toLowerCase()}`;
-
-/** The standard contas the farm does not have yet (archived ones count as had). */
-export function missingDefaults(accounts: Account[]): { group: AccountGroup; name: string }[] {
-  const have = new Set(accounts.map((a) => nameKey(a.group, a.name)));
-  return DEFAULT_ACCOUNTS.filter((d) => !have.has(nameKey(d.group, d.name)));
 }
 
 /** Name of a conta, null when unset or gone. */

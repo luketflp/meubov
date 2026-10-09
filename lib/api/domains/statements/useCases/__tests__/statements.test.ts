@@ -82,7 +82,7 @@ const EXPENSE = {
   farmId: 7,
   kind: "expense",
   date: "2026-09-10",
-  category: "nutrition",
+  category: "grp-nutricao",
   amountBrl: 4850,
   notes: null,
   dueDate: "2026-09-18",
@@ -95,6 +95,10 @@ const EXPENSE = {
   seriesIndex: null,
   bankAccountId: null,
 };
+
+/** A plan_groups row of the farm, as the grupo check reads it. */
+const grupo = (id: string, kind: string) =>
+  ({ id, farmId: 7, kind, name: id, archivedAt: null, createdAt: new Date(0) });
 
 beforeEach(() => {
   state.selectResults = [];
@@ -240,7 +244,7 @@ describe("ResolveLineUseCase", () => {
 
   it("reads the side of a lançamento fora do resultado from its movimento", async () => {
     const entrada = { ...LINE, amountBrl: 4850 };
-    const liberacao = { ...EXPENSE, kind: "financing", flow: "in", category: "other", accountId: "acc-pronaf" };
+    const liberacao = { ...EXPENSE, kind: "financing", flow: "in", category: "grp-financiamentos", accountId: "acc-pronaf" };
     state.selectResults = [[entrada], [liberacao]];
     state.returning = [
       [{ ...liberacao, paidAt: "2026-09-18", bankAccountId: "sicredi" }],
@@ -290,7 +294,8 @@ describe("ResolveLineUseCase", () => {
   });
 
   it("creates the lançamento paid on the line's date by its conta", async () => {
-    state.selectResults = [[LINE], [{ kind: "checking", archivedAt: null }]];
+    // The line, the grupo sent, then the line's conta as "Pago por".
+    state.selectResults = [[LINE], [grupo("grp-sanidade", "expense")], [{ kind: "checking", archivedAt: null }]];
     state.returning = [
       [{ ...EXPENSE, paidAt: "2026-09-18", bankAccountId: "sicredi" }],
       [{ ...LINE, status: "created", expenseId: "e-1" }],
@@ -298,16 +303,41 @@ describe("ResolveLineUseCase", () => {
     const result = await resolveRun({
       type: "create",
       // Value and payment day the form sent are pinned to the line's.
-      entry: { date: "2026-09-18", category: "health", amountBrl: 1, paidAt: "2026-09-01", notes: "PIX ENVIADO AGROPECUARIA SERTAO" },
+      entry: {
+        date: "2026-09-18",
+        category: "grp-sanidade",
+        amountBrl: 1,
+        paidAt: "2026-09-01",
+        notes: "PIX ENVIADO AGROPECUARIA SERTAO",
+      },
     });
     expect(state.inserts[0]).toMatchObject({
       kind: "expense",
-      category: "health",
+      category: "grp-sanidade",
       amountBrl: 4850,
       paidAt: "2026-09-18",
       bankAccountId: "sicredi",
     });
     expect(result).toMatchObject({ line: { status: "created", expenseId: "e-1" } });
+  });
+
+  it("creates a receita from an entrada in the grupo the form sent", async () => {
+    const entrada = { ...LINE, amountBrl: 3000, description: "PIX RECEBIDO ALUGUEL PASTO" };
+    state.selectResults = [[entrada], [grupo("grp-arrendamentos", "revenue")], [{ kind: "checking", archivedAt: null }]];
+    state.returning = [
+      [{ ...EXPENSE, kind: "revenue", category: "grp-arrendamentos", amountBrl: 3000, paidAt: "2026-09-18" }],
+      [{ ...entrada, status: "created", expenseId: "e-1" }],
+    ];
+    await resolveRun({ type: "create", entry: { date: "2026-09-18", category: "grp-arrendamentos", amountBrl: 1 } });
+    expect(state.inserts[0]).toMatchObject({ kind: "revenue", category: "grp-arrendamentos", amountBrl: 3000 });
+
+    // A despesa grupo sent with an entrada is refused.
+    state.inserts = [];
+    state.selectResults = [[entrada], [grupo("grp-nutricao", "expense")]];
+    expect(
+      await resolveRun({ type: "create", entry: { date: "2026-09-18", category: "grp-nutricao", amountBrl: 1 } })
+    ).toBe("invalid_category");
+    expect(state.inserts).toEqual([]);
   });
 
   it("refuses to create a lançamento in a grupo that is not the farm's, and leaves the line pending", async () => {

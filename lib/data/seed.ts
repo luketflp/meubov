@@ -18,6 +18,7 @@ import type {
   LotPlacement,
   ManejoSession,
   Movement,
+  PlanGroup,
   Weighing,
   Sex,
   TreatmentStatus,
@@ -204,40 +205,55 @@ const NUTRITION_BY_MONTH: readonly number[] = [
 const LABOR_MONTHLY = 2600;
 const ADMIN_MONTHLY = 480;
 
+/** The eleven default grupos (DEFAULT_GROUPS in lib/domain/groups.ts), with fixed ids the seed points at. */
+export const SEED_GROUPS: readonly PlanGroup[] = [
+  { id: "grp-receitas", kind: "revenue", name: "Receitas", createdAt: "2025-07-01T12:00:00.000Z" },
+  { id: "grp-nutricao", kind: "expense", name: "Nutrição", createdAt: "2025-07-01T12:00:00.000Z" },
+  { id: "grp-pastagem", kind: "expense", name: "Pastagem", createdAt: "2025-07-01T12:00:00.000Z" },
+  { id: "grp-mao-de-obra", kind: "expense", name: "Mão de obra", createdAt: "2025-07-01T12:00:00.000Z" },
+  { id: "grp-sanidade", kind: "expense", name: "Sanidade", createdAt: "2025-07-01T12:00:00.000Z" },
+  { id: "grp-reproducao", kind: "expense", name: "Reprodução", createdAt: "2025-07-01T12:00:00.000Z" },
+  { id: "grp-administrativo", kind: "expense", name: "Administrativo", createdAt: "2025-07-01T12:00:00.000Z" },
+  { id: "grp-outros", kind: "expense", name: "Outros", createdAt: "2025-07-01T12:00:00.000Z" },
+  { id: "grp-investimentos", kind: "investment", name: "Investimentos", createdAt: "2025-07-01T12:00:00.000Z" },
+  { id: "grp-financiamentos", kind: "financing", name: "Financiamentos", createdAt: "2025-07-01T12:00:00.000Z" },
+  { id: "grp-socios", kind: "partners", name: "Sócios", createdAt: "2025-07-01T12:00:00.000Z" },
+];
+
 /**
  * The farm's plano de contas: the standard list, with fixed ids so the seed
  * expenses can point at them. Mirrors DEFAULT_ACCOUNTS in lib/domain/accounts.ts.
  */
 const SEED_ACCOUNTS: readonly Account[] = [
-  { id: "acc-revenue-aluguel-de-pasto", group: "revenue", name: "Aluguel de pasto" },
-  { id: "acc-revenue-venda-de-esterco", group: "revenue", name: "Venda de esterco" },
-  { id: "acc-revenue-outras-receitas", group: "revenue", name: "Outras receitas" },
-  { id: "acc-nutrition-sal-mineral", group: "nutrition", name: "Sal mineral" },
-  { id: "acc-nutrition-racao-e-suplemento", group: "nutrition", name: "Ração e suplemento" },
-  { id: "acc-nutrition-silagem", group: "nutrition", name: "Silagem" },
-  { id: "acc-pasture-adubo", group: "pasture", name: "Adubo" },
-  { id: "acc-pasture-sementes", group: "pasture", name: "Sementes" },
-  { id: "acc-pasture-herbicida", group: "pasture", name: "Herbicida" },
-  { id: "acc-pasture-rocada", group: "pasture", name: "Roçada" },
-  { id: "acc-labor-salarios", group: "labor", name: "Salários" },
-  { id: "acc-labor-encargos", group: "labor", name: "Encargos" },
-  { id: "acc-labor-diarias", group: "labor", name: "Diárias" },
-  { id: "acc-health-vacinas", group: "health", name: "Vacinas" },
-  { id: "acc-health-vermifugos", group: "health", name: "Vermífugos" },
-  { id: "acc-health-medicamentos", group: "health", name: "Medicamentos" },
-  { id: "acc-health-veterinario", group: "health", name: "Veterinário" },
-  { id: "acc-breeding-semen", group: "breeding", name: "Sêmen" },
-  { id: "acc-breeding-iatf-e-hormonios", group: "breeding", name: "IATF e hormônios" },
-  { id: "acc-breeding-touros", group: "breeding", name: "Touros" },
-  { id: "acc-admin-energia", group: "admin", name: "Energia" },
-  { id: "acc-admin-combustivel", group: "admin", name: "Combustível" },
-  { id: "acc-admin-manutencao", group: "admin", name: "Manutenção" },
-  { id: "acc-admin-impostos-e-taxas", group: "admin", name: "Impostos e taxas" },
-  { id: "acc-admin-contabilidade", group: "admin", name: "Contabilidade" },
-  { id: "acc-investment-benfeitorias", group: "investment", name: "Benfeitorias" },
-  { id: "acc-investment-maquinas-e-implementos", group: "investment", name: "Máquinas e implementos" },
-  { id: "acc-investment-equipamentos", group: "investment", name: "Equipamentos" },
-  { id: "acc-partners-distribuicao-de-lucro", group: "partners", name: "Distribuição de lucro" },
+  { id: "acc-revenue-aluguel-de-pasto", group: "grp-receitas", name: "Aluguel de pasto" },
+  { id: "acc-revenue-venda-de-esterco", group: "grp-receitas", name: "Venda de esterco" },
+  { id: "acc-revenue-outras-receitas", group: "grp-receitas", name: "Outras receitas" },
+  { id: "acc-nutrition-sal-mineral", group: "grp-nutricao", name: "Sal mineral" },
+  { id: "acc-nutrition-racao-e-suplemento", group: "grp-nutricao", name: "Ração e suplemento" },
+  { id: "acc-nutrition-silagem", group: "grp-nutricao", name: "Silagem" },
+  { id: "acc-pasture-adubo", group: "grp-pastagem", name: "Adubo" },
+  { id: "acc-pasture-sementes", group: "grp-pastagem", name: "Sementes" },
+  { id: "acc-pasture-herbicida", group: "grp-pastagem", name: "Herbicida" },
+  { id: "acc-pasture-rocada", group: "grp-pastagem", name: "Roçada" },
+  { id: "acc-labor-salarios", group: "grp-mao-de-obra", name: "Salários" },
+  { id: "acc-labor-encargos", group: "grp-mao-de-obra", name: "Encargos" },
+  { id: "acc-labor-diarias", group: "grp-mao-de-obra", name: "Diárias" },
+  { id: "acc-health-vacinas", group: "grp-sanidade", name: "Vacinas" },
+  { id: "acc-health-vermifugos", group: "grp-sanidade", name: "Vermífugos" },
+  { id: "acc-health-medicamentos", group: "grp-sanidade", name: "Medicamentos" },
+  { id: "acc-health-veterinario", group: "grp-sanidade", name: "Veterinário" },
+  { id: "acc-breeding-semen", group: "grp-reproducao", name: "Sêmen" },
+  { id: "acc-breeding-iatf-e-hormonios", group: "grp-reproducao", name: "IATF e hormônios" },
+  { id: "acc-breeding-touros", group: "grp-reproducao", name: "Touros" },
+  { id: "acc-admin-energia", group: "grp-administrativo", name: "Energia" },
+  { id: "acc-admin-combustivel", group: "grp-administrativo", name: "Combustível" },
+  { id: "acc-admin-manutencao", group: "grp-administrativo", name: "Manutenção" },
+  { id: "acc-admin-impostos-e-taxas", group: "grp-administrativo", name: "Impostos e taxas" },
+  { id: "acc-admin-contabilidade", group: "grp-administrativo", name: "Contabilidade" },
+  { id: "acc-investment-benfeitorias", group: "grp-investimentos", name: "Benfeitorias" },
+  { id: "acc-investment-maquinas-e-implementos", group: "grp-investimentos", name: "Máquinas e implementos" },
+  { id: "acc-investment-equipamentos", group: "grp-investimentos", name: "Equipamentos" },
+  { id: "acc-partners-distribuicao-de-lucro", group: "grp-socios", name: "Distribuição de lucro" },
 ];
 
 /** A despesa paid on its own date: kind and paidAt are filled by buildExpenses. */
@@ -245,17 +261,17 @@ type PaidExpense = Omit<Expense, "id" | "kind" | "paidAt">;
 
 /** One-off expenses: pasture upkeep, breeding, extra health and misc. */
 const ONE_OFF_EXPENSES: readonly PaidExpense[] = [
-  { date: "2025-09-15", category: "pasture", amountBrl: 2900, notes: "Adubação das pastagens", accountId: "acc-pasture-adubo" },
-  { date: "2026-01-20", category: "pasture", amountBrl: 1400, notes: "Sementes de braquiária", accountId: "acc-pasture-sementes" },
-  { date: "2026-03-18", category: "pasture", amountBrl: 1650, notes: "Roçada e reparo de cercas", accountId: "acc-pasture-rocada" },
-  { date: "2026-06-10", category: "pasture", amountBrl: 900 },
-  { date: "2025-11-05", category: "breeding", amountBrl: 2100, notes: "Protocolo IATF", accountId: "acc-breeding-iatf-e-hormonios", lotId: "lot-1" },
-  { date: "2026-01-15", category: "breeding", amountBrl: 1300, notes: "Doses de sêmen", accountId: "acc-breeding-semen", lotId: "lot-1" },
-  { date: "2025-10-12", category: "health", amountBrl: 850, notes: "Consulta veterinária", accountId: "acc-health-veterinario", lotId: "lot-3" },
-  { date: "2026-02-08", category: "health", amountBrl: 620 },
-  { date: "2026-05-11", category: "health", amountBrl: 1200, notes: "Campanha de aftosa", accountId: "acc-health-vacinas" },
-  { date: "2025-12-18", category: "other", amountBrl: 700, notes: "Combustível" },
-  { date: "2026-04-22", category: "other", amountBrl: 540 },
+  { date: "2025-09-15", category: "grp-pastagem", amountBrl: 2900, notes: "Adubação das pastagens", accountId: "acc-pasture-adubo" },
+  { date: "2026-01-20", category: "grp-pastagem", amountBrl: 1400, notes: "Sementes de braquiária", accountId: "acc-pasture-sementes" },
+  { date: "2026-03-18", category: "grp-pastagem", amountBrl: 1650, notes: "Roçada e reparo de cercas", accountId: "acc-pasture-rocada" },
+  { date: "2026-06-10", category: "grp-pastagem", amountBrl: 900 },
+  { date: "2025-11-05", category: "grp-reproducao", amountBrl: 2100, notes: "Protocolo IATF", accountId: "acc-breeding-iatf-e-hormonios", lotId: "lot-1" },
+  { date: "2026-01-15", category: "grp-reproducao", amountBrl: 1300, notes: "Doses de sêmen", accountId: "acc-breeding-semen", lotId: "lot-1" },
+  { date: "2025-10-12", category: "grp-sanidade", amountBrl: 850, notes: "Consulta veterinária", accountId: "acc-health-veterinario", lotId: "lot-3" },
+  { date: "2026-02-08", category: "grp-sanidade", amountBrl: 620 },
+  { date: "2026-05-11", category: "grp-sanidade", amountBrl: 1200, notes: "Campanha de aftosa", accountId: "acc-health-vacinas" },
+  { date: "2025-12-18", category: "grp-outros", amountBrl: 700, notes: "Combustível" },
+  { date: "2026-04-22", category: "grp-outros", amountBrl: 540 },
 ];
 
 /**
@@ -264,23 +280,23 @@ const ONE_OFF_EXPENSES: readonly PaidExpense[] = [
  */
 const OPEN_AND_REVENUE_ENTRIES: readonly Omit<Expense, "id">[] = [
   {
-    kind: "revenue", date: "2026-08-12", category: "other", amountBrl: 1800,
+    kind: "revenue", date: "2026-08-12", category: "grp-receitas", amountBrl: 1800,
     paidAt: "2026-08-12", accountId: "acc-revenue-venda-de-esterco",
   },
   {
-    kind: "revenue", date: "2026-09-05", category: "other", amountBrl: 6400,
+    kind: "revenue", date: "2026-09-05", category: "grp-receitas", amountBrl: 6400,
     paidAt: "2026-09-05", accountId: "acc-revenue-aluguel-de-pasto",
   },
   {
-    kind: "expense", date: "2026-09-10", dueDate: "2026-09-30", category: "labor",
+    kind: "expense", date: "2026-09-10", dueDate: "2026-09-30", category: "grp-mao-de-obra",
     amountBrl: 8400, accountId: "acc-labor-salarios",
   },
   {
-    kind: "expense", date: "2026-09-18", dueDate: "2026-09-18", category: "nutrition",
+    kind: "expense", date: "2026-09-18", dueDate: "2026-09-18", category: "grp-nutricao",
     amountBrl: 4850, accountId: "acc-nutrition-sal-mineral",
   },
   {
-    kind: "expense", date: "2026-09-20", dueDate: "2026-09-28", category: "admin",
+    kind: "expense", date: "2026-09-20", dueDate: "2026-09-28", category: "grp-administrativo",
     amountBrl: 1320, accountId: "acc-admin-energia",
   },
 ];
@@ -291,19 +307,19 @@ function buildExpenses(): Expense[] {
   EXPENSE_MONTHS.forEach((month, i) => {
     rows.push({
       date: `${month}-05`,
-      category: "nutrition",
+      category: "grp-nutricao",
       amountBrl: NUTRITION_BY_MONTH[i],
       notes: "Ração e sal mineral",
       accountId: "acc-nutrition-racao-e-suplemento",
     });
     rows.push({
       date: `${month}-01`,
-      category: "labor",
+      category: "grp-mao-de-obra",
       amountBrl: LABOR_MONTHLY,
       notes: "Diárias e encargos",
       accountId: "acc-labor-diarias",
     });
-    rows.push({ date: `${month}-10`, category: "admin", amountBrl: ADMIN_MONTHLY });
+    rows.push({ date: `${month}-10`, category: "grp-administrativo", amountBrl: ADMIN_MONTHLY });
   });
   rows.push(...ONE_OFF_EXPENSES);
   const entries: Omit<Expense, "id">[] = [
@@ -725,6 +741,7 @@ export function generateInitialData(): HerdData {
     manejoSessions: movementSessions,
     expenses: buildExpenses(),
     accounts: SEED_ACCOUNTS.map((account) => ({ ...account })),
+    planGroups: SEED_GROUPS.map((group) => ({ ...group })),
     customCategories: [],
     semenBulls: [],
     farm: { ...FARM },

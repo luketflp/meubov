@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { lotEconomics } from "@/lib/domain/lotEconomics";
 import { coe, type EconomicsInputs } from "@/lib/domain/economics";
-import type { Animal, Expense, ManejoSession, ManejoSessionAnimal, Treatment } from "@/lib/types";
+import type { Animal, Expense, ManejoSession, ManejoSessionAnimal } from "@/lib/types";
 import { makeAnimal, makeManejoSession, makeTreatment } from "./fixtures";
 
 const TODAY = "2026-07-24";
@@ -27,16 +27,6 @@ const expense = (partial: Partial<Expense>): Expense => ({
   amountBrl: 0,
   ...partial,
 });
-
-const cost = (earTag: string, costBrl: number, partial: Partial<Treatment> = {}): Treatment =>
-  makeTreatment({
-    id: `t-${earTag}`,
-    animalEarTag: earTag,
-    date: "2026-03-01",
-    status: "done",
-    costBrl,
-    ...partial,
-  });
 
 /** Each animal's live arrobas at 2025-12-31 → 2026-06-30 in the comment. */
 const animals: Animal[] = [
@@ -110,19 +100,15 @@ const expenses: Expense[] = [
   expense({ id: "e-rev", kind: "revenue", category: "other", lotId: "lot-a", amountBrl: 5000 }),
   // Outside the window.
   expense({ id: "e-old", lotId: "lot-a", date: "2025-12-20", amountBrl: 700 }),
-];
-
-const treatments: Treatment[] = [
-  cost("A1", 40),
-  cost("B1", 60),
-  cost("B2", 99, { id: "t-B2-scheduled", status: "scheduled" }),
+  // Vacinas typed in Sanidade with the lote.
+  expense({ id: "e-vac-a", lotId: "lot-a", category: "health", date: "2026-03-01", amountBrl: 40 }),
+  expense({ id: "e-vac-b", lotId: "lot-b", category: "health", date: "2026-03-01", amountBrl: 60 }),
 ];
 
 const input: EconomicsInputs = {
   animals,
   manejoSessions: sessions,
   movements: [],
-  treatments,
   expenses,
   invernadas: [],
   lots: [
@@ -143,7 +129,7 @@ describe("lotEconomics", () => {
   });
 
   it("splits direct and shared cost", () => {
-    // A: 1000 + A1's 40; B: B1's 60; C: 300. Shared pool 2000 → 3/5 and 2/5.
+    // A: 1000 + its vacina 40; B: its vacina 60; C: 300. Shared pool 2000 → 3/5 and 2/5.
     expect(byName("Lote A")).toMatchObject({ lotId: "lot-a", heads: 3, directBrl: 1040, sharedBrl: 1200, totalBrl: 2240 });
     expect(byName("Lote B")).toMatchObject({ lotId: "lot-b", heads: 2, directBrl: 60, sharedBrl: 800, totalBrl: 860 });
     expect(byName("Lote C")).toMatchObject({ lotId: "lot-c", heads: 0, directBrl: 300, sharedBrl: 0, totalBrl: 300 });
@@ -177,7 +163,7 @@ describe("lotEconomics", () => {
   });
 
   it("closes on a Fazenda row whose total is the COE", () => {
-    const total = coe(expenses, treatments, P);
+    const total = coe(expenses, P);
     expect(total).toBe(3400);
     expect(farm).toMatchObject({
       lotId: null,
@@ -211,11 +197,21 @@ describe("lotEconomics", () => {
 
   it("leaves margin null without a quote and shares nothing without heads", () => {
     expect(lotEconomics(input, P, null, TODAY).farm.marginPerArroba).toBeNull();
-    const noHerd = lotEconomics({ ...input, animals: [], treatments: [] }, P, QUOTE, TODAY);
+    const noHerd = lotEconomics({ ...input, animals: [] }, P, QUOTE, TODAY);
     expect(noHerd.lots.map((l) => [l.name, l.sharedBrl])).toEqual([
       ["Lote A", 0],
+      ["Lote B", 0],
       ["Lote C", 0],
     ]);
-    expect(noHerd.farm).toMatchObject({ heads: 0, totalBrl: 3300, perHeadDay: null });
+    expect(noHerd.farm).toMatchObject({ heads: 0, totalBrl: 3400, perHeadDay: null });
+  });
+
+  it("leaves a tratamento's cost out of its lote and of the Fazenda row", () => {
+    // The store's data has the tratamentos; handed in whole, they still count for nothing.
+    const withTreatments = {
+      ...input,
+      treatments: [makeTreatment({ animalEarTag: "A1", date: "2026-03-01", status: "done", costBrl: 999 })],
+    };
+    expect(lotEconomics(withTreatments, P, QUOTE, TODAY)).toEqual(lotEconomics(input, P, QUOTE, TODAY));
   });
 });

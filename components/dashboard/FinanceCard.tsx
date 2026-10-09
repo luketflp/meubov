@@ -27,7 +27,7 @@ interface FinanceCardProps {
 }
 
 export function FinanceCard({ result, breakdown, months }: FinanceCardProps) {
-  const expenseGroups = useHerdStore((s) => s.expenseGroups);
+  const planGroups = useHerdStore((s) => s.planGroups);
   const empty = result.totalRevenue === 0 && result.totalCost === 0;
   const positive = result.result >= 0;
   const groups: BarGroup[] = months.map((month) => ({
@@ -124,7 +124,7 @@ export function FinanceCard({ result, breakdown, months }: FinanceCardProps) {
                         aria-hidden
                         className={cn("size-2 shrink-0 rounded-full", SLICE_COLORS[index % SLICE_COLORS.length])}
                       />
-                      {groupLabel(slice.category, expenseGroups)}
+                      {groupLabel(slice.category, planGroups)}
                       <span className="ml-auto font-mono text-ink">{formatNumber(slice.pct)}%</span>
                     </li>
                   ))}

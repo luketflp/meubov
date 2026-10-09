@@ -135,23 +135,34 @@ describe("headsLabel", () => {
 });
 
 const GROUPS: GroupsReport = {
-  revenues: [{ label: "Venda de gado", amountBrl: 1000, locked: true }],
-  revenueTotal: 1000,
+  revenues: [
+    { key: "venda-de-gado", label: "Venda de gado", amountBrl: 1000, accounts: [], locked: true },
+    {
+      key: "grp-receitas",
+      label: "Receitas",
+      amountBrl: 250,
+      accounts: [
+        { label: "Arrendamento", amountBrl: 200, locked: false },
+        { label: "Sem conta", amountBrl: 50, locked: false },
+      ],
+    },
+  ],
+  revenueTotal: 1250,
   expenses: [
     {
-      key: "nutrition",
+      key: "grp-nutricao",
       label: "Nutrição",
-      custom: false,
       amountBrl: 300,
       accounts: [
         { label: "Ração e suplemento", amountBrl: 100, locked: false },
         { label: "Sal mineral", amountBrl: 200, locked: false },
       ],
     },
-    { key: "other", label: "Outros", custom: false, amountBrl: 100, accounts: [{ label: "Sem conta", amountBrl: 100, locked: false }] },
+    { key: "grp-outros", label: "Outros", amountBrl: 100, accounts: [{ label: "Sem conta", amountBrl: 100, locked: false }] },
   ],
   expenseTotal: 400,
-  balance: 600,
+  balance: 850,
+  flat: { revenue: true, expense: false },
   capital: [
     {
       key: "financing",
@@ -167,19 +178,48 @@ const GROUPS: GroupsReport = {
 };
 
 describe("groups tables", () => {
-  it("gives each receita its share of the receita", () => {
-    const { table, totals } = groupsRevenueTable(GROUPS);
-    expect(table.rows).toEqual([["Venda de gado", 1000, 100]]);
-    expect(totals).toEqual(["Total de receitas", 1000, 100]);
+  it("gives Venda de gado and each receita grupo its share of the receita", () => {
+    const { table, totals, subRows } = groupsRevenueTable(GROUPS, false);
+    expect(table.columns[0].header).toBe("Grupo");
+    expect(table.rows).toEqual([
+      ["Venda de gado", 1000, 80],
+      ["Receitas", 250, 20],
+    ]);
+    expect(totals).toEqual(["Total de receitas", 1250, 100]);
+    expect(subRows).toBeUndefined();
+  });
+
+  it("lists the contas of the only receita grupo without its header, Venda de gado on its own", () => {
+    const { table, subRows } = groupsRevenueTable(GROUPS, true);
+    expect(table.columns[0].header).toBe("Grupo / conta");
+    expect(table.rows).toEqual([
+      ["Venda de gado", 1000, 80],
+      ["Arrendamento", 200, 16],
+      ["Sem conta", 50, 4],
+    ]);
+    expect([...(subRows ?? [])]).toEqual([]);
+  });
+
+  it("opens each receita grupo under its header when there are two", () => {
+    const servicos = {
+      key: "grp-servicos",
+      label: "Serviços",
+      amountBrl: 250,
+      accounts: [{ label: "Sem conta", amountBrl: 250, locked: false }],
+    };
+    const report = { ...GROUPS, revenues: [...GROUPS.revenues, servicos], revenueTotal: 1500, flat: { revenue: false, expense: false } };
+    const { table, subRows } = groupsRevenueTable(report, true);
+    expect(table.rows.map((r) => r[0])).toEqual(["Venda de gado", "Receitas", "Arrendamento", "Sem conta", "Serviços", "Sem conta"]);
+    expect([...(subRows ?? [])]).toEqual([2, 3, 5]);
   });
 
   it("lists the grupos with their share of the despesas and of the receita", () => {
     const { table, totals, subRows } = groupsExpenseTable(GROUPS, false);
     expect(table.rows).toEqual([
-      ["Nutrição", 300, 75, 30],
-      ["Outros", 100, 25, 10],
+      ["Nutrição", 300, 75, 24],
+      ["Outros", 100, 25, 8],
     ]);
-    expect(totals).toEqual(["Total de despesas", 400, 100, 40]);
+    expect(totals).toEqual(["Total de despesas", 400, 100, 32]);
     expect(subRows).toBeUndefined();
   });
 
@@ -188,6 +228,20 @@ describe("groups tables", () => {
     expect(table.columns[0].header).toBe("Grupo / conta");
     expect(table.rows.map((r) => r[0])).toEqual(["Nutrição", "Ração e suplemento", "Sal mineral", "Outros", "Sem conta"]);
     expect([...(subRows ?? [])]).toEqual([1, 2, 4]);
+  });
+
+  it("lists the contas of the only despesa grupo without its header", () => {
+    const report = { ...GROUPS, expenses: [GROUPS.expenses[0]], expenseTotal: 300, flat: { revenue: true, expense: true } };
+    const { table, subRows } = groupsExpenseTable(report, true);
+    expect(table.rows.map((r) => r[0])).toEqual(["Ração e suplemento", "Sal mineral"]);
+    expect([...(subRows ?? [])]).toEqual([]);
+  });
+
+  it("keeps the grupo header while the farm has other despesa grupos, even when only one has lines", () => {
+    const report = { ...GROUPS, expenses: [GROUPS.expenses[0]], expenseTotal: 300 };
+    const { table, subRows } = groupsExpenseTable(report, true);
+    expect(table.rows.map((r) => r[0])).toEqual(["Nutrição", "Ração e suplemento", "Sal mineral"]);
+    expect([...(subRows ?? [])]).toEqual([1, 2]);
   });
 
   it("has no share of the receita when there was none", () => {

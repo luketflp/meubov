@@ -70,7 +70,7 @@ export interface Breeding {
   localOpId?: string;
 }
 
-/** One purchase of semen doses of a bull; it also became a farm expense. */
+/** One purchase of semen doses of a bull. */
 export interface SemenPurchase {
   id: string;
   date: string;
@@ -78,8 +78,6 @@ export interface SemenPurchase {
   /** Absent when the server stripped it for a member without Financeiro. */
   totalBrl?: number;
   seller?: string;
-  /** Expense this purchase wrote in Financeiro; absent once that expense is gone. */
-  expenseId?: string;
 }
 
 /**
@@ -383,20 +381,21 @@ export interface Movement {
   bankAccountId?: string;
 }
 
-/** One of the seven grupos de despesa the app ships with; they never change. */
-export type BuiltinCategory = "nutrition" | "pasture" | "labor" | "health" | "breeding" | "admin" | "other";
+/** Tipo of a grupo do plano: what the money of its lançamentos is. A rendimento has no grupo. */
+export type GroupKind = Exclude<EntryKind, "yield">;
 
-/** Grupo of a despesa: a BuiltinCategory key or the id of one of the farm's ExpenseGroup. */
-export type ExpenseCategory = string;
-
-/** A grupo de despesa the farm created ("Máquinas e veículos"); it counts in the COE like the seven. */
-export interface ExpenseGroup {
+/** A grupo of the plano de contas ("Nutrição", "Receitas", "Financiamentos"); every one belongs to the farm. */
+export interface PlanGroup {
   id: string;
+  kind: GroupKind;
   name: string;
   /** ISO timestamp; an archived grupo leaves the forms and keeps its history. */
   archivedAt?: string;
   createdAt: string;
 }
+
+/** Grupo of a lançamento: a PlanGroup id. */
+export type ExpenseCategory = string;
 
 /**
  * What the money of a lançamento is. Despesa and receita make the resultado;
@@ -408,13 +407,13 @@ export type EntryKind = "expense" | "revenue" | "investment" | "financing" | "pa
 /** Direction of a lançamento: money in or out of the conta bancária. */
 export type EntryFlow = "in" | "out";
 
-/** The three groups outside the resultado that hold contas do plano. */
+/** The three kinds outside the resultado. */
 export type CapitalGroup = "investment" | "financing" | "partners";
 
 /**
  * One line of money the farm typed ("lançamento"): a despesa, a receita, or
- * money outside the resultado. The table stays `expenses`; vendas, compras and
- * treatment costs are not lançamentos, they derive from the manejos.
+ * money outside the resultado. The table stays `expenses`; vendas and compras
+ * are not lançamentos, they derive from the manejos.
  */
 export interface Expense {
   id: string;
@@ -423,8 +422,8 @@ export interface Expense {
   flow?: EntryFlow;
   /** Competência. */
   date: string;
-  /** Grupo of a despesa; the other kinds write "other" and nothing reads it. */
-  category: ExpenseCategory;
+  /** Grupo of the lançamento; absent on a rendimento only. */
+  category?: ExpenseCategory;
   amountBrl: number;
   notes?: string;
   /** Vencimento; absent means `date`. */
@@ -494,7 +493,7 @@ export interface Attachment {
   createdAt: string;
 }
 
-/** Grupo of a conta: "revenue", a CapitalGroup or a despesa grupo (ExpenseCategory). */
+/** Grupo of a conta: a PlanGroup id. */
 export type AccountGroup = string;
 
 /** A farm-defined conta inside a grupo ("Sal mineral" in Nutrição). */
@@ -659,8 +658,8 @@ export interface HerdData {
   expenses: Expense[];
   /** Plano de contas: the farm's contas, archived ones included. */
   accounts: Account[];
-  /** Grupos de despesa the farm created, archived ones included; absent in an old snapshot. */
-  expenseGroups?: ExpenseGroup[];
+  /** Every grupo of the plano, archived ones included; absent in an old snapshot. */
+  planGroups?: PlanGroup[];
   /** Contas bancárias, caixa and cartões, archived ones included. */
   bankAccounts?: BankAccount[];
   transfers?: Transfer[];
