@@ -8,6 +8,7 @@
 import { Elysia } from "elysia";
 
 import { farmPlugin } from "@/lib/api/plugins/farm";
+import { can } from "@/lib/domain/permissions";
 
 import { AddLotUseCase } from "./useCases/Add.useCase";
 import { ArchiveLotUseCase } from "./useCases/Archive.useCase";
@@ -56,6 +57,23 @@ export const lotsController = new Elysia({ prefix: "/lots" })
       const result = await new RemoveLotUseCase().run({ farmId, id: params.id });
       if (result === "lot_not_found") return status(404, { error: result });
       if (result === "lot_occupied") return status(409, { error: result });
+      return result;
+    },
+    { farm: true }
+  )
+  .post(
+    "/:id/purge",
+    async ({ farmId, permissions, params, status }) => {
+      const result = await new RemoveLotUseCase().run({
+        farmId,
+        id: params.id,
+        purge: { canEditFinance: can(permissions, "finance", "edit") },
+      });
+      if (result === "lot_not_found") return status(404, { error: result });
+      if (result === "lot_occupied") return status(409, { error: result });
+      if (result === "finance_required") {
+        return status(403, { error: "forbidden", area: "finance" });
+      }
       return result;
     },
     { farm: true }

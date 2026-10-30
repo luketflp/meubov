@@ -67,6 +67,7 @@ export const ROUTE_REQUIREMENTS: Readonly<Record<string, RouteRequirement>> = {
   "POST /api/herd/lots": edit("lots"),
   "PATCH /api/herd/lots/:id": edit("lots"),
   "DELETE /api/herd/lots/:id": edit("lots"),
+  "POST /api/herd/lots/:id/purge": edit("herd", "lots"),
   "POST /api/herd/lots/:id/archive": edit("lots"),
   "POST /api/herd/lots/:id/placements": edit("lots"),
   "POST /api/herd/invernadas": edit("lots"),
