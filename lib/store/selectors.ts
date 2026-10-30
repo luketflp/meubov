@@ -356,6 +356,32 @@ export function canDeleteLot(
   );
 }
 
+/**
+ * What "Excluir lote e animais" takes away, mirroring removeLot's purge: the
+ * lot's live animals, the manejos only they fill, and whether an open manejo
+ * holding one of them (or heading into the lot) refuses it for now.
+ */
+export function lotPurge(lotId: string, animals: Animal[], manejoSessions: ManejoSession[]) {
+  const tags = new Set(
+    activeAnimals(animals)
+      .filter((animal) => animal.lotId === lotId)
+      .map((animal) => animal.earTag)
+  );
+  const holdsOne = (session: ManejoSession) =>
+    session.animals.some((entry) => tags.has(entry.earTag));
+  return {
+    heads: tags.size,
+    emptied: manejoSessions.filter(
+      (session) =>
+        session.animals.length > 0 && session.animals.every((entry) => tags.has(entry.earTag))
+    ),
+    openManejo: manejoSessions.some(
+      (session) =>
+        session.status === "open" && (session.destinationLotId === lotId || holdsOne(session))
+    ),
+  };
+}
+
 /** Logical lots with an open placement, eligible for new animal assignments. */
 export function currentlyPlacedLots(
   lots: Lot[],

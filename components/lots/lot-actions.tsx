@@ -2,8 +2,9 @@
 
 /**
  * The actions of a lote on its ficha: the same dialogs the /lots card offers
- * (editar, encerrar, excluir, mover), guarded the same way. Deleting sends
- * the farmer back to the list, since the page has nothing left to show.
+ * (editar, encerrar, excluir, mover), guarded the same way; a lote with
+ * animals is excluded together with them. Deleting sends the farmer back to
+ * the list, since the page has nothing left to show.
  * Every one of them writes, so whoever may only read Lotes e Mapa gets none.
  */
 import { useRouter } from "next/navigation";
@@ -15,9 +16,11 @@ import { ArchiveLotDialog } from "@/components/lots/archive-lot-dialog";
 import { DeleteLotButton } from "@/components/lots/delete-lot-button";
 import { EditLotDialog } from "@/components/lots/edit-lot-dialog";
 import { MoveLotDialog } from "@/components/lots/move-lot-dialog";
+import { PurgeLotDialog } from "@/components/lots/purge-lot-dialog";
 
 export function LotActions({ summary }: { summary: LotSummary }) {
   const canEditLots = useCan("lots", "edit");
+  const canEditHerd = useCan("herd", "edit");
   const router = useRouter();
   const animals = useHerdStore((state) => state.animals);
   const manejoSessions = useHerdStore((state) => state.manejoSessions);
@@ -31,7 +34,11 @@ export function LotActions({ summary }: { summary: LotSummary }) {
       {currentPlacement && heads === 0 ? (
         <ArchiveLotDialog lot={lot} currentPlacement={currentPlacement} />
       ) : null}
-      {deletable ? <DeleteLotButton lot={lot} onDeleted={() => router.replace("/lots")} /> : null}
+      {deletable ? (
+        <DeleteLotButton lot={lot} onDeleted={() => router.replace("/lots")} />
+      ) : heads > 0 && canEditHerd ? (
+        <PurgeLotDialog lot={lot} onDeleted={() => router.replace("/lots")} />
+      ) : null}
       <MoveLotDialog lot={lot} currentInvernada={currentInvernada} />
     </div>
   );

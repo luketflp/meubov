@@ -23,6 +23,7 @@ import {
   historyInvernadaById,
   invernadaRemoval,
   invernadasWithSummary,
+  lotPurge,
   lotSummary,
   lotsByInvernada,
   lotsWithSummary,
@@ -1044,5 +1045,33 @@ describe("invernadaRemoval", () => {
 
   it("keeps history when only past lotes grazed it", () => {
     expect(invernadaRemoval("inv-7", [placement("inv-7", "2026-03-01")])).toBe("history");
+  });
+});
+
+describe("lotPurge", () => {
+  const inLot = makeAnimal({ id: "a-1", earTag: "T01", lotId: "lot-x" });
+  const sold = makeAnimal({ id: "a-2", earTag: "T02", lotId: "lot-x", active: false });
+  const elsewhere = makeAnimal({ id: "a-3", earTag: "BR-9", lotId: "lot-1" });
+  const pass = (earTag: string) => ({ earTag, outcome: "done" as const });
+
+  it("takes only the live animals, and only the manejos they alone fill", () => {
+    const own = makeManejoSession({ id: "s-own", status: "closed", animals: [pass("T01")] });
+    const mixed = makeManejoSession({
+      id: "s-mixed",
+      status: "closed",
+      animals: [pass("T01"), pass("BR-9")],
+    });
+    const history = makeManejoSession({ id: "s-sale", status: "closed", animals: [pass("T02")] });
+    const result = lotPurge("lot-x", [inLot, sold, elsewhere], [own, mixed, history]);
+    expect(result.heads).toBe(1);
+    expect(result.emptied.map((s) => s.id)).toEqual(["s-own"]);
+    expect(result.openManejo).toBe(false);
+  });
+
+  it("flags an open manejo holding one of its animals or heading into it", () => {
+    const chute = makeManejoSession({ animals: [pass("T01")] });
+    expect(lotPurge("lot-x", [inLot], [chute]).openManejo).toBe(true);
+    const entry = makeManejoSession({ kind: "entry", destinationLotId: "lot-x" });
+    expect(lotPurge("lot-x", [inLot], [entry]).openManejo).toBe(true);
   });
 });

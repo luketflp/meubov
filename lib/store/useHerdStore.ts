@@ -440,6 +440,8 @@ export interface HerdStore extends HerdData {
   addLot: (l: NewLot) => Promise<Lot>;
   /** Removes the lot via the API; false when an active animal occupies it. */
   removeLot: (id: string) => Promise<boolean>;
+  /** Deletes the lot with its active animals for good; false while an open manejo holds it. */
+  purgeLot: (id: string) => Promise<boolean>;
   /** Edits the logical lot's registration fields. */
   updateLot: (id: string, patch: LotPatch) => Promise<void>;
   /** Moves the whole logical lot to another invernada in one transaction. */
@@ -2086,6 +2088,20 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
             : placement
         ),
     }));
+    return true;
+  },
+
+  purgeLot: async (id) => {
+    const { error } = await api.lots({ id }).purge.post();
+    if (error) {
+      if (error.status === CONFLICT) return false;
+      apiFail("excluir o lote", error);
+    }
+    // The cascade ran on the server (animals, their records, emptied manejos):
+    // reload instead of repeating it here.
+    if (!(await reloadHerd(set))) {
+      toast.info("Lote excluído. Recarregue para ver o rebanho atualizado.");
+    }
     return true;
   },
 

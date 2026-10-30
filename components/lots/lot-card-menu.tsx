@@ -18,6 +18,7 @@ import { useDeleteLot } from "@/components/lots/use-delete-lot";
 import { ArchiveLotDialog } from "@/components/lots/archive-lot-dialog";
 import { EditLotDialog } from "@/components/lots/edit-lot-dialog";
 import { MoveLotDialog } from "@/components/lots/move-lot-dialog";
+import { PurgeLotDialog } from "@/components/lots/purge-lot-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -27,7 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-type OpenDialog = "edit" | "move" | "archive" | null;
+type OpenDialog = "edit" | "move" | "archive" | "purge" | null;
 
 interface LotCardMenuProps {
   row: LotCardRow;
@@ -38,6 +39,7 @@ interface LotCardMenuProps {
 export function LotCardMenu({ row, invernada }: LotCardMenuProps) {
   const { lot, placement, heads, canDelete } = row;
   const canEditLots = useCan("lots", "edit");
+  const canEditHerd = useCan("herd", "edit");
   const [dialog, setDialog] = useState<OpenDialog>(null);
   const { remove, removing, error } = useDeleteLot(lot);
   const { addToast } = useToast();
@@ -47,6 +49,8 @@ export function LotCardMenu({ row, invernada }: LotCardMenuProps) {
   }, [error, addToast]);
 
   if (!canEditLots) return null;
+  // A lote with animals is deleted with them, which also takes Rebanho edit.
+  const canPurge = !canDelete && heads > 0 && canEditHerd;
 
   const openState = (name: Exclude<OpenDialog, null>) => ({
     open: dialog === name,
@@ -106,11 +110,20 @@ export function LotCardMenu({ row, invernada }: LotCardMenuProps) {
                 {removing ? "Excluindo…" : "Excluir"}
               </DropdownMenuItem>
             </>
+          ) : canPurge ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onSelect={() => setDialog("purge")}>
+                <Trash2 aria-hidden />
+                Excluir lote e animais
+              </DropdownMenuItem>
+            </>
           ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
 
       <EditLotDialog lot={lot} trigger="none" {...openState("edit")} />
+      {canPurge ? <PurgeLotDialog lot={lot} trigger="none" {...openState("purge")} /> : null}
       {placement ? (
         <>
           <MoveLotDialog
