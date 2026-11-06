@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { SearchX } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
@@ -11,6 +11,7 @@ import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/herd/FilterBar";
 import { HerdTable } from "@/components/herd/HerdTable";
+import { HerdSelectionBar } from "@/components/herd/HerdSelectionBar";
 import { HerdPagination } from "@/components/herd/HerdPagination";
 import { AnimalCard } from "@/components/herd/AnimalCard";
 import { AddAnimalsButton } from "@/components/herd/AddAnimalsButton";
@@ -89,6 +90,23 @@ function HerdScreen() {
     [sorted, view.page, view.pageSize]
   );
 
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(() => new Set());
+  // What the bar counts and "Excluir" takes: the ticked animals the filter still shows.
+  const selected = useMemo(
+    () =>
+      new Set(sorted.filter(({ animal }) => ticked.has(animal.id)).map(({ animal }) => animal.id)),
+    [sorted, ticked]
+  );
+  const tick = (ids: string[], checked: boolean) =>
+    setTicked((previous) => {
+      const next = new Set(previous);
+      for (const id of ids) {
+        if (checked) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+
   // A stale link (that lot, or a page past the end) is rewritten to the view on screen.
   useEffect(() => {
     if (current.page === view.page && lotId === view.filters.lotId) return;
@@ -149,6 +167,15 @@ function HerdScreen() {
         onChange={setFilters}
       />
 
+      {canEdit && selected.size > 0 ? (
+        <HerdSelectionBar
+          selected={selected}
+          total={sorted.length}
+          onSelectAll={() => tick(sorted.map(({ animal }) => animal.id), true)}
+          onClear={() => setTicked(new Set())}
+        />
+      ) : null}
+
       {sorted.length === 0 ? (
         <div className="rounded-xl border border-hairline bg-panel">
           <EmptyState
@@ -166,6 +193,7 @@ function HerdScreen() {
               invernadaNames={invernadaNames}
               sort={view.sort}
               onSort={sortBy}
+              selection={canEdit ? { ids: selected, onChange: tick } : undefined}
             />
           </div>
 

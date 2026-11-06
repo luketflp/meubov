@@ -15,6 +15,7 @@ import { makeAnimal, makeManejoSession, makeTreatment } from "@/lib/domain/__tes
 import {
   animalById,
   animalsByBreed,
+  animalsPurge,
   breedingsByLot,
   canDeleteLot,
   currentlyPlacedLots,
@@ -1073,5 +1074,54 @@ describe("lotPurge", () => {
     expect(lotPurge("lot-x", [inLot], [chute]).openManejo).toBe(true);
     const entry = makeManejoSession({ kind: "entry", destinationLotId: "lot-x" });
     expect(lotPurge("lot-x", [inLot], [entry]).openManejo).toBe(true);
+  });
+});
+
+describe("animalsPurge", () => {
+  const calf = makeAnimal({ id: "c-1", earTag: "VE1", birthDate: "2026-08-10" });
+  const other = makeAnimal({ id: "c-2", earTag: "VE2", birthDate: "2026-08-10" });
+  const sold = makeAnimal({ id: "c-3", earTag: "VE3", active: false });
+  const partos = (calvings: Calving[]): ReproductionRecord => ({
+    breedings: [],
+    diagnoses: [],
+    calvings,
+  });
+  const dam = makeAnimal({
+    id: "d-1",
+    earTag: "R381",
+    sex: "female",
+    category: "cow",
+    reproduction: partos([
+      { date: "2026-08-10", calfEarTag: "VE1" },
+      // An older calf that carried the same brinco.
+      { date: "2024-07-01", calfEarTag: "VE1" },
+      { date: "2026-08-10", calfEarTag: "VE2" },
+    ]),
+  });
+  const pass = (earTag: string) => ({ earTag, outcome: "done" as const });
+
+  it("takes the live animals ticked and the partos naming them on their birth date", () => {
+    const result = animalsPurge(new Set(["c-1", "c-3"]), [calf, other, sold, dam], []);
+    expect(result.animalIds).toEqual(["c-1"]);
+    expect(result.earTags).toEqual(["VE1"]);
+    expect(result.calvings).toBe(1);
+  });
+
+  it("leaves to the cascade the partos of a dam deleted with them", () => {
+    expect(animalsPurge(new Set(["c-1", "d-1"]), [calf, dam], []).calvings).toBe(0);
+  });
+
+  it("empties only the manejos they alone fill, and flags an open one holding them", () => {
+    const own = makeManejoSession({ id: "s-own", status: "closed", animals: [pass("VE1")] });
+    const mixed = makeManejoSession({
+      id: "s-mixed",
+      status: "closed",
+      animals: [pass("VE1"), pass("VE2")],
+    });
+    const result = animalsPurge(new Set(["c-1"]), [calf, other], [own, mixed]);
+    expect(result.emptied.map((s) => s.id)).toEqual(["s-own"]);
+    expect(result.openManejo).toBe(false);
+    const chute = makeManejoSession({ animals: [pass("VE1")] });
+    expect(animalsPurge(new Set(["c-1"]), [calf], [chute]).openManejo).toBe(true);
   });
 });

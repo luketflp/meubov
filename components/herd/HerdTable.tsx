@@ -29,6 +29,11 @@ interface HerdTableProps {
   invernadaNames: ReadonlyMap<string, string>;
   sort: HerdSort;
   onSort: (column: SortColumn) => void;
+  /** The ticked animals and how to tick more; absent, there is no checkbox column. */
+  selection?: {
+    ids: ReadonlySet<string>;
+    onChange: (ids: string[], checked: boolean) => void;
+  };
 }
 
 const COLUMNS: { key: SortColumn; label: string }[] = [
@@ -48,7 +53,14 @@ function SortIcon({ active, direction }: { active: boolean; direction: "asc" | "
   return <ArrowDown aria-hidden className="size-3.5 text-brand" />;
 }
 
-export function HerdTable({ items, lotNames, invernadaNames, sort, onSort }: HerdTableProps) {
+export function HerdTable({
+  items,
+  lotNames,
+  invernadaNames,
+  sort,
+  onSort,
+  selection,
+}: HerdTableProps) {
   const customCategories = useHerdStore((s) => s.customCategories);
   const router = useRouter();
 
@@ -56,11 +68,32 @@ export function HerdTable({ items, lotNames, invernadaNames, sort, onSort }: Her
     router.push(`/herd/${id}`);
   };
 
+  const pageIds = items.map(({ animal }) => animal.id);
+  const tickedOnPage = selection ? pageIds.filter((id) => selection.ids.has(id)).length : 0;
+
   return (
     <div className="overflow-hidden rounded-xl border border-hairline bg-panel">
       <Table className="[&_tr>*:first-child]:pl-4 [&_tr>*:last-child]:pr-4">
         <TableHeader className="bg-surface">
           <TableRow className="hover:bg-surface">
+            {selection ? (
+              <TableHead className="w-10 px-3">
+                <label className="flex size-8 cursor-pointer items-center justify-center">
+                  <input
+                    type="checkbox"
+                    checked={tickedOnPage > 0 && tickedOnPage === pageIds.length}
+                    ref={(input) => {
+                      if (input) {
+                        input.indeterminate = tickedOnPage > 0 && tickedOnPage < pageIds.length;
+                      }
+                    }}
+                    onChange={(event) => selection.onChange(pageIds, event.target.checked)}
+                    aria-label="Selecionar os animais desta página"
+                    className="size-4 accent-brand"
+                  />
+                </label>
+              </TableHead>
+            ) : null}
             {COLUMNS.map(({ key, label }) => {
               const active = sort.column === key;
               return (
@@ -104,6 +137,24 @@ export function HerdTable({ items, lotNames, invernadaNames, sort, onSort }: Her
               aria-label={`Abrir ficha do animal ${animal.earTag}`}
               className="cursor-pointer border-hairline hover:bg-surface"
             >
+              {selection ? (
+                <TableCell
+                  className="w-10 px-3"
+                  // Ticking must not open the ficha the row leads to.
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                >
+                  <label className="flex size-8 cursor-pointer items-center justify-center">
+                    <input
+                      type="checkbox"
+                      checked={selection.ids.has(animal.id)}
+                      onChange={(event) => selection.onChange([animal.id], event.target.checked)}
+                      aria-label={`Selecionar ${animal.earTag}`}
+                      className="size-4 accent-brand"
+                    />
+                  </label>
+                </TableCell>
+              ) : null}
               <TableCell className="px-3 font-mono font-medium">{animal.earTag}</TableCell>
               <TableCell className="px-3">
                 {animalCategoryName(animal, customCategories)}

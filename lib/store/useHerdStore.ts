@@ -649,6 +649,11 @@ export interface HerdStore extends HerdData {
    * or a lot deleted since).
    */
   reactivateAnimal: (earTag: string) => Promise<void>;
+  /**
+   * Deletes animals entered by mistake for good, with their records and the
+   * partos that brought them in; false while an open manejo holds one of them.
+   */
+  purgeAnimals: (ids: string[]) => Promise<boolean>;
 }
 
 /** Editable fields of an animal (only sent ones change). */
@@ -2799,6 +2804,20 @@ export const useHerdStore = create<HerdStore>()((set, get) => ({
           }
         : {}),
     }));
+    return true;
+  },
+
+  purgeAnimals: async (ids) => {
+    const { error } = await api.animals.purge.post({ ids });
+    if (error) {
+      if (error.status === CONFLICT) return false;
+      apiFail("excluir os animais", error);
+    }
+    // The cascade ran on the server (records, the dams' partos, emptied
+    // manejos): reload instead of repeating it here.
+    if (!(await reloadHerd(set))) {
+      toast.info("Animais excluídos. Recarregue para ver o rebanho atualizado.");
+    }
     return true;
   },
 

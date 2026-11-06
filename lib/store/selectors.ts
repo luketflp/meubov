@@ -367,17 +367,54 @@ export function lotPurge(lotId: string, animals: Animal[], manejoSessions: Manej
       .filter((animal) => animal.lotId === lotId)
       .map((animal) => animal.earTag)
   );
-  const holdsOne = (session: ManejoSession) =>
-    session.animals.some((entry) => tags.has(entry.earTag));
+  const { emptied, openManejo } = manejosOf(tags, manejoSessions);
   return {
     heads: tags.size,
+    emptied,
+    openManejo:
+      openManejo ||
+      manejoSessions.some(
+        (session) => session.status === "open" && session.destinationLotId === lotId
+      ),
+  };
+}
+
+/**
+ * What "Excluir" on the herd's selection takes away, mirroring purgeAnimals:
+ * the live animals among `ids`, the parto that names each one on its birth date
+ * on a dam that stays, the manejos only they fill, and whether an open manejo
+ * holding one of them refuses it for now.
+ */
+export function animalsPurge(
+  ids: ReadonlySet<string>,
+  animals: Animal[],
+  manejoSessions: ManejoSession[]
+) {
+  const herd = activeAnimals(animals).filter((animal) => ids.has(animal.id));
+  const purged = new Set(herd.map((animal) => animal.id));
+  const birthByTag = new Map(herd.map((animal) => [animal.earTag, animal.birthDate]));
+  const calvings = animals
+    .filter((dam) => !purged.has(dam.id))
+    .flatMap((dam) => dam.reproduction?.calvings ?? [])
+    .filter((calving) => birthByTag.get(calving.calfEarTag) === calving.date).length;
+  return {
+    animalIds: [...purged],
+    earTags: [...birthByTag.keys()],
+    calvings,
+    ...manejosOf(new Set(birthByTag.keys()), manejoSessions),
+  };
+}
+
+/** The manejos only `tags` fill, and whether an open one holds any of them. */
+function manejosOf(tags: ReadonlySet<string>, manejoSessions: ManejoSession[]) {
+  return {
     emptied: manejoSessions.filter(
       (session) =>
         session.animals.length > 0 && session.animals.every((entry) => tags.has(entry.earTag))
     ),
     openManejo: manejoSessions.some(
       (session) =>
-        session.status === "open" && (session.destinationLotId === lotId || holdsOne(session))
+        session.status === "open" && session.animals.some((entry) => tags.has(entry.earTag))
     ),
   };
 }
