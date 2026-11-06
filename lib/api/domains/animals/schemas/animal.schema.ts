@@ -60,6 +60,11 @@ export const DeleteWeighingsBody = t.Object({
   earTags: t.Array(t.String({ minLength: 1 }), { minItems: 1 }),
 });
 
+/** Body of POST /animals/purge: the animals "Excluir" takes, by id. */
+export const PurgeAnimalsBody = t.Object({
+  ids: t.Array(t.String({ minLength: 1 }), { minItems: 1, maxItems: 10000 }),
+});
+
 /** Body of PATCH /animals/:id (all fields optional). */
 export const AnimalPatchBody = t.Object({
   /** New ear tag; must stay unique within the farm (409 on conflict). */

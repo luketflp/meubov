@@ -1,6 +1,7 @@
 /**
- * Animals — registration (one or a batch), bulk import, edits and the baixa,
- * plus recording, correcting and removing the weighings of one animal.
+ * Animals — registration (one or a batch), bulk import, edits, the baixa and
+ * the purge of animals entered by mistake, plus recording, correcting and
+ * removing the weighings of one animal.
  *
  * Every route is farm-scoped and addresses an existing animal by its stable
  * id, never by ear tag: the tag is an editable identifier.
@@ -9,6 +10,7 @@ import { Elysia } from "elysia";
 
 import { farmPlugin } from "@/lib/api/plugins/farm";
 import { todayISO } from "@/lib/domain/dates";
+import { can } from "@/lib/domain/permissions";
 
 import { AddAnimalUseCase } from "./useCases/Add.useCase";
 import { AddAnimalsUseCase } from "./useCases/AddBatch.useCase";
@@ -16,6 +18,7 @@ import { DeactivateAnimalUseCase } from "./useCases/Deactivate.useCase";
 import { ReactivateAnimalUseCase } from "./useCases/Reactivate.useCase";
 import { EditWeighingUseCase } from "./useCases/EditWeighing.useCase";
 import { ImportAnimalsUseCase } from "./useCases/Import.useCase";
+import { PurgeAnimalsUseCase } from "./useCases/Purge.useCase";
 import { RecordWeighingUseCase } from "./useCases/RecordWeighing.useCase";
 import { RemoveWeighingUseCase } from "./useCases/RemoveWeighing.useCase";
 import { UpdateAnimalUseCase } from "./useCases/Edit.useCase";
@@ -25,6 +28,7 @@ import {
   ImportAnimalsBody,
   NewAnimalBody,
   NewAnimalsBody,
+  PurgeAnimalsBody,
   WeighingBody,
 } from "./schemas/animal.schema";
 
@@ -60,6 +64,22 @@ export const animalsController = new Elysia({ prefix: "/animals" })
       return result;
     },
     { farm: true, body: ImportAnimalsBody }
+  )
+  .post(
+    "/purge",
+    async ({ farmId, permissions, body, status }) => {
+      const result = await new PurgeAnimalsUseCase().run({
+        farmId,
+        ids: body.ids,
+        canEditFinance: can(permissions, "finance", "edit"),
+      });
+      if (result === "animal_in_open_manejo") return status(409, { error: result });
+      if (result === "finance_required") {
+        return status(403, { error: "forbidden", area: "finance" });
+      }
+      return result;
+    },
+    { farm: true, body: PurgeAnimalsBody }
   )
   .patch(
     "/:id",

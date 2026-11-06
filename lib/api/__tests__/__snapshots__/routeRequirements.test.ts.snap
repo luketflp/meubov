@@ -245,6 +245,11 @@ exports[`ROUTE_REQUIREMENTS against the mounted app > is pinned 1`] = `
       "lots",
     ],
   },
+  "POST /api/herd/animals/purge": {
+    "edit": [
+      "herd",
+    ],
+  },
   "POST /api/herd/attachments/upload-token": {
     "edit": [
       "finance",
