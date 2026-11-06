@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo } from "react";
 import { SearchX } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
-import { activeAnimals, withStatus } from "@/lib/store/selectors";
+import { activeAnimals, activeLots, withStatus } from "@/lib/store/selectors";
 import { todayISO } from "@/lib/domain/dates";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
@@ -67,8 +67,14 @@ function HerdScreen() {
     [invernadas, lotPlacements]
   );
 
+  // A deleted lot keeps its row (and its name in lotNames) for the history,
+  // but no animal of the herd is in it: it is not a lot to filter by.
+  const filterLots = useMemo(() => activeLots(lots), [lots]);
+
   // A link to a lot that no longer exists shows the whole herd.
-  const lotId = lotNames.has(view.filters.lotId) ? view.filters.lotId : LOT_ALL;
+  const lotId = filterLots.some((lot) => lot.id === view.filters.lotId)
+    ? view.filters.lotId
+    : LOT_ALL;
   const filters = useMemo(() => ({ ...view.filters, lotId }), [view.filters, lotId]);
 
   const filtered = useMemo(() => filterHerd(derived, filters), [derived, filters]);
@@ -137,7 +143,11 @@ function HerdScreen() {
         }
       />
 
-      <FilterBar filters={{ ...filters, search: searchText }} lots={lots} onChange={setFilters} />
+      <FilterBar
+        filters={{ ...filters, search: searchText }}
+        lots={filterLots}
+        onChange={setFilters}
+      />
 
       {sorted.length === 0 ? (
         <div className="rounded-xl border border-hairline bg-panel">
