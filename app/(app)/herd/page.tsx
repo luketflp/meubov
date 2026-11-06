@@ -1,17 +1,19 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { SearchX } from "lucide-react";
+import { ListChecks, SearchX } from "lucide-react";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
 import { activeAnimals, activeLots, withStatus } from "@/lib/store/selectors";
 import { todayISO } from "@/lib/domain/dates";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ReadOnlyPill } from "@/components/layout/ReadOnlyPill";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/herd/FilterBar";
 import { HerdTable } from "@/components/herd/HerdTable";
 import { HerdSelectionBar } from "@/components/herd/HerdSelectionBar";
+import { MobileSelectionActions, MobileSelectionHeader } from "@/components/herd/MobileSelection";
 import { HerdPagination } from "@/components/herd/HerdPagination";
 import { AnimalCard } from "@/components/herd/AnimalCard";
 import { AddAnimalsButton } from "@/components/herd/AddAnimalsButton";
@@ -20,7 +22,7 @@ import { useHerdView } from "@/components/herd/useHerdView";
 import { ExportMenu } from "@/components/export/ExportMenu";
 import { herdExportTable } from "@/lib/export/datasets/herd";
 import { currentInvernadaNames } from "@/lib/export/datasets/lots";
-import { paginate } from "@/components/herd/pagination";
+import { paginate, rangeLabel } from "@/components/herd/pagination";
 import {
   LOT_ALL,
   filterHerd,
@@ -107,6 +109,28 @@ function HerdScreen() {
       return next;
     });
 
+  // The phone's cards have no checkbox column: "Selecionar", or holding a
+  // card, opens a selection mode. It pushes a history entry, so the back
+  // gesture leaves the mode instead of the screen; X and a finished "Excluir"
+  // go back the same way.
+  const [selecting, setSelecting] = useState(false);
+  const enterSelection = (id?: string) => {
+    if (id) tick([id], true);
+    if (selecting) return;
+    setSelecting(true);
+    window.history.pushState(null, "", window.location.href);
+  };
+  const leaveSelection = () => window.history.back();
+  useEffect(() => {
+    if (!selecting) return;
+    const leave = () => {
+      setSelecting(false);
+      setTicked(new Set());
+    };
+    window.addEventListener("popstate", leave);
+    return () => window.removeEventListener("popstate", leave);
+  }, [selecting]);
+
   // A stale link (that lot, or a page past the end) is rewritten to the view on screen.
   useEffect(() => {
     if (current.page === view.page && lotId === view.filters.lotId) return;
@@ -147,25 +171,39 @@ function HerdScreen() {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 pt-6 md:px-8">
-      <PageHeader
-        title="Rebanho"
-        subtitle={herdSubtitle(derived.length, filtered.length, filterActive)}
-        badges={canEdit ? undefined : <ReadOnlyPill />}
-        actions={
-          <div className="flex flex-wrap gap-2">
-            {/* The import creates the sheet's new lots, so the server also asks for Lotes edit. */}
-            {canEdit && canEditLots ? <ImportHerdDialog /> : null}
-            {exportMenu}
-            {canEdit ? <AddAnimalsButton /> : null}
-          </div>
-        }
-      />
+      {selecting ? (
+        <MobileSelectionHeader
+          count={selected.size}
+          total={sorted.length}
+          summary={[...filterWords, countLabel(sorted.length)].join(" · ")}
+          onSelectAll={() => tick(sorted.map(({ animal }) => animal.id), true)}
+          onClearAll={() => setTicked(new Set())}
+          onLeave={leaveSelection}
+        />
+      ) : null}
 
-      <FilterBar
-        filters={{ ...filters, search: searchText }}
-        lots={filterLots}
-        onChange={setFilters}
-      />
+      {/* On the phone, the selection's bar takes the place of the title and the filters. */}
+      <div className={selecting ? "contents max-md:hidden" : "contents"}>
+        <PageHeader
+          title="Rebanho"
+          subtitle={herdSubtitle(derived.length, filtered.length, filterActive)}
+          badges={canEdit ? undefined : <ReadOnlyPill />}
+          actions={
+            <div className="flex flex-wrap gap-2">
+              {/* The import creates the sheet's new lots, so the server also asks for Lotes edit. */}
+              {canEdit && canEditLots ? <ImportHerdDialog /> : null}
+              {exportMenu}
+              {canEdit ? <AddAnimalsButton /> : null}
+            </div>
+          }
+        />
+
+        <FilterBar
+          filters={{ ...filters, search: searchText }}
+          lots={filterLots}
+          onChange={setFilters}
+        />
+      </div>
 
       {canEdit && selected.size > 0 ? (
         <HerdSelectionBar
@@ -197,6 +235,23 @@ function HerdScreen() {
             />
           </div>
 
+          {canEdit && !selecting ? (
+            <div className="flex items-center justify-between gap-2 md:hidden">
+              <p className="text-[13px] text-ink-soft">
+                {rangeLabel(current.from, current.to, current.total)}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                onClick={() => enterSelection()}
+              >
+                <ListChecks aria-hidden />
+                Selecionar
+              </Button>
+            </div>
+          ) : null}
+
           <ul className="flex flex-col gap-2 md:hidden">
             {current.items.map((item) => (
               <AnimalCard
@@ -204,6 +259,17 @@ function HerdScreen() {
                 item={item}
                 lotName={lotNames.get(item.animal.lotId) ?? "—"}
                 invernadaName={invernadaNames.get(item.animal.lotId) ?? "—"}
+                selection={
+                  selecting
+                    ? {
+                        selected: selected.has(item.animal.id),
+                        onToggle: () => tick([item.animal.id], !selected.has(item.animal.id)),
+                      }
+                    : undefined
+                }
+                onLongPress={
+                  canEdit && !selecting ? () => enterSelection(item.animal.id) : undefined
+                }
               />
             ))}
           </ul>
@@ -216,6 +282,10 @@ function HerdScreen() {
           />
         </>
       )}
+
+      {selecting ? (
+        <MobileSelectionActions selected={selected} onDeleted={leaveSelection} />
+      ) : null}
     </div>
   );
 }

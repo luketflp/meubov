@@ -7,7 +7,7 @@
  * farmer types "excluir" to confirm. The store is read inside the content
  * only, while it is open.
  */
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/domain/dates";
@@ -18,6 +18,8 @@ import { sessionHasMoney } from "@/lib/domain/moneyRedaction";
 import { animalsPurge } from "@/lib/store/selectors";
 import { useHerdStore } from "@/lib/store/useHerdStore";
 import { useCan } from "@/lib/store/usePermissions";
+import { cn } from "@/lib/utils";
+import { BOTTOM_SHEET } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -39,25 +41,28 @@ const CONFIRM_WORD = "excluir";
 
 const headsLabel = (heads: number) => (heads === 1 ? "1 animal" : `${heads} animais`);
 
+/** A sheet from the bottom on the phone, where "Excluir" sits; centered from md up. */
+const SHEET = cn(
+  BOTTOM_SHEET,
+  "max-h-[92dvh] overflow-y-auto md:top-1/2 md:bottom-auto md:left-1/2 md:max-w-md md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-b-xl md:pb-4"
+);
+
 interface PurgeAnimalsDialogProps {
   /** The ticked animals. */
   ids: ReadonlySet<string>;
   /** Called after the server deleted them. */
   onDeleted: () => void;
+  /** The button that opens it. */
+  children: ReactNode;
 }
 
-export function PurgeAnimalsDialog({ ids, onDeleted }: PurgeAnimalsDialogProps) {
+export function PurgeAnimalsDialog({ ids, onDeleted, children }: PurgeAnimalsDialogProps) {
   const [open, setOpen] = useState(false);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button type="button" variant="destructive" size="sm" className="min-h-9">
-          <Trash2 aria-hidden />
-          Excluir
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogTrigger asChild>{children}</DialogTrigger>
+      <DialogContent className={SHEET}>
         <PurgeAnimalsForm
           ids={ids}
           onClose={() => setOpen(false)}

@@ -1,5 +1,7 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { PurgeAnimalsDialog } from "@/components/herd/PurgeAnimalsDialog";
 
 interface HerdSelectionBarProps {
@@ -33,7 +35,12 @@ export function HerdSelectionBar({ selected, total, onSelectAll, onClear }: Herd
         Limpar seleção
       </button>
       <div className="ml-auto">
-        <PurgeAnimalsDialog ids={selected} onDeleted={onClear} />
+        <PurgeAnimalsDialog ids={selected} onDeleted={onClear}>
+          <Button type="button" variant="destructive" size="sm" className="min-h-9">
+            <Trash2 aria-hidden />
+            Excluir
+          </Button>
+        </PurgeAnimalsDialog>
       </div>
     </div>
   );
