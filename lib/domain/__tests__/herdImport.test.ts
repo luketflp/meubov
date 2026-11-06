@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import * as XLSX from "xlsx";
 import type { CustomCategory } from "@/lib/types";
 import {
   buildImportRows,
@@ -11,6 +12,7 @@ import {
   parseImportDate,
   parseSex,
   parseWeight,
+  SHEET_READ_OPTIONS,
   validateImportRowLocations,
   type BuildImportRowsContext,
 } from "@/lib/domain/herdImport";
@@ -320,6 +322,26 @@ describe("buildImportRows — rows", () => {
     expect(result.rows[0].status).toBe("ok");
     expect(result.rows[0].cells.birthDate).toBe("2023-03-15");
     expect(result.rows[0].payload?.birthDate).toBe("2023-03-15");
+  });
+
+  it("reads an Excel CSV as typed: DD/MM date, comma weight, zero-led brinco", () => {
+    // Excel pt-BR saves the CSV `;`-separated, CRLF, Latin-1.
+    const csv = [HEADERS.join(";"), "0123;Novilha;Nelore;;05/03/2023;Lote 1;01;280,5"].join("\r\n");
+    const workbook = XLSX.read(
+      Uint8Array.from(csv, (ch) => ch.charCodeAt(0)).buffer,
+      SHEET_READ_OPTIONS
+    );
+    const matrix = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[workbook.SheetNames[0]], {
+      header: 1,
+      raw: true,
+      defval: "",
+      blankrows: false,
+    });
+    expect(buildImportRows(matrix, ctx()).rows[0].payload).toMatchObject({
+      earTag: "0123",
+      birthDate: "2023-03-05",
+      weightKg: 280.5,
+    });
   });
 
   it("accepts a year-only birth cell and shows the year in the preview", () => {

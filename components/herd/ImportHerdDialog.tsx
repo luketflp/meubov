@@ -19,6 +19,7 @@ import {
   importFieldForHeader,
   validateImportRowLocations,
   FIELD_LABEL,
+  SHEET_READ_OPTIONS,
   type ImportField,
   type ImportParseResult,
   type ImportRow,
@@ -150,7 +151,7 @@ export function ImportHerdDialog() {
     try {
       const buffer = await file.arrayBuffer();
       const XLSX = await import("xlsx");
-      const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+      const workbook = XLSX.read(buffer, SHEET_READ_OPTIONS);
       const sheetName = workbook.SheetNames[0];
       const sheet = sheetName ? workbook.Sheets[sheetName] : undefined;
       const rawMatrix = sheet

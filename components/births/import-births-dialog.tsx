@@ -23,6 +23,7 @@ import {
   summarizeBirthImport,
   type LotPicks,
 } from "@/lib/domain/birthImport";
+import { SHEET_READ_OPTIONS } from "@/lib/domain/herdImport";
 import { currentPlacementForLot, currentlyPlacedLots } from "@/lib/store/selectors";
 import { BirthImportLots, type LotOption } from "@/components/births/import-births-lots";
 import { BirthImportPreview } from "@/components/births/import-births-preview";
@@ -153,7 +154,7 @@ export function ImportBirthsDialog() {
     try {
       const buffer = await file.arrayBuffer();
       const XLSX = await import("xlsx");
-      const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+      const workbook = XLSX.read(buffer, SHEET_READ_OPTIONS);
       const read = workbook.SheetNames.map((name) => {
         const sheet = workbook.Sheets[name];
         const options = { header: 1, defval: "", blankrows: false } as const;

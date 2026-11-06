@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import * as XLSX from "xlsx";
+import { SHEET_READ_OPTIONS } from "@/lib/domain/herdImport";
 import {
   birthImportFieldForHeader,
   birthImportPayloads,
@@ -197,6 +199,32 @@ describe("summarizeBirthImport and birthImportPayloads", () => {
     expect(birthImportPayloads(result, { "pasto 9": "l2" })[1]).toEqual({
       calfEarTag: "B2", calfSex: "male", breed: "Angus", lotId: "l2", date: "2025-09-29", weightKg: 28, deathNotes: "morreu",
     });
+  });
+});
+
+describe("a CSV read with SHEET_READ_OPTIONS", () => {
+  /** Reads like the dialog. Excel pt-BR saves the CSV `;`-separated, CRLF, Latin-1. */
+  function readExcelCsv(...lines: string[]): unknown[][] {
+    const bytes = Uint8Array.from(lines.join("\r\n"), (ch) => ch.charCodeAt(0));
+    const workbook = XLSX.read(bytes.buffer, SHEET_READ_OPTIONS);
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const options = { header: 1, defval: "", blankrows: false } as const;
+    return mergeSheetCells(
+      XLSX.utils.sheet_to_json<unknown[]>(worksheet, { ...options, raw: true }),
+      XLSX.utils.sheet_to_json<unknown[]>(worksheet, { ...options, raw: false })
+    );
+  }
+
+  it("reads DD/MM dates and comma weights the Brazilian way", () => {
+    const matrix = readExcelCsv(
+      "BRINCO MÃE;BRINCO BEZ;SEXO;RAÇA;PESO ;DATA;LOTE ",
+      "R381;VE52;M;ANGUS;32;07/09/2025;2",
+      "R381;VE17;F;NELORE;28,5;14/08/2025;2"
+    );
+    expect(buildBirthImportRows(matrix, ctx()).rows.map((row) => row.parsed)).toEqual([
+      { calfEarTag: "VE52", sex: "male", date: "2025-09-07", weightKg: 32 },
+      { calfEarTag: "VE17", sex: "female", date: "2025-08-14", weightKg: 28.5 },
+    ]);
   });
 });
 

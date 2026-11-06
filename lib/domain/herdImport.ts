@@ -110,6 +110,14 @@ export function importFieldForHeader(raw: string): ImportField | undefined {
 /* Value parsers                                                              */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * SheetJS `read` options of the import dialogs. `raw` hands a CSV's cells over
+ * as the farmer typed them, for the parsers below to read the Brazilian way:
+ * SheetJS alone takes "07/09/2026" for July 9 (US order) and "28,5" for 285.
+ * An .xlsx keeps its typed cells, and `cellDates` turns its dates into Date.
+ */
+export const SHEET_READ_OPTIONS = { type: "array", cellDates: true, raw: true } as const;
+
 /** Sex implied by the category, or null when both are possible (bezerro). */
 export function impliedSex(category: Category): Sex | null {
   if (category === "heifer" || category === "cow") return "female";
